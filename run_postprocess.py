@@ -1,133 +1,161 @@
+#!/usr/bin/env python3
 """
-MNPBEM Postprocessing Runner
+pyMNPBEM Postprocessing Runner
 
-This script loads simulation results and performs analysis and visualization.
+Main entry point for analyzing simulation results.
+Loads data from a simulation run folder and generates analysis and plots.
+
+Usage:
+    python run_postprocess.py /path/to/run_folder
+    python run_postprocess.py --latest
+
 """
 
-import argparse
 import sys
 import os
+import argparse
 from pathlib import Path
-
-# Add postprocess module to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from postprocess.postprocess import PostprocessManager
+import glob
 
 
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description='Postprocess MNPBEM simulation results'
-    )
-    
-    parser.add_argument(
-        '--str-conf',
-        type=str,
-        required=True,
-        help='Path to structure configuration file'
-    )
-    parser.add_argument(
-        '--sim-conf',
-        type=str,
-        required=True,
-        help='Path to simulation configuration file'
-    )
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose output'
-    )
-    
-    return parser.parse_args()
+def find_latest_run(base_dir: str) -> str:
+    """Find the most recent simulation run folder."""
+    pattern = os.path.join(base_dir, '**/config.json')
+    config_files = glob.glob(pattern, recursive=True)
 
+    if not config_files:
+        raise FileNotFoundError(f"No simulation runs found in {base_dir}")
 
-def load_config(config_path):
-    """Load configuration from Python file."""
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-    
-    # Load config file as module
-    config_dict = {}
-    with open(config_path, 'r') as f:
-        exec(f.read(), config_dict)
-    
-    if 'args' not in config_dict:
-        raise ValueError(f"Config file must contain 'args' dictionary: {config_path}")
-    
-    return config_dict['args']
+    # Sort by modification time
+    config_files.sort(key=os.path.getmtime, reverse=True)
 
-
-def merge_configs(structure_path, simulation_path):
-    """Merge structure and simulation configs."""
-    if args.verbose:
-        print(f"Loading structure config: {structure_path}")
-    structure_args = load_config(structure_path)
-    
-    if args.verbose:
-        print(f"Loading simulation config: {simulation_path}")
-    simulation_args = load_config(simulation_path)
-    
-    # Merge: simulation settings override structure if there's overlap
-    merged = {**structure_args, **simulation_args}
-    
-    if args.verbose:
-        print(f"✓ Configurations loaded and merged successfully")
-    
-    return merged
+    # Return the directory containing the most recent config.json
+    return os.path.dirname(config_files[0])
 
 
 def main():
-    """Main postprocessing function."""
-    global args
-    args = parse_arguments()
-    
-    try:
-        # Load and merge configurations
-        config = merge_configs(args.str_conf, args.sim_conf)
-        
-        # Initialize postprocessing manager
-        postprocess = PostprocessManager(config, verbose=args.verbose)
-        
-        # Run postprocessing
-        # ✅ FIX: Handle three return values
-        result = postprocess.run()
-        
-        # Unpack based on return type
-        if len(result) == 3:
-            data, analysis, field_analysis = result
-        elif len(result) == 2:
-            data, analysis = result
-            field_analysis = []
-        else:
-            raise ValueError(f"Unexpected return value from postprocess.run(): {result}")
-        
-        # Print summary
-        if args.verbose:
-            print("\n✓ Postprocessing completed successfully")
-            
-            # Print field data info if available
-            if 'fields' in data and data['fields']:
-                print(f"\n  Field data processed:")
-                for i, field in enumerate(data['fields']):
-                    print(f"    Polarization {i+1}: λ = {field['wavelength']:.1f} nm")
+    """Main entry point for postprocessing."""
+    parser = argparse.ArgumentParser(
+        description='Run pyMNPBEM postprocessing analysis'
+    )
+    parser.add_argument(
+        'run_folder',
+        nargs='?',
+        help='Path to simulation run folder'
+    )
+    parser.add_argument(
+        '--latest',
+        action='store_true',
+        help='Process the most recent simulation run'
+    )
+    parser.add_argument(
+        '--search-dir',
+        default=os.path.expanduser('~/research/pymnpbem/results'),
+        help='Directory to search for latest run'
+    )
+    parser.add_argument(
+        '--quiet', '-q',
+        action='store_true',
+        help='Suppress progress output'
+    )
+    parser.add_argument(
+        '--no-plots',
+        action='store_true',
+        help='Skip plot generation'
+    )
 
-                    enhancement = field['enhancement']
-                    if hasattr(enhancement, 'shape'):
-                        print(f"      Grid size: {enhancement.shape}")
-                    else:
-                        print(f"      Grid size: (1,) - single point")
-        
-        return 0
-        
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("pyMNPBEM Postprocessing Runner")
+    print("=" * 60)
+
+    # Determine run folder
+    if args.run_folder:
+        run_folder = args.run_folder
+    elif args.latest:
+        print(f"\nSearching for latest run in: {args.search_dir}")
+        try:
+            run_folder = find_latest_run(args.search_dir)
+            print(f"Found latest run: {run_folder}")
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            return 1
+    else:
+        print("Error: Please specify a run folder or use --latest")
+        parser.print_help()
         return 1
+
+    # Validate run folder
+    if not os.path.exists(run_folder):
+        print(f"Error: Run folder not found: {run_folder}")
+        return 1
+
+    config_path = os.path.join(run_folder, 'config.json')
+    if not os.path.exists(config_path):
+        print(f"Error: Not a valid run folder (missing config.json): {run_folder}")
+        return 1
+
+    print(f"\nProcessing run: {run_folder}")
+
+    # Import and run postprocessing
+    try:
+        from postprocess import PostprocessManager
+
+        # Override config if needed
+        config_override = {}
+        if args.no_plots:
+            config_override['save_plots'] = False
+
+        # Create manager and run
+        manager = PostprocessManager(
+            run_folder,
+            config={'simulation': config_override} if config_override else None
+        )
+
+        data, analysis = manager.run(verbose=not args.quiet)
+
+        # Print summary of results
+        print("\n" + "=" * 60)
+        print("Postprocessing Summary")
+        print("=" * 60)
+
+        if 'spectrum' in analysis:
+            resonance_summary = analysis['spectrum'].get('resonance_summary', {})
+            for pol_key, pol_data in resonance_summary.get('resonances', {}).items():
+                print(f"\n{pol_key}:")
+                for peak in pol_data.get('peaks', [])[:3]:
+                    wl = peak.get('wavelength', 0)
+                    ext = peak.get('extinction', 0)
+                    fwhm = peak.get('fwhm')
+                    fwhm_str = f", FWHM={fwhm:.1f}nm" if fwhm else ""
+                    print(f"  Peak: λ={wl:.1f}nm, σ_ext={ext:.1f}nm²{fwhm_str}")
+
+        if 'hotspots' in analysis:
+            print("\nField Hotspots:")
+            for pol_idx, hotspots in analysis['hotspots'].items():
+                if hotspots:
+                    top = hotspots[0]
+                    pos = top['position']
+                    enh = top['enhancement']
+                    print(f"  Pol {pol_idx+1}: Max enhancement {enh:.1f}x at ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}) nm")
+
+        print("\n" + "=" * 60)
+        print(f"Results saved to: {run_folder}")
+        print("=" * 60)
+
+        return 0
+
+    except ImportError as e:
+        print(f"\nError importing postprocess modules: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
     except Exception as e:
-        print(f"Error during postprocessing: {e}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
+        print(f"\nError during postprocessing: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 

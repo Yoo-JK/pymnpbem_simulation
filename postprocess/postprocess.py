@@ -1,330 +1,352 @@
 """
-Postprocessing Manager
+Postprocess Manager for pyMNPBEM simulations.
 
-Coordinates all postprocessing tasks.
-Includes unpolarized light calculation (FDTD-style incoherent averaging).
+Orchestrates the complete postprocessing pipeline:
+1. Load simulation results
+2. Analyze spectra
+3. Analyze fields
+4. Create visualizations
+5. Export data
 """
 
 import os
-import sys
-import json
-import csv
-from pathlib import Path
+from typing import Dict, Any, Optional, List
+import numpy as np
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from postprocess.post_utils.data_loader import DataLoader
-from postprocess.post_utils.spectrum_analyzer import SpectrumAnalyzer
-from postprocess.post_utils.visualizer import Visualizer
-from postprocess.post_utils.field_analyzer import FieldAnalyzer
-from postprocess.post_utils.field_exporter import FieldExporter
-from postprocess.post_utils.data_exporter import DataExporter
+from .post_utils import (
+    DataLoader,
+    SpectrumAnalyzer,
+    FieldAnalyzer,
+    Visualizer,
+    SurfaceChargeVisualizer,
+    GeometryCrossSection,
+    DataExporter
+)
 
 
 class PostprocessManager:
-    """Manages the entire postprocessing workflow."""
+    """
+    Manages the complete postprocessing workflow for pyMNPBEM simulations.
 
-    def __init__(self, config, verbose=False):
-        self.config = config
-        self.verbose = verbose
+    Provides a unified interface to:
+    - Load and validate simulation results
+    - Perform spectral analysis (peaks, FWHM, etc.)
+    - Analyze field distributions (hotspots, statistics)
+    - Generate publication-quality visualizations
+    - Export data to various formats
+    """
 
-        # Validate required config keys
-        output_dir = config.get('output_dir')
-        simulation_name = config.get('simulation_name')
+    def __init__(self, run_folder: str, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the postprocess manager.
 
-        if output_dir is None:
-            raise ValueError("Config missing required key: 'output_dir'")
-        if simulation_name is None:
-            raise ValueError("Config missing required key: 'simulation_name'")
+        Args:
+            run_folder: Path to simulation run folder
+            config: Optional configuration override
+        """
+        self.run_folder = run_folder
+        self.plots_dir = os.path.join(run_folder, 'plots')
+        self.data_dir = os.path.join(run_folder, 'data')
 
-        self.output_dir = os.path.join(output_dir, simulation_name)
+        os.makedirs(self.plots_dir, exist_ok=True)
+        os.makedirs(self.data_dir, exist_ok=True)
 
-        # Initialize components
-        self.data_loader = DataLoader(config, verbose)
-        self.analyzer = SpectrumAnalyzer(config, verbose)
-        self.visualizer = Visualizer(config, verbose)
-        self.field_analyzer = FieldAnalyzer(verbose)
-        self.field_exporter = FieldExporter(self.output_dir, verbose)
-        self.data_exporter = DataExporter(config, verbose)
-    
-    def run(self):
-        """Execute complete postprocessing workflow."""
-        if self.verbose:
-            print("\n" + "="*60)
+        # Initialize data loader
+        self.loader = DataLoader(run_folder)
+
+        # Load configuration
+        self.config = config or self.loader.load_config()
+        self.sim_config = self.config.get('simulation', {})
+        self.structure_config = self.config.get('structure', {})
+
+        # Initialize visualization tools
+        self.visualizer = Visualizer(self.sim_config)
+        self.surface_charge_viz = SurfaceChargeVisualizer(self.sim_config)
+        self.geometry_cross = GeometryCrossSection(self.structure_config)
+
+        # Initialize data exporter
+        self.exporter = DataExporter(self.data_dir, self.sim_config)
+
+        # Storage for results
+        self.data = {}
+        self.analysis = {}
+
+    def run(self, verbose: bool = True) -> tuple:
+        """
+        Run the complete postprocessing pipeline.
+
+        Args:
+            verbose: Whether to print progress information
+
+        Returns:
+            Tuple of (data, analysis) dictionaries
+        """
+        if verbose:
+            print("=" * 60)
             print("Starting Postprocessing")
-            print("="*60)
-        
+            print("=" * 60)
+
         # Step 1: Load data
-        if self.verbose:
-            print("\n[1/6] Loading simulation results...")
-        
-        try:
-            data = self.data_loader.load_simulation_results()
-        except FileNotFoundError:
-            print("  MAT file not found, trying text file...")
-            data = self.data_loader.load_text_results()
-        
+        if verbose:
+            print("\n[1/5] Loading simulation results...")
+
+        self.data = self.loader.load_all()
+
+        if verbose:
+            self._print_data_summary()
+
         # Step 2: Analyze spectra
-        if self.verbose:
-            print("\n[2/6] Analyzing spectra...")
+        if verbose:
+            print("\n[2/5] Analyzing spectra...")
 
-        analysis = self.analyzer.analyze(data)
+        if 'spectrum' in self.data:
+            self.analysis['spectrum'] = self._analyze_spectrum()
+            self.analysis['spectrum_unpolarized'] = self._compute_unpolarized_spectrum()
 
-        if self.verbose:
-            self._print_analysis_summary(analysis)
+            if verbose:
+                self._print_spectrum_analysis()
 
-        # Step 2.5: Analyze fields
-        field_analysis = []
-        if 'fields' in data and data['fields']:
-            if self.verbose:
-                print("\n[2.5/6] Analyzing electromagnetic fields...")
+        # Step 3: Analyze fields
+        if verbose:
+            print("\n[3/5] Analyzing electric fields...")
 
-            for field_data in data['fields']:
-                field_result = self.field_analyzer.analyze_field(field_data)
-                field_analysis.append(field_result)
+        if 'field' in self.data:
+            self.analysis['field'] = self._analyze_fields()
 
-        # Step 3: Create visualizations (with unpolarized plots if applicable)
-        if self.verbose:
-            print("\n[3/6] Creating visualizations...")
+            if verbose:
+                self._print_field_analysis()
 
-        plots = self.visualizer.create_all_plots(data, analysis)
+        # Step 4: Generate visualizations
+        if self.sim_config.get('save_plots', True):
+            if verbose:
+                print("\n[4/5] Generating visualizations...")
 
-        if self.verbose and plots:
-            print(f"  Created {len(plots)} plot(s)")
+            self._generate_all_plots()
 
-        # Step 3.5: Export data to TXT files
-        if self.verbose:
-            print("\n[3.5/6] Exporting data to TXT files...")
+        # Step 5: Export data
+        if verbose:
+            print("\n[5/5] Exporting data...")
 
-        txt_files = self.data_exporter.export_all(data, analysis)
+        self._export_all_data()
 
-        if self.verbose and txt_files:
-            print(f"  Exported {len(txt_files)} TXT file(s)")
-        
-        # Step 4: Export field data
-        if 'fields' in data and data['fields'] and field_analysis:
-            if self.verbose:
-                print("\n[4/6] Exporting field data...")
+        if verbose:
+            print("\n" + "=" * 60)
+            print(f"Postprocessing complete. Results in: {self.run_folder}")
+            print("=" * 60)
 
-            # Export field analysis to JSON
-            self.field_exporter.export_to_json(data['fields'], field_analysis)
+        return self.data, self.analysis
 
-            # Optionally export downsampled field arrays
-            if self.config.get('export_field_arrays', False):
-                self.field_exporter.export_field_data_arrays(data['fields'])
+    def _analyze_spectrum(self) -> Dict[str, Any]:
+        """Analyze optical spectra."""
+        analyzer = SpectrumAnalyzer(self.data['spectrum'])
 
-        # Step 5: Save processed data
-        if self.verbose:
-            print(f"\n[5/6] Saving processed data...")
-        
-        self._save_processed_data(data, analysis, field_analysis)
-        
-        if self.verbose:
-            print("\n" + "="*60)
-            print("Postprocessing Completed Successfully")
-            print("="*60)
-            print(f"\nResults saved in: {self.output_dir}/")
-        
-        return data, analysis, field_analysis
-    
-    def _print_analysis_summary(self, analysis):
-        """Print summary of spectral analysis."""
-        print("\n  Spectral Analysis Summary:")
-        print("  " + "-"*50)
-
-        # Extract per-polarization info from arrays
-        n_pol = len(analysis['peak_wavelengths'])
-
-        for ipol in range(n_pol):
-            print(f"\n  Polarization {ipol + 1}:")
-            print(f"    Peak Wavelength: {analysis['peak_wavelengths'][ipol]:.2f} nm")
-            print(f"    Peak Value: {analysis['peak_values'][ipol]:.2e} nm²")
-            print(f"    FWHM: {analysis['fwhm'][ipol]:.2f} nm")
-
-        # Print unpolarized analysis if available
-        unpol_info = analysis.get('unpolarized', {})
-        if unpol_info.get('can_calculate', False):
-            unpol_spec = analysis.get('unpolarized_spectrum', {})
-            print(f"\n  Unpolarized (FDTD-style incoherent average):")
-            print(f"    Method: {unpol_info.get('method', 'N/A')}")
-            print(f"    Peak Wavelength: {unpol_spec.get('peak_wavelength', 0):.2f} nm")
-            print(f"    Peak Absorption: {unpol_spec.get('peak_absorption', 0):.2e} nm²")
-            print(f"    Peak Extinction: {unpol_spec.get('peak_extinction', 0):.2e} nm²")
-        else:
-            print(f"\n  Unpolarized: Not calculated")
-            print(f"    Reason: {unpol_info.get('reason', 'Unknown')}")
-    
-    def _save_processed_data(self, data, analysis, field_analysis):
-        """Save processed data in various formats."""
-        output_formats = self.config.get('output_formats', ['txt', 'csv', 'json'])
-        
-        # Save analysis results
-        if 'txt' in output_formats:
-            self._save_txt(data, analysis, field_analysis)
-        
-        if 'csv' in output_formats:
-            self._save_csv(data, analysis)
-        
-        if 'json' in output_formats:
-            self._save_json(data, analysis, field_analysis)
-    
-    def _save_txt(self, data, analysis, field_analysis):
-        """Save processed data as text file."""
-        filepath = os.path.join(self.output_dir, 'simulation_processed.txt')
-        
-        with open(filepath, 'w') as f:
-            f.write("MNPBEM Simulation Results - Processed\n")
-            f.write("="*60 + "\n\n")
-            
-            # Write analysis summary
-            f.write("SPECTRAL ANALYSIS\n")
-            f.write("-"*60 + "\n\n")
-            
-            # ✅ FIX: analysis is a single dict with arrays
-            n_pol = len(analysis['peak_wavelengths'])
-            
-            for ipol in range(n_pol):
-                f.write(f"Polarization {ipol + 1}:\n")
-                f.write(f"  Peak Wavelength: {analysis['peak_wavelengths'][ipol]:.2f} nm\n")
-                f.write(f"  Peak Value: {analysis['peak_values'][ipol]:.2e} nm²\n")
-                f.write(f"  FWHM: {analysis['fwhm'][ipol]:.2f} nm\n")
-                f.write("\n")
-            
-            # Write field analysis
-            if field_analysis:
-                f.write("\nFIELD ANALYSIS\n")
-                f.write("-"*60 + "\n\n")
-                
-                for pol_idx, field_result in enumerate(field_analysis):
-                    f.write(f"Polarization {pol_idx + 1} (λ = {field_result['wavelength']:.1f} nm):\n")
-                    
-                    stats = field_result['enhancement_stats']
-                    f.write(f"  Enhancement Statistics:\n")
-                    f.write(f"    Max:       {stats['max']:.2f}\n")
-                    f.write(f"    Mean:      {stats['mean']:.2f}\n")
-                    f.write(f"    Median:    {stats['median']:.2f}\n")
-                    f.write(f"    95th %ile: {stats['percentile_95']:.2f}\n")
-                    
-                    if field_result['hotspots']:
-                        f.write(f"\n  Top Hotspots:\n")
-                        for hotspot in field_result['hotspots'][:5]:
-                            pos = hotspot['position']
-                            f.write(f"    #{hotspot['rank']}: ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}) nm "
-                                  f"| E/E₀ = {hotspot['enhancement']:.2f}\n")
-                    
-                    f.write("\n")
-            
-            # Write full spectrum data
-            f.write("\nFULL SPECTRUM DATA\n")
-            f.write("-"*60 + "\n\n")
-            f.write("Wavelength(nm)\t")
-            
-            n_pol = data['extinction'].shape[1]
-            for i in range(n_pol):
-                f.write(f"Ext_pol{i+1}\t")
-            for i in range(n_pol):
-                f.write(f"Sca_pol{i+1}\t")
-            for i in range(n_pol):
-                f.write(f"Abs_pol{i+1}")
-                if i < n_pol - 1:
-                    f.write("\t")
-            f.write("\n")
-            
-            for i, wl in enumerate(data['wavelength']):
-                f.write(f"{wl:.2f}\t")
-                for pol in range(n_pol):
-                    f.write(f"{data['extinction'][i, pol]:.6e}\t")
-                for pol in range(n_pol):
-                    f.write(f"{data['scattering'][i, pol]:.6e}\t")
-                for pol in range(n_pol):
-                    f.write(f"{data['absorption'][i, pol]:.6e}")
-                    if pol < n_pol - 1:
-                        f.write("\t")
-                f.write("\n")
-        
-        if self.verbose:
-            print(f"  Saved: {filepath}")
-    
-    def _save_csv(self, data, analysis):
-        """Save processed data as CSV file."""
-        filepath = os.path.join(self.output_dir, 'simulation_processed.csv')
-        
-        with open(filepath, 'w', newline='') as f:
-            writer = csv.writer(f)
-            
-            # Header
-            n_pol = data['extinction'].shape[1]
-            header = ['Wavelength(nm)']
-            for i in range(n_pol):
-                header.append(f'Extinction_pol{i+1}')
-            for i in range(n_pol):
-                header.append(f'Scattering_pol{i+1}')
-            for i in range(n_pol):
-                header.append(f'Absorption_pol{i+1}')
-            
-            writer.writerow(header)
-            
-            # Data
-            for i, wl in enumerate(data['wavelength']):
-                row = [wl]
-                for pol in range(n_pol):
-                    row.append(data['extinction'][i, pol])
-                for pol in range(n_pol):
-                    row.append(data['scattering'][i, pol])
-                for pol in range(n_pol):
-                    row.append(data['absorption'][i, pol])
-                writer.writerow(row)
-        
-        if self.verbose:
-            print(f"  Saved: {filepath}")
-    
-    def _save_json(self, data, analysis, field_analysis):
-        """Save processed data as JSON file."""
-        filepath = os.path.join(self.output_dir, 'simulation_processed.json')
-        
-        # Prepare JSON-serializable data
-        json_data = {
-            'wavelength': data['wavelength'].tolist(),
-            'extinction': data['extinction'].tolist(),
-            'scattering': data['scattering'].tolist(),
-            'absorption': data['absorption'].tolist(),
-            'analysis': {}
+        analysis = {
+            'resonance_summary': analyzer.get_resonance_summary(),
+            'peaks': {},
+            'fwhm': {},
+            'statistics': {},
         }
-        
-        # ✅ FIX: Convert analysis dict properly
-        for key, value in analysis.items():
-            if hasattr(value, 'tolist'):
-                json_data['analysis'][key] = value.tolist()
-            elif isinstance(value, dict):
-                json_data['analysis'][key] = {k: (v.tolist() if hasattr(v, 'tolist') else v) 
-                                               for k, v in value.items()}
-            else:
-                json_data['analysis'][key] = value
-        
-        # Add field data summary if available
-        if 'fields' in data and data['fields']:
-            json_data['field_data_available'] = True
-            json_data['field_wavelengths'] = [float(f['wavelength']) for f in data['fields']]
-            
-            # Add field analysis summary
-            if field_analysis:
-                json_data['field_analysis_summary'] = []
-                for field_result in field_analysis:
-                    summary = {
-                        'wavelength': field_result['wavelength'],
-                        'max_enhancement': field_result['enhancement_stats']['max'],
-                        'mean_enhancement': field_result['enhancement_stats']['mean'],
-                        'num_hotspots': len(field_result['hotspots']),
-                        'top_hotspot_position': field_result['hotspots'][0]['position'] if field_result['hotspots'] else None,
-                        'top_hotspot_enhancement': field_result['hotspots'][0]['enhancement'] if field_result['hotspots'] else None
-                    }
-                    json_data['field_analysis_summary'].append(summary)
-        else:
-            json_data['field_data_available'] = False
-        
-        with open(filepath, 'w') as f:
-            json.dump(json_data, f, indent=2)
-        
-        if self.verbose:
-            print(f"  Saved: {filepath}")
+
+        for pol_idx in range(analyzer.n_polarizations):
+            # Find peaks
+            peaks = analyzer.find_peaks('extinction', pol_idx)
+            analysis['peaks'][pol_idx] = peaks
+
+            # Calculate FWHM for main peak
+            if peaks:
+                fwhm = analyzer.calculate_fwhm('extinction', pol_idx, 0)
+                analysis['fwhm'][pol_idx] = fwhm
+
+            # Statistics
+            stats = analyzer.get_statistics('extinction', pol_idx)
+            analysis['statistics'][pol_idx] = stats
+
+        return analysis
+
+    def _compute_unpolarized_spectrum(self) -> Dict[str, np.ndarray]:
+        """Compute unpolarized spectrum."""
+        analyzer = SpectrumAnalyzer(self.data['spectrum'])
+        return analyzer.calculate_unpolarized()
+
+    def _analyze_fields(self) -> Dict[int, Dict[str, Any]]:
+        """Analyze electric field distributions."""
+        field_analysis = {}
+
+        for pol_idx, field_data in self.data['field'].items():
+            analyzer = FieldAnalyzer(field_data)
+
+            field_analysis[pol_idx] = {
+                'statistics': analyzer.get_statistics(),
+                'hotspots': analyzer.find_hotspots(),
+                'enhanced_volume': analyzer.compute_enhanced_volume(),
+            }
+
+        self.analysis['field_stats'] = {k: v['statistics'] for k, v in field_analysis.items()}
+        self.analysis['hotspots'] = {k: v['hotspots'] for k, v in field_analysis.items()}
+
+        return field_analysis
+
+    def _generate_all_plots(self):
+        """Generate all visualization plots."""
+        # Spectrum plots
+        if 'spectrum' in self.data:
+            self._generate_spectrum_plots()
+
+        # Field plots
+        if 'field' in self.data:
+            self._generate_field_plots()
+
+        # Surface charge plots
+        if 'surface_charges' in self.data:
+            self._generate_surface_charge_plots()
+
+    def _generate_spectrum_plots(self):
+        """Generate spectrum plots."""
+        spectrum = self.data['spectrum']
+        n_pol = spectrum['extinction'].shape[1]
+
+        # Individual polarization plots
+        for pol_idx in range(n_pol):
+            self.visualizer.plot_spectrum(
+                spectrum, pol_idx,
+                title=f'Optical Spectrum - Polarization {pol_idx + 1}',
+                save_path=os.path.join(self.plots_dir, f'spectrum_pol{pol_idx + 1}')
+            )
+
+        # Comparison plot
+        if n_pol > 1:
+            self.visualizer.plot_spectrum_comparison(
+                spectrum,
+                title='Extinction Spectrum Comparison',
+                save_path=os.path.join(self.plots_dir, 'spectrum_comparison')
+            )
+
+            # Unpolarized plot
+            if 'spectrum_unpolarized' in self.analysis:
+                self.visualizer.plot_spectrum_unpolarized(
+                    spectrum, self.analysis['spectrum_unpolarized'],
+                    title='Unpolarized vs Polarized Spectra',
+                    save_path=os.path.join(self.plots_dir, 'spectrum_unpolarized')
+                )
+
+        self.visualizer.close_all()
+
+    def _generate_field_plots(self):
+        """Generate field enhancement plots."""
+        field_data = self.data['field']
+
+        # Get geometry overlay
+        geometry_overlay = self.geometry_cross.calculate('xz', 0.0)
+
+        for pol_idx, data in field_data.items():
+            # Basic field plot
+            self.visualizer.plot_field_enhancement(
+                data,
+                geometry_overlay=geometry_overlay,
+                title=f'Field Enhancement - Polarization {pol_idx + 1}',
+                save_path=os.path.join(self.plots_dir, f'field_pol{pol_idx + 1}')
+            )
+
+            # Linear scale version
+            self.visualizer.plot_field_enhancement(
+                data,
+                log_scale=False,
+                geometry_overlay=geometry_overlay,
+                title=f'Field Enhancement (Linear) - Pol {pol_idx + 1}',
+                save_path=os.path.join(self.plots_dir, f'field_pol{pol_idx + 1}_linear')
+            )
+
+        # Comparison plot if multiple polarizations
+        if len(field_data) > 1:
+            self.visualizer.plot_field_comparison(
+                field_data,
+                title='Field Enhancement Comparison',
+                save_path=os.path.join(self.plots_dir, 'field_comparison')
+            )
+
+        self.visualizer.close_all()
+
+    def _generate_surface_charge_plots(self):
+        """Generate surface charge plots."""
+        charge_data = self.data['surface_charges']
+        mode_info = self.data.get('summary', {}).get('mode_analysis', {})
+
+        for pol_idx, data in charge_data.items():
+            # 3D surface charge plot
+            self.surface_charge_viz.plot_surface_charges_3d(
+                data,
+                component='real',
+                title=f'Surface Charge - Polarization {pol_idx + 1}',
+                save_path=os.path.join(self.plots_dir, f'surface_charge_pol{pol_idx + 1}')
+            )
+
+            # Multi-view plot
+            self.surface_charge_viz.plot_charge_multiview(
+                data,
+                title=f'Surface Charge Multi-View - Pol {pol_idx + 1}',
+                save_path=os.path.join(self.plots_dir, f'surface_charge_multiview_pol{pol_idx + 1}')
+            )
+
+            # Mode analysis plot
+            if str(pol_idx) in mode_info:
+                self.surface_charge_viz.plot_mode_analysis(
+                    data, mode_info[str(pol_idx)],
+                    save_path=os.path.join(self.plots_dir, f'mode_analysis_pol{pol_idx + 1}')
+                )
+
+    def _export_all_data(self):
+        """Export all data to files."""
+        self.exporter.export_all(self.data, self.analysis)
+
+    def _print_data_summary(self):
+        """Print summary of loaded data."""
+        print(f"      Run folder: {self.run_folder}")
+
+        if 'spectrum' in self.data:
+            n_wl = len(self.data['spectrum']['wavelengths'])
+            n_pol = self.data['spectrum']['extinction'].shape[1]
+            wl_range = self.loader.get_wavelength_range()
+            print(f"      Spectrum: {n_wl} wavelengths, {n_pol} polarization(s)")
+            print(f"      Wavelength range: {wl_range[0]:.0f} - {wl_range[1]:.0f} nm")
+
+        if 'field' in self.data:
+            print(f"      Field data: {len(self.data['field'])} polarization(s)")
+
+        if 'surface_charges' in self.data:
+            print(f"      Surface charge data: {len(self.data['surface_charges'])} polarization(s)")
+
+    def _print_spectrum_analysis(self):
+        """Print spectrum analysis results."""
+        if 'spectrum' not in self.analysis:
+            return
+
+        summary = self.analysis['spectrum'].get('resonance_summary', {})
+
+        for pol_key, pol_data in summary.get('resonances', {}).items():
+            print(f"      {pol_key}: {pol_data['n_peaks']} peak(s) found")
+            for i, peak in enumerate(pol_data['peaks'][:2]):  # Top 2 peaks
+                wl = peak['wavelength']
+                ext = peak['extinction']
+                fwhm = peak.get('fwhm')
+                fwhm_str = f", FWHM={fwhm:.1f}nm" if fwhm else ""
+                print(f"        Peak {i+1}: λ={wl:.1f}nm, σ_ext={ext:.1f}nm²{fwhm_str}")
+
+    def _print_field_analysis(self):
+        """Print field analysis results."""
+        if 'field_stats' not in self.analysis:
+            return
+
+        for pol_idx, stats in self.analysis['field_stats'].items():
+            max_enh = stats.get('max', 0)
+            mean_enh = stats.get('mean', 0)
+            print(f"      Pol {pol_idx + 1}: Max enhancement={max_enh:.1f}, Mean={mean_enh:.2f}")
+
+            hotspots = self.analysis.get('hotspots', {}).get(pol_idx, [])
+            if hotspots:
+                top_hotspot = hotspots[0]
+                pos = top_hotspot['position']
+                print(f"        Top hotspot at ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}) nm")
+
+    def get_results(self) -> tuple:
+        """Get analysis results."""
+        return self.data, self.analysis

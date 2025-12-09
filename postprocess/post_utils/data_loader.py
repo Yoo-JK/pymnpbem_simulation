@@ -1,191 +1,209 @@
 """
-Data Loading Utilities
+Data Loader for pyMNPBEM simulation results.
 
-Loads and parses MATLAB output files.
+Loads simulation results from:
+- NumPy .npy files
+- JSON summary files
+- Text data files
 """
 
 import numpy as np
-import scipy.io as sio
+import json
 import os
+from pathlib import Path
+from typing import Dict, Any, Optional
 
 
 class DataLoader:
-    """Handles loading of MATLAB output files."""
+    """
+    Loads simulation results from a run folder.
 
-    def __init__(self, config, verbose=False):
-        self.config = config
-        self.verbose = verbose
+    Supports loading:
+    - Spectrum data (wavelengths, scattering, absorption, extinction)
+    - Field data (enhancement, coordinates)
+    - Surface charge data (positions, values, mesh)
+    - Configuration and summary data
+    """
 
-        # Validate required config keys
-        output_dir = config.get('output_dir')
-        simulation_name = config.get('simulation_name')
+    def __init__(self, run_folder: str):
+        """
+        Initialize the data loader.
 
-        if output_dir is None:
-            raise ValueError("Config missing required key: 'output_dir'")
-        if simulation_name is None:
-            raise ValueError("Config missing required key: 'simulation_name'")
+        Args:
+            run_folder: Path to simulation run folder
+        """
+        self.run_folder = run_folder
+        self.data_dir = os.path.join(run_folder, 'data')
 
-        self.output_dir = os.path.join(output_dir, simulation_name)
-    
-    def load_simulation_results(self):
-        """Load simulation results from MATLAB output."""
-        mat_file = os.path.join(self.output_dir, 'simulation_results.mat')
-        
-        if not os.path.exists(mat_file):
-            raise FileNotFoundError(f"Results file not found: {mat_file}")
-        
-        if self.verbose:
-            print(f"Loading results from: {mat_file}")
-        
-        # Load MATLAB file
-        mat_data = sio.loadmat(mat_file, struct_as_record=False, squeeze_me=True)
+        if not os.path.exists(run_folder):
+            raise FileNotFoundError(f"Run folder not found: {run_folder}")
 
-        if 'results' not in mat_data:
-            raise KeyError(f"MAT file missing 'results' structure: {mat_file}")
-        results = mat_data['results']
-        
-        # Extract data
-        data = {
-            'wavelength': self._extract_array(results.wavelength),
-            'scattering': self._extract_array(results.scattering),
-            'extinction': self._extract_array(results.extinction),
-            'absorption': self._extract_array(results.absorption),
-            'polarizations': self._extract_array(results.polarizations),
-            'propagation_dirs': self._extract_array(results.propagation_dirs),
-        }
-        
-        # Add calculation time if available
-        if hasattr(results, 'calculation_time'):
-            data['calculation_time'] = float(results.calculation_time)
-        
-        # Ensure 2D arrays for cross sections
-        for key in ['scattering', 'extinction', 'absorption']:
-            if data[key].ndim == 1:
-                data[key] = data[key].reshape(-1, 1)
-        
-        # ✅ FIX: Add n_polarizations to data dictionary
-        data['n_polarizations'] = data['scattering'].shape[1]
-        
-        if self.verbose:
-            print(f"  Loaded {len(data['wavelength'])} wavelength points")
-            print(f"  Polarizations: {data['n_polarizations']}")
-        
-        # Load field data if available
-        if hasattr(results, 'fields'):
-            data['fields'] = self._load_field_data(results.fields)
-            if self.verbose and data['fields']:
-                # Count unique wavelengths and polarizations
-                unique_wls = set(f.get('wavelength_idx', f.get('wavelength')) for f in data['fields'])
-                unique_pols = set(f.get('polarization_idx', 0) for f in data['fields'])
-                print(f"  Field data loaded: {len(data['fields'])} entries "
-                      f"({len(unique_wls)} wavelength(s), {len(unique_pols)} polarization(s))")
-        
+    def load_all(self) -> Dict[str, Any]:
+        """
+        Load all available data from the run folder.
+
+        Returns:
+            Dictionary with all loaded data
+        """
+        data = {}
+
+        # Load configuration
+        data['config'] = self.load_config()
+
+        # Load summary
+        data['summary'] = self.load_summary()
+
+        # Load spectrum data
+        spectrum = self.load_spectrum()
+        if spectrum:
+            data['spectrum'] = spectrum
+
+        # Load field data
+        field = self.load_field_data()
+        if field:
+            data['field'] = field
+
+        # Load surface charge data
+        charges = self.load_surface_charges()
+        if charges:
+            data['surface_charges'] = charges
+
         return data
-    
-    def _load_field_data(self, fields_struct):
-        """Load electromagnetic field data from MATLAB structure."""
-        if fields_struct is None:
-            return []
-        
-        # Handle single polarization vs multiple
-        if not isinstance(fields_struct, np.ndarray):
-            fields_struct = [fields_struct]
-        
-        field_data_list = []
-        
-        for field_item in fields_struct:
-            # Validate required fields
-            required_fields = ['wavelength', 'polarization', 'x_grid', 'y_grid', 'z_grid']
-            missing_fields = [f for f in required_fields if not hasattr(field_item, f)]
-            if missing_fields:
-                raise AttributeError(f"Field data missing required attributes: {missing_fields}")
 
-            field_dict = {
-                'wavelength': float(field_item.wavelength),
-                'polarization': self._extract_array(field_item.polarization),
-                'x_grid': self._extract_array(field_item.x_grid),
-                'y_grid': self._extract_array(field_item.y_grid),
-                'z_grid': self._extract_array(field_item.z_grid),
-            }
+    def load_config(self) -> Dict[str, Any]:
+        """Load configuration from config.json."""
+        config_path = os.path.join(self.run_folder, 'config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        return {}
 
-            # New fields for per-polarization peak wavelength support
-            if hasattr(field_item, 'wavelength_idx'):
-                field_dict['wavelength_idx'] = int(field_item.wavelength_idx)
+    def load_summary(self) -> Dict[str, Any]:
+        """Load summary from summary.json."""
+        summary_path = os.path.join(self.run_folder, 'summary.json')
+        if os.path.exists(summary_path):
+            with open(summary_path, 'r') as f:
+                return json.load(f)
+        return {}
 
-            if hasattr(field_item, 'polarization_idx'):
-                field_dict['polarization_idx'] = int(field_item.polarization_idx)
-            
-            # Electric field components
-            if hasattr(field_item, 'e_total'):
-                field_dict['e_total'] = self._extract_array(field_item.e_total)
-            
-            if hasattr(field_item, 'e_induced'):
-                field_dict['e_induced'] = self._extract_array(field_item.e_induced)
-            
-            if hasattr(field_item, 'e_incoming'):
-                field_dict['e_incoming'] = self._extract_array(field_item.e_incoming)
-            
-            # Enhancement and intensity
-            if hasattr(field_item, 'enhancement'):
-                field_dict['enhancement'] = self._extract_array(field_item.enhancement)
-            
-            if hasattr(field_item, 'intensity'):
-                field_dict['intensity'] = self._extract_array(field_item.intensity)
-            
-            field_data_list.append(field_dict)
-        
-        return field_data_list
-    
-    def _extract_array(self, matlab_array):
-        """Extract numpy array from MATLAB data."""
-        if matlab_array is None:
-            return np.array([])
-        
-        # Convert to numpy array if not already
-        arr = np.array(matlab_array)
-        
-        # Handle scalar
-        if arr.ndim == 0:
-            return arr.item()
-        
-        return arr
-    
-    def load_text_results(self):
-        """Load results from text file (backup method)."""
-        txt_file = os.path.join(self.output_dir, 'simulation_results.txt')
-        
-        if not os.path.exists(txt_file):
-            raise FileNotFoundError(f"Results file not found: {txt_file}")
-        
-        if self.verbose:
-            print(f"Loading results from text file: {txt_file}")
-        
-        # Load data
-        data_array = np.loadtxt(txt_file, skiprows=1)
+    def load_spectrum(self) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Load spectrum data.
 
-        # Validate data format: should have (3*n_pol + 1) columns
-        # Column layout: wavelength, sca_pol1..n, ext_pol1..n, abs_pol1..n
-        n_cols = data_array.shape[1]
-        if (n_cols - 1) % 3 != 0:
-            raise ValueError(
-                f"Invalid text file format: expected (3*n_pol + 1) columns, got {n_cols}. "
-                f"File may be corrupted or have unexpected format."
-            )
-        n_pol = (n_cols - 1) // 3
+        Returns:
+            Dictionary with wavelengths and cross-sections, or None if not available
+        """
+        wavelengths_path = os.path.join(self.data_dir, 'wavelengths.npy')
 
-        if n_pol < 1:
-            raise ValueError(f"Invalid number of polarizations calculated: {n_pol}")
+        if not os.path.exists(wavelengths_path):
+            return None
 
         data = {
-            'wavelength': data_array[:, 0],
-            'scattering': data_array[:, 1:n_pol+1],
-            'extinction': data_array[:, n_pol+1:2*n_pol+1],
-            'absorption': data_array[:, 2*n_pol+1:],
-            'n_polarizations': n_pol,  # ✅ FIX: Add this here too
+            'wavelengths': np.load(wavelengths_path),
         }
-        
-        if self.verbose:
-            print(f"  Loaded {len(data['wavelength'])} wavelength points")
-            print(f"  Polarizations: {n_pol}")
-        
+
+        # Load cross-section data
+        for name in ['scattering', 'absorption', 'extinction']:
+            path = os.path.join(self.data_dir, f'{name}.npy')
+            if os.path.exists(path):
+                data[name] = np.load(path)
+
+        # Load unpolarized if available
+        unpol_path = os.path.join(self.data_dir, 'extinction_unpolarized.npy')
+        if os.path.exists(unpol_path):
+            data['extinction_unpolarized'] = np.load(unpol_path)
+
         return data
+
+    def load_field_data(self) -> Optional[Dict[int, Dict[str, np.ndarray]]]:
+        """
+        Load field data for all polarizations.
+
+        Returns:
+            Dictionary mapping polarization index to field data
+        """
+        field_data = {}
+
+        # Find all field files
+        for filename in os.listdir(self.data_dir):
+            if filename.startswith('field_pol') and filename.endswith('_enhancement.npy'):
+                # Extract polarization index
+                parts = filename.split('_')
+                pol_str = parts[1]  # 'pol1', 'pol2', etc.
+                pol_idx = int(pol_str[3:]) - 1  # Convert to 0-indexed
+
+                prefix = f'field_pol{pol_idx+1}'
+
+                field_data[pol_idx] = {
+                    'enhancement': np.load(os.path.join(self.data_dir, f'{prefix}_enhancement.npy')),
+                    'x': np.load(os.path.join(self.data_dir, f'{prefix}_x.npy')),
+                    'y': np.load(os.path.join(self.data_dir, f'{prefix}_y.npy')),
+                    'z': np.load(os.path.join(self.data_dir, f'{prefix}_z.npy')),
+                }
+
+        return field_data if field_data else None
+
+    def load_surface_charges(self) -> Optional[Dict[int, Dict[str, np.ndarray]]]:
+        """
+        Load surface charge data for all polarizations.
+
+        Returns:
+            Dictionary mapping polarization index to charge data
+        """
+        charge_data = {}
+
+        for filename in os.listdir(self.data_dir):
+            if filename.startswith('charges_pol') and filename.endswith('_values.npy'):
+                parts = filename.split('_')
+                pol_str = parts[1]
+                pol_idx = int(pol_str[3:]) - 1
+
+                prefix = f'charges_pol{pol_idx+1}'
+
+                charge_data[pol_idx] = {
+                    'positions': np.load(os.path.join(self.data_dir, f'{prefix}_positions.npy')),
+                    'charges': np.load(os.path.join(self.data_dir, f'{prefix}_values.npy')),
+                    'vertices': np.load(os.path.join(self.data_dir, f'{prefix}_vertices.npy')),
+                    'faces': np.load(os.path.join(self.data_dir, f'{prefix}_faces.npy')),
+                }
+
+        return charge_data if charge_data else None
+
+    def load_spectrum_txt(self, pol_idx: int = 0) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Load spectrum data from text file.
+
+        Args:
+            pol_idx: Polarization index (0-indexed)
+
+        Returns:
+            Dictionary with spectrum data
+        """
+        filepath = os.path.join(self.data_dir, f'spectrum_pol{pol_idx+1}.txt')
+
+        if not os.path.exists(filepath):
+            return None
+
+        data = np.loadtxt(filepath, skiprows=1)
+
+        return {
+            'wavelengths': data[:, 0],
+            'scattering': data[:, 1],
+            'absorption': data[:, 2],
+            'extinction': data[:, 3],
+        }
+
+    def get_polarization_count(self) -> int:
+        """Get the number of polarizations in the data."""
+        spectrum = self.load_spectrum()
+        if spectrum and 'scattering' in spectrum:
+            return spectrum['scattering'].shape[1]
+        return 0
+
+    def get_wavelength_range(self) -> Optional[tuple]:
+        """Get the wavelength range of the simulation."""
+        spectrum = self.load_spectrum()
+        if spectrum and 'wavelengths' in spectrum:
+            wavelengths = spectrum['wavelengths']
+            return (float(wavelengths[0]), float(wavelengths[-1]))
+        return None

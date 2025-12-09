@@ -1,237 +1,249 @@
-# MNPBEM Automation Pipeline
+# pyMNPBEM Simulation - Detailed Help
 
-Automated pipeline for MNPBEM (Metallic Nanoparticle Boundary Element Method) simulations.
-
-## 📁 Directory Structure
+## Directory Structure
 
 ```
-mnpbem_simulation/
-├── master.sh                    # Main execution script
-├── run_simulation.py           # Simulation code generator
-├── run_postprocess.py          # Postprocessing script
+pymnpbem_simulation/
 ├── config/
-│   └── config.py              # Configuration file
+│   ├── simulation/
+│   │   └── config_simulation.py    # Simulation parameters
+│   └── structure/
+│       └── config_structure.py     # Structure definitions
 ├── simulation/
-│   ├── calculate.py           # Simulation manager class
-│   └── sim_utils/             # Simulation utilities
-│       ├── __init__.py
-│       ├── geometry_generator.py
-│       ├── material_manager.py
-│       └── matlab_code_generator.py
-└── postprocess/
-    ├── postprocess.py         # Postprocessing manager class
-    └── post_utils/            # Postprocessing utilities
-        ├── __init__.py
-        ├── data_loader.py
-        ├── spectrum_analyzer.py
-        └── visualizer.py
+│   ├── __init__.py
+│   ├── runner.py                   # Main simulation orchestrator
+│   └── sim_utils/
+│       ├── geometry_builder.py     # Particle geometry builder
+│       ├── material_builder.py     # Material/dielectric functions
+│       ├── bem_solver.py           # BEM solver wrapper
+│       ├── field_calculator.py     # Electric field calculations
+│       └── surface_charge.py       # Surface charge analysis
+├── postprocess/
+│   ├── __init__.py
+│   ├── postprocess.py              # Postprocessing manager
+│   └── post_utils/
+│       ├── data_loader.py          # Load simulation results
+│       ├── spectrum_analyzer.py    # Spectral analysis
+│       ├── field_analyzer.py       # Field distribution analysis
+│       ├── visualizer.py           # Spectrum and field plots
+│       ├── surface_charge_visualizer.py  # 3D charge visualization
+│       ├── geometry_cross_section.py     # Geometry overlays
+│       └── data_exporter.py        # Export to TXT/CSV/JSON
+├── run_simulation.py               # Main entry point
+├── run_postprocess.py              # Postprocessing entry point
+├── requirements.txt                # Python dependencies
+└── README.md                       # Quick start guide
 ```
 
-## 🚀 Quick Start
+## Workflow
 
-### 1. Setup
+### 1. Configure Structure (`config/structure/config_structure.py`)
 
-```bash
-# Make master.sh executable
-chmod +x master.sh
-
-# Install Python dependencies
-pip install numpy scipy pandas matplotlib
-```
-
-### 2. Configure Simulation
-
-Edit `config/config.py` to set your simulation parameters:
+Set the particle geometry:
 
 ```python
-args = {}
+# Example: Gold nanosphere in water
+args['structure'] = 'sphere'
+args['diameter'] = 50          # nm
+args['mesh_density'] = 144     # Number of mesh vertices
+args['materials'] = ['gold']   # Particle material
+args['medium'] = 'water'       # Surrounding medium
+```
 
-# Structure type
-args['structure'] = 'dimer_core_shell_cube'
+### 2. Configure Simulation (`config/simulation/config_simulation.py`)
 
-# Geometry parameters
-args['core_size'] = 20
-args['shell_thickness'] = 5
-args['gap'] = 10
+Set simulation parameters:
 
-# Materials
-args['materials'] = ['air', 'silver', 'gold']
+```python
+# Path to pyMNPBEM installation
+args['pymnpbem_path'] = '/path/to/pyMNPBEM'
+
+# Simulation type
+args['simulation_type'] = 'stat'  # 'stat' (quasistatic) or 'ret' (retarded)
+
+# Excitation
+args['excitation_type'] = 'planewave'
+args['polarizations'] = [[1, 0, 0], [0, 1, 0]]  # x and y polarized
 
 # Wavelength range
-args['wavelength_range'] = [400, 800, 80]
+args['wavelength_range'] = [400, 800, 100]  # [start, end, num_points]
 
-# ... (see config.py for all options)
+# Calculations
+args['calculate_cross_sections'] = True
+args['calculate_fields'] = True
+args['calculate_surface_charges'] = True
 ```
 
 ### 3. Run Simulation
 
 ```bash
-./master.sh --config ./config/config.py
+python run_simulation.py
 ```
 
-## 📊 Output Files
+### 4. Run Postprocessing
 
-Results are saved in `./results/` directory:
+```bash
+python run_postprocess.py /path/to/results/folder
+# or
+python run_postprocess.py --latest
+```
 
-- `simulation_results.txt` - Raw MATLAB output
-- `simulation_results.mat` - MATLAB binary format
-- `simulation_processed.txt` - Processed data with analysis
-- `simulation_processed.csv` - CSV format for Excel
-- `simulation_processed.json` - JSON format with metadata
-- `simulation_spectrum.png/pdf` - Spectrum plots
-- `simulation_polarization_comparison.png/pdf` - Polarization comparison
-
-## 🎯 Supported Structures
+## Structure Types Reference
 
 ### Single Particles
-- `sphere` - Nanosphere
-- `cube` - Nanocube with rounded edges
-- `rod` - Nanorod/cylinder
-- `ellipsoid` - Ellipsoid
-- `triangle` - Triangular nanoparticle
+
+| Type | Required Parameters |
+|------|---------------------|
+| `sphere` | `diameter`, `mesh_density` |
+| `cube` | `size`, `rounding` (0-1), `mesh_density` |
+| `rod` | `diameter`, `height`, `mesh_density` |
+| `ellipsoid` | `axes` ([x, y, z] semi-axes), `mesh_density` |
+| `triangle` | `side_length`, `thickness` |
 
 ### Core-Shell Structures
-- `core_shell_sphere` - Core-shell sphere
-- `core_shell_cube` - Core-shell cube
+
+| Type | Required Parameters |
+|------|---------------------|
+| `core_shell_sphere` | `core_diameter`, `shell_thickness`, `mesh_density` |
+| `core_shell_cube` | `core_size`, `shell_thickness`, `rounding`, `mesh_density` |
+| `core_shell_rod` | `core_diameter`, `shell_thickness`, `height`, `mesh_density` |
 
 ### Dimers
-- `dimer_sphere` - Two coupled spheres
-- `dimer_cube` - Two coupled cubes
-- `dimer_core_shell_cube` - Two core-shell cubes
 
-## 🔧 Configuration Options
+| Type | Required Parameters |
+|------|---------------------|
+| `dimer_sphere` | `diameter`, `gap`, `mesh_density` |
+| `dimer_cube` | `size`, `gap`, `rounding`, `mesh_density` |
+| `dimer_core_shell_cube` | `core_size`, `shell_thickness`, `gap`, `rounding`, `mesh_density` |
 
-### Geometry Parameters
+### Advanced Dimer Cube
 
-Different structures require different parameters:
-
-#### Sphere
 ```python
-args['structure'] = 'sphere'
-args['diameter'] = 10  # nm
+args['structure'] = 'advanced_dimer_cube'
+args['core_size'] = 30              # Core size (nm)
+args['shell_layers'] = [5, 3]       # Shell thicknesses (inner to outer)
+args['materials'] = ['gold', 'silver', 'sio2']  # Core to outer
+args['roundings'] = [0.25, 0.2, 0.15]           # Per-layer rounding
+args['gap'] = 5                     # Surface-to-surface gap (nm)
+args['offset'] = [0, 0, 0]          # Additional offset for particle 2
+args['tilt_angle'] = 0              # Tilt angle (degrees)
+args['tilt_axis'] = [0, 1, 0]       # Tilt axis
+args['rotation_angle'] = 0          # Z-axis rotation (degrees)
 ```
 
-#### Dimer Core-Shell Cube
+### Sphere Cluster Aggregate
+
 ```python
-args['structure'] = 'dimer_core_shell_cube'
-args['core_size'] = 20  # nm
-args['shell_thickness'] = 5  # nm
-args['gap'] = 10  # Gap between cubes
-args['rounding'] = 0.25  # Edge rounding
+args['structure'] = 'sphere_cluster_aggregate'
+args['n_spheres'] = 3      # 1-7 spheres
+args['diameter'] = 50      # nm
+args['gap'] = -0.1         # Negative = overlap (contact)
+args['mesh_density'] = 144
 ```
 
-### Materials
+## Simulation Modes
 
-Available materials:
-- `'air'` - Air/vacuum
-- `'water'` - Water
-- `'glass'` - Glass substrate
-- `'gold'` - Gold (from gold.dat)
-- `'silver'` - Silver (from silver.dat)
-- `'aluminum'` - Aluminum (from aluminum.dat)
+### Quasistatic (`stat`)
+- Fast computation
+- Suitable for small particles (d < λ/10)
+- Uses electrostatic approximation
 
-### Excitation Types
+### Retarded (`ret`)
+- Full Maxwell equations
+- Required for large particles or broad wavelength ranges
+- More accurate but slower
 
-**Plane Wave**
+## Materials
+
+### Built-in Materials
+- `gold`, `silver`, `aluminum`, `copper`
+- `goldpalik`, `silverpalik`, `copperpalik` (Palik data)
+
+### Medium Options
+- `air`, `vacuum`: ε = 1.0
+- `water`: ε = 1.77 (n ≈ 1.33)
+- `glass`, `sio2`: ε ≈ 2.13-2.25
+
+### Custom Materials
+
 ```python
-args['excitation_type'] = 'planewave'
-args['polarizations'] = [[1,0,0], [0,1,0], [0,0,1]]
+# Custom constant dielectric
+args['medium'] = {'type': 'constant', 'epsilon': 2.25}
+
+# Custom refractive index file
+args['refractive_index_paths'] = {
+    'gold': '/path/to/gold_data.dat'  # Format: wavelength, n, k
+}
 ```
 
-**Dipole**
-```python
-args['excitation_type'] = 'dipole'
-args['dipole_position'] = [0, 0, 15]
-args['dipole_moment'] = [1, 0, 0]
-```
+## Output Files
 
-**EELS**
-```python
-args['excitation_type'] = 'eels'
-args['impact_parameter'] = [10, 0]
-args['beam_energy'] = 200e3
-```
+### Data Files (`data/`)
+- `wavelengths.npy`: Wavelength array
+- `scattering.npy`, `absorption.npy`, `extinction.npy`: Cross-sections
+- `field_pol{N}_enhancement.npy`: Field enhancement grids
+- `charges_pol{N}_values.npy`: Surface charge values
+- `spectrum_pol{N}.txt`: Text format spectrum
 
-## 📈 Analysis Features
+### Plots (`plots/`)
+- `spectrum_pol{N}.png`: Individual spectrum plots
+- `spectrum_comparison.png`: Multi-polarization comparison
+- `field_pol{N}.png`: Field enhancement maps
+- `surface_charge_pol{N}.png`: 3D surface charge plots
+- `mode_analysis_pol{N}.png`: Mode identification
 
-The postprocessing automatically calculates:
+### Metadata
+- `config.json`: Full configuration snapshot
+- `summary.json`: Analysis results summary
 
-- **Peak wavelengths** - Resonance positions
-- **Peak values** - Maximum cross sections
-- **FWHM** - Full width at half maximum
-- **Enhancement factors** - Polarization-dependent enhancement
-- **Average/max cross sections** - Statistical measures
+## Surface Charge Analysis
 
-## 🐛 Troubleshooting
+Surface charge plots help identify plasmon modes:
 
-### MATLAB Not Found
-```bash
-# Add MATLAB to PATH
-export PATH="/path/to/matlab/bin:$PATH"
-```
+- **Dipolar mode**: Single node (positive/negative split)
+- **Quadrupolar mode**: Two nodes
+- **Hexapolar mode**: Three nodes
 
-### MNPBEM Path Error
-Edit `master.sh` and update the MNPBEM path:
-```bash
-matlab -nodisplay -nodesktop -r "addpath(genpath('/YOUR/PATH/TO/MNPBEM')); ..."
-```
+The mode analysis automatically computes:
+- Dipole moment magnitude
+- Quadrupole tensor strength
+- Charge asymmetry
+- Dominant mode classification
 
-### Permission Denied
-```bash
-chmod +x master.sh
-```
+## Tips
 
-## 📝 Example Configurations
+### Mesh Density
+- Spheres: 144-200 for good accuracy
+- Cubes: 12-16 sufficient for most cases
+- Increase for complex shapes or high accuracy needs
 
-### Gold Nanosphere in Water
-```python
-args['structure'] = 'sphere'
-args['diameter'] = 50
-args['materials'] = ['water', 'gold']
-args['simulation_type'] = 'ret'
-args['wavelength_range'] = [400, 800, 100]
-```
+### Gap Size (Dimers)
+- > 10 nm: Weak coupling
+- 2-5 nm: Strong coupling, large field enhancement
+- < 1 nm: Ultra-strong coupling (may need nonlocal corrections)
 
-### Silver Nanocube Dimer
-```python
-args['structure'] = 'dimer_cube'
-args['size'] = 40
-args['gap'] = 5
-args['materials'] = ['air', 'silver']
-args['polarizations'] = [[1,0,0], [0,1,0]]  # Parallel and perpendicular
-```
+### Field Calculation Region
+- Set `field_mindist` ≥ 0.5 nm to avoid singularities
+- Use appropriate grid resolution for visualization quality
 
-### Core-Shell Nanoparticle
-```python
-args['structure'] = 'core_shell_sphere'
-args['core_diameter'] = 30
-args['shell_thickness'] = 10
-args['materials'] = ['air', 'gold', 'silver']  # medium, shell, core
-```
+## Troubleshooting
 
-## 🔬 Advanced Options
+### "Cannot import pyMNPBEM"
+- Check `pymnpbem_path` in config_simulation.py
+- Ensure pyMNPBEM is properly installed
 
-### High Precision
-```python
-args['mesh_density'] = 16  # Higher mesh density
-args['refine'] = 3  # Better integration
-args['simulation_type'] = 'ret'  # Full Maxwell equations
-```
+### Out of Memory
+- Reduce `mesh_density`
+- Use `use_iterative_solver = True` for large structures
+- Reduce wavelength range
 
-### Fast Calculation
-```python
-args['mesh_density'] = 8
-args['refine'] = 1
-args['simulation_type'] = 'stat'  # Quasistatic approximation
-```
+### Slow Computation
+- Use `simulation_type = 'stat'` for small particles
+- Reduce `mesh_density`
+- Use symmetry if applicable (`use_mirror_symmetry`)
 
-## 📚 Citation
+## References
 
-If you use this pipeline, please cite the MNPBEM papers:
-- U. Hohenester and A. Trügler, Comp. Phys. Commun. 183, 370 (2012)
-- U. Hohenester, Comp. Phys. Commun. 185, 1177 (2014)
-- J. Waxenegger et al., Comp. Phys. Commun. 193, 138 (2015)
-
-## 📧 Support
-
-For MNPBEM-related questions, visit: https://physik.uni-graz.at/mnpbem/
+- pyMNPBEM: https://github.com/Yoo-JK/pyMNPBEM
+- MNPBEM (MATLAB): https://github.com/Nikolaos-Matthaiakakis/MNPBEM
+- BEM Theory: Hohenester & Trügler, Computer Physics Communications (2012)
