@@ -10,7 +10,7 @@ Orchestrates the complete postprocessing pipeline:
 """
 
 import os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple, Union
 import numpy as np
 
 from .post_utils import (
@@ -36,28 +36,38 @@ class PostprocessManager:
     - Export data to various formats
     """
 
-    def __init__(self, run_folder: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Dict[str, Any], verbose: bool = False):
         """
         Initialize the postprocess manager.
 
         Args:
-            run_folder: Path to simulation run folder
-            config: Optional configuration override
+            config: Merged configuration dictionary (structure + simulation settings)
+            verbose: Whether to print progress information
         """
-        self.run_folder = run_folder
-        self.plots_dir = os.path.join(run_folder, 'plots')
-        self.data_dir = os.path.join(run_folder, 'data')
+        self.config = config
+        self.verbose = verbose
+
+        # Determine run folder from config
+        output_dir = config.get('output_dir', './results')
+        run_name = config.get('run_name')
+        if not run_name:
+            structure = config.get('structure', 'particle')
+            sim_type = config.get('simulation_type', 'stat')
+            run_name = f"{structure}_{sim_type}"
+
+        self.run_folder = os.path.join(output_dir, run_name)
+        self.plots_dir = os.path.join(self.run_folder, 'plots')
+        self.data_dir = os.path.join(self.run_folder, 'data')
 
         os.makedirs(self.plots_dir, exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)
 
         # Initialize data loader
-        self.loader = DataLoader(run_folder)
+        self.loader = DataLoader(self.run_folder)
 
-        # Load configuration
-        self.config = config or self.loader.load_config()
-        self.sim_config = self.config.get('simulation', {})
-        self.structure_config = self.config.get('structure', {})
+        # Use provided config, structure sim_config for compatibility
+        self.sim_config = config
+        self.structure_config = config
 
         # Initialize visualization tools
         self.visualizer = Visualizer(self.sim_config)
@@ -71,16 +81,17 @@ class PostprocessManager:
         self.data = {}
         self.analysis = {}
 
-    def run(self, verbose: bool = True) -> tuple:
+    def run(self) -> Tuple[Dict, Dict, List]:
         """
         Run the complete postprocessing pipeline.
 
-        Args:
-            verbose: Whether to print progress information
-
         Returns:
-            Tuple of (data, analysis) dictionaries
+            Tuple of (data, analysis, field_analysis):
+                - data: Dictionary with loaded simulation data
+                - analysis: Dictionary with analysis results
+                - field_analysis: List of field analysis results (or empty list)
         """
+        verbose = self.verbose
         if verbose:
             print("=" * 60)
             print("Starting Postprocessing")
@@ -134,7 +145,13 @@ class PostprocessManager:
             print(f"Postprocessing complete. Results in: {self.run_folder}")
             print("=" * 60)
 
-        return self.data, self.analysis
+        # Build field_analysis list for compatibility with original interface
+        field_analysis = []
+        if 'field' in self.analysis:
+            for pol_idx in sorted(self.analysis['field'].keys()):
+                field_analysis.append(self.analysis['field'][pol_idx])
+
+        return self.data, self.analysis, field_analysis
 
     def _analyze_spectrum(self) -> Dict[str, Any]:
         """Analyze optical spectra."""
