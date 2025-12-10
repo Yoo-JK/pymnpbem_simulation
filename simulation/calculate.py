@@ -21,7 +21,8 @@ from .sim_utils import (
     MaterialBuilder,
     BEMSolver,
     FieldCalculator,
-    SurfaceChargeCalculator
+    SurfaceChargeCalculator,
+    NonlocalHandler
 )
 
 
@@ -57,6 +58,7 @@ class SimulationManager:
         self.bem_solver = BEMSolver(config, self.pymnpbem_path)
         self.field_calculator = FieldCalculator(config, self.pymnpbem_path)
         self.surface_charge_calculator = SurfaceChargeCalculator(config, self.pymnpbem_path)
+        self.nonlocal_handler = NonlocalHandler(config, self.pymnpbem_path)
 
     def create_run_folder(self) -> str:
         """
@@ -166,6 +168,33 @@ class SimulationManager:
             mat_info = self.results['materials']['info']
             print(f"      Materials: {mat_info.get('materials', [])}")
             print(f"      Medium: {mat_info.get('medium', 'unknown')}")
+
+        # Step 2.5: Apply nonlocal corrections if enabled
+        if self.nonlocal_handler.is_needed():
+            if self.verbose:
+                print("\n[2.5/6] Applying nonlocal quantum corrections...")
+
+            materials_list = self.config.get('materials', [])
+            particles, inout, extra_eps = self.nonlocal_handler.modify_particles_for_nonlocal(
+                particles, inout, materials_list
+            )
+
+            # Add artificial epsilon functions to epstab
+            epstab.extend(extra_eps)
+
+            self.results['nonlocal'] = {
+                'enabled': True,
+                'model': self.nonlocal_handler.model,
+                'cover_thickness_nm': self.nonlocal_handler.cover_thickness,
+                'n_cover_layers': len(extra_eps),
+            }
+
+            if self.verbose:
+                print(f"      Model: {self.nonlocal_handler.model}")
+                print(f"      Cover layer thickness: {self.nonlocal_handler.cover_thickness} nm")
+                print(f"      Added {len(extra_eps)} artificial layer(s)")
+        else:
+            self.results['nonlocal'] = {'enabled': False}
 
         # Step 3: Set up BEM solver
         if self.verbose:
@@ -345,6 +374,7 @@ class SimulationManager:
         summary = {
             'geometry': self.results.get('geometry', {}),
             'materials': self.results.get('materials', {}),
+            'nonlocal': self.results.get('nonlocal', {'enabled': False}),
             'simulation': {
                 'type': self.config.get('simulation_type', 'stat'),
                 'excitation': self.config.get('excitation_type', 'planewave'),
@@ -389,6 +419,7 @@ class SimulationManager:
             'run_folder': self.run_folder,
             'materials': self.config.get('materials', []),
             'medium': self.config.get('medium', 'air'),
+            'use_nonlocality': self.config.get('use_nonlocality', False),
         }
 
     def get_results(self) -> Dict[str, Any]:
@@ -398,3 +429,4 @@ class SimulationManager:
     def get_run_folder(self) -> Optional[str]:
         """Get the run folder path."""
         return self.run_folder
+
