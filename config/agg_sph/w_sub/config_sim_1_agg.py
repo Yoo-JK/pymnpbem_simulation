@@ -13,8 +13,8 @@ args['wavelength_chunk_size'] = 10
 # ============================================================================
 # PATHS
 # ============================================================================
-args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/MNPBEM')
-args['output_dir'] = os.path.join(Path.home(), 'research/mnpbem/sphere_cluster')
+args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/pyMNPBEM')
+args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/sphere_cluster')
 
 # ============================================================================
 # SIMULATION SETTINGS
