@@ -203,6 +203,36 @@ args['plot_dpi'] = 300
 args['spectrum_xaxis'] = 'wavelength'
 
 # ============================================================================
+# NONLOCAL QUANTUM CORRECTIONS
+# ============================================================================
+# For sub-nanometer gaps (< 1 nm), quantum effects become important.
+# The nonlocal model adds thin artificial cover layers to account for
+# electron spill-out and screening at metal surfaces.
+#
+# Reference: Luo et al., PRL 111, 093901 (2013)
+
+# Enable nonlocal corrections (for gap < 1 nm)
+args['use_nonlocality'] = False
+
+# Cover layer thickness (nm) - typically 0.05-0.1 nm
+# args['nonlocal_cover_thickness'] = 0.05
+
+# Nonlocal model type:
+#   - 'hydrodynamic' : Hydrodynamic Drude model (default)
+#   - 'qcm'          : Quantum corrected model
+# args['nonlocal_model'] = 'hydrodynamic'
+
+# Custom Drude parameters (optional, override defaults for specific metals)
+# args['nonlocal_drude_params'] = {
+#     'gold': {
+#         'omega_p': 9.02,    # Plasma frequency (eV)
+#         'gamma': 0.071,     # Damping rate (eV)
+#         'v_f': 1.39e6,      # Fermi velocity (m/s)
+#         'eps_inf': 9.84,    # Background permittivity
+#     }
+# }
+
+# ============================================================================
 # ADVANCED OPTIONS
 # ============================================================================
 
