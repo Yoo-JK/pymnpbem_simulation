@@ -1,5 +1,5 @@
 """
-MNPBEM Postprocessing Runner
+pyMNPBEM Postprocessing Runner
 
 This script loads simulation results and performs analysis and visualization.
 """
@@ -18,9 +18,9 @@ from postprocess.postprocess import PostprocessManager
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Postprocess MNPBEM simulation results'
+        description='Postprocess pyMNPBEM simulation results'
     )
-    
+
     parser.add_argument(
         '--str-conf',
         type=str,
@@ -38,7 +38,7 @@ def parse_arguments():
         action='store_true',
         help='Enable verbose output'
     )
-    
+
     return parser.parse_args()
 
 
@@ -46,53 +46,51 @@ def load_config(config_path):
     """Load configuration from Python file."""
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
-    
+
     # Load config file as module
     config_dict = {}
     with open(config_path, 'r') as f:
         exec(f.read(), config_dict)
-    
+
     if 'args' not in config_dict:
         raise ValueError(f"Config file must contain 'args' dictionary: {config_path}")
-    
+
     return config_dict['args']
 
 
-def merge_configs(structure_path, simulation_path):
+def merge_configs(structure_path, simulation_path, verbose=False):
     """Merge structure and simulation configs."""
-    if args.verbose:
+    if verbose:
         print(f"Loading structure config: {structure_path}")
     structure_args = load_config(structure_path)
-    
-    if args.verbose:
+
+    if verbose:
         print(f"Loading simulation config: {simulation_path}")
     simulation_args = load_config(simulation_path)
-    
+
     # Merge: simulation settings override structure if there's overlap
     merged = {**structure_args, **simulation_args}
-    
-    if args.verbose:
+
+    if verbose:
         print(f"✓ Configurations loaded and merged successfully")
-    
+
     return merged
 
 
 def main():
     """Main postprocessing function."""
-    global args
     args = parse_arguments()
-    
+
     try:
         # Load and merge configurations
-        config = merge_configs(args.str_conf, args.sim_conf)
-        
+        config = merge_configs(args.str_conf, args.sim_conf, args.verbose)
+
         # Initialize postprocessing manager
         postprocess = PostprocessManager(config, verbose=args.verbose)
-        
+
         # Run postprocessing
-        # ✅ FIX: Handle three return values
         result = postprocess.run()
-        
+
         # Unpack based on return type
         if len(result) == 3:
             data, analysis, field_analysis = result
@@ -101,25 +99,37 @@ def main():
             field_analysis = []
         else:
             raise ValueError(f"Unexpected return value from postprocess.run(): {result}")
-        
+
         # Print summary
         if args.verbose:
             print("\n✓ Postprocessing completed successfully")
-            
+
+            # Print spectrum info
+            if 'spectrum' in data:
+                print(f"\n  Spectrum data processed:")
+                print(f"    Wavelength range: {data['wavelengths'][0]:.1f} - {data['wavelengths'][-1]:.1f} nm")
+                print(f"    Number of points: {len(data['wavelengths'])}")
+
             # Print field data info if available
             if 'fields' in data and data['fields']:
                 print(f"\n  Field data processed:")
                 for i, field in enumerate(data['fields']):
                     print(f"    Polarization {i+1}: λ = {field['wavelength']:.1f} nm")
-
                     enhancement = field['enhancement']
                     if hasattr(enhancement, 'shape'):
                         print(f"      Grid size: {enhancement.shape}")
-                    else:
-                        print(f"      Grid size: (1,) - single point")
-        
+                        print(f"      Max enhancement: {enhancement.max():.1f}")
+
+            # Print surface charge info if available
+            if 'surface_charges' in data and data['surface_charges']:
+                print(f"\n  Surface charge data processed:")
+                for i, charge in enumerate(data['surface_charges']):
+                    print(f"    Polarization {i+1}: λ = {charge['wavelength']:.1f} nm")
+                    if 'mode_info' in charge:
+                        print(f"      Dominant mode: {charge['mode_info'].get('dominant_mode', 'unknown')}")
+
         return 0
-        
+
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

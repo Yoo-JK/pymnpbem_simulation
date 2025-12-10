@@ -1,294 +1,259 @@
 """
-Field Analysis Utilities
+Field Analyzer for pyMNPBEM simulation results.
 
-Analyzes electromagnetic field distributions.
+Provides analysis of electric field distributions:
+- Hotspot detection
+- Enhancement statistics
+- Volume integration
 """
 
 import numpy as np
-from scipy.ndimage import maximum_filter
+from scipy.ndimage import maximum_filter, label
+from typing import Dict, List, Any, Optional
 
 
 class FieldAnalyzer:
-    """Analyzes electromagnetic field data."""
-    
-    def __init__(self, verbose=False):
-        self.verbose = verbose
-    
-    def analyze_field(self, field_data):
+    """
+    Analyzes electric field distributions from plasmonic simulations.
+
+    Features:
+    - Hotspot detection and characterization
+    - Enhancement statistics
+    - Volume integration for field enhancement
+    """
+
+    def __init__(self, field_data: Dict[str, np.ndarray]):
         """
-        Comprehensive field analysis.
-        
-        Parameters
-        ----------
-        field_data : dict or list of dict
-            Single field data dict or list of field data for multiple polarizations
-        
-        Returns
-        -------
-        dict or list of dict
-            Analysis results (single dict if input is dict, list if input is list)
+        Initialize the field analyzer.
+
+        Args:
+            field_data: Dictionary with field enhancement data
         """
-        # ✅ FIX: Handle both single and multiple polarizations properly
-        if isinstance(field_data, list):
-            # Multiple polarizations: analyze each separately
-            if self.verbose:
-                print(f"  Analyzing {len(field_data)} polarizations...")
-            
-            return [self._analyze_single_field(pol_data) for pol_data in field_data]
+        self.enhancement = field_data.get('enhancement')
+        self.x = field_data.get('x')
+        self.y = field_data.get('y')
+        self.z = field_data.get('z')
+        self.X = field_data.get('X')
+        self.Y = field_data.get('Y')
+        self.Z = field_data.get('Z')
+
+    def find_hotspots(self, n_hotspots: int = 10,
+                      min_distance: int = 3,
+                      threshold: float = 0.5) -> List[Dict[str, Any]]:
+        """
+        Find field hotspot locations.
+
+        Args:
+            n_hotspots: Maximum number of hotspots to find
+            min_distance: Minimum grid-point distance between hotspots
+            threshold: Minimum fraction of max value for hotspot
+
+        Returns:
+            List of hotspot dictionaries
+        """
+        if self.enhancement is None:
+            return []
+
+        enhancement = self.enhancement
+        max_val = np.max(enhancement)
+        threshold_val = max_val * threshold
+
+        # Find local maxima
+        local_max = maximum_filter(enhancement, size=min_distance)
+        is_max = (enhancement == local_max) & (enhancement > threshold_val)
+
+        # Get positions of maxima
+        max_positions = np.where(is_max)
+        max_values = enhancement[is_max]
+
+        # Sort by value
+        sort_idx = np.argsort(max_values)[::-1]
+
+        hotspots = []
+        for i in range(min(n_hotspots, len(sort_idx))):
+            idx = sort_idx[i]
+
+            # Get grid indices and coordinates
+            if enhancement.ndim == 2:
+                gi, gj = max_positions[0][idx], max_positions[1][idx]
+                x = float(self.X[gi, gj]) if self.X is not None else float(gi)
+                y = float(self.Y[gi, gj]) if self.Y is not None else float(gj)
+                z = float(self.Z[gi, gj]) if self.Z is not None else 0.0
+                grid_idx = [int(gi), int(gj)]
+            else:
+                gi, gj, gk = max_positions[0][idx], max_positions[1][idx], max_positions[2][idx]
+                x = float(self.X[gi, gj, gk]) if self.X is not None else float(gi)
+                y = float(self.Y[gi, gj, gk]) if self.Y is not None else float(gj)
+                z = float(self.Z[gi, gj, gk]) if self.Z is not None else float(gk)
+                grid_idx = [int(gi), int(gj), int(gk)]
+
+            hotspots.append({
+                'position': [x, y, z],
+                'enhancement': float(max_values[idx]),
+                'grid_index': grid_idx,
+                'rank': i + 1
+            })
+
+        return hotspots
+
+    def get_statistics(self, exclude_inside: bool = True) -> Dict[str, float]:
+        """
+        Compute statistics of field enhancement.
+
+        Args:
+            exclude_inside: Whether to exclude points inside particle (zero values)
+
+        Returns:
+            Dictionary with statistics
+        """
+        if self.enhancement is None:
+            return {}
+
+        enhancement = self.enhancement
+
+        if exclude_inside:
+            mask = enhancement > 0
+            if not np.any(mask):
+                return {
+                    'max': 0.0,
+                    'min': 0.0,
+                    'mean': 0.0,
+                    'std': 0.0,
+                    'median': 0.0,
+                    'p90': 0.0,
+                    'p99': 0.0,
+                }
+            valid = enhancement[mask]
         else:
-            # Single polarization
-            return self._analyze_single_field(field_data)
-    
-    def _analyze_single_field(self, pol_data):
+            valid = enhancement.flatten()
+
+        return {
+            'max': float(np.max(valid)),
+            'min': float(np.min(valid)),
+            'mean': float(np.mean(valid)),
+            'std': float(np.std(valid)),
+            'median': float(np.median(valid)),
+            'p90': float(np.percentile(valid, 90)),
+            'p99': float(np.percentile(valid, 99)),
+        }
+
+    def compute_enhanced_volume(self, thresholds: List[float] = [10, 100, 1000]) -> Dict[float, float]:
         """
-        Analyze a single polarization field data.
-        
-        Parameters
-        ----------
-        pol_data : dict
-            Field data for a single polarization
-        
-        Returns
-        -------
-        dict
-            Analysis results
+        Compute volume where enhancement exceeds given thresholds.
+
+        Args:
+            thresholds: List of enhancement thresholds
+
+        Returns:
+            Dictionary mapping threshold to volume (in nm^3)
         """
-        # Extract data
-        enhancement = pol_data.get('enhancement')
-        intensity = pol_data.get('intensity')
-        x_grid = pol_data.get('x_grid')
-        y_grid = pol_data.get('y_grid')
-        z_grid = pol_data.get('z_grid')
-        
-        if enhancement is None:
+        if self.enhancement is None or self.x is None:
+            return {t: 0.0 for t in thresholds}
+
+        # Calculate voxel volume
+        dx = self.x[1] - self.x[0] if len(self.x) > 1 else 1.0
+        dy = self.y[1] - self.y[0] if len(self.y) > 1 else 1.0
+        dz = self.z[1] - self.z[0] if len(self.z) > 1 else 1.0
+        voxel_volume = abs(dx * dy * dz)
+
+        volumes = {}
+        for threshold in thresholds:
+            n_voxels = np.sum(self.enhancement > threshold)
+            volumes[threshold] = float(n_voxels * voxel_volume)
+
+        return volumes
+
+    def compute_integral_enhancement(self) -> float:
+        """
+        Compute integrated field enhancement over the computation volume.
+
+        Returns:
+            Integrated enhancement (enhancement * volume)
+        """
+        if self.enhancement is None or self.x is None:
+            return 0.0
+
+        dx = self.x[1] - self.x[0] if len(self.x) > 1 else 1.0
+        dy = self.y[1] - self.y[0] if len(self.y) > 1 else 1.0
+        dz = self.z[1] - self.z[0] if len(self.z) > 1 else 1.0
+        voxel_volume = abs(dx * dy * dz)
+
+        # Exclude inside particle
+        mask = self.enhancement > 0
+        integral = np.sum(self.enhancement[mask]) * voxel_volume
+
+        return float(integral)
+
+    def find_gap_hotspot(self, particle_bounds: Optional[Dict[str, float]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Find the hotspot in the gap region (for dimers).
+
+        Args:
+            particle_bounds: Optional bounds of individual particles
+
+        Returns:
+            Hotspot information or None
+        """
+        if self.enhancement is None:
             return None
 
-        # Handle complex data
-        if np.iscomplexobj(enhancement):
-            if self.verbose:
-                print("  Converting complex enhancement to magnitude...")
-            enhancement = np.abs(enhancement)
+        # Simple heuristic: find maximum near x=0 for face-to-face dimers
+        if self.X is not None:
+            # Create mask for gap region (near x=0)
+            gap_mask = np.abs(self.X) < np.max(np.abs(self.x)) * 0.3
+            gap_enhancement = np.where(gap_mask, self.enhancement, 0)
 
-        if intensity is not None and np.iscomplexobj(intensity):
-            intensity = np.abs(intensity)
+            max_idx = np.unravel_index(np.argmax(gap_enhancement), gap_enhancement.shape)
 
-        # Extract polarization once to avoid multiple .get() calls
-        polarization = pol_data.get('polarization')
-        if hasattr(polarization, 'tolist'):
-            polarization = polarization.tolist()
-
-        analysis = {
-            'wavelength': pol_data.get('wavelength'),
-            'wavelength_idx': pol_data.get('wavelength_idx'),
-            'polarization': polarization,
-            'polarization_idx': pol_data.get('polarization_idx'),
-        }
-
-        # Enhancement statistics
-        analysis['enhancement_stats'] = self._calculate_statistics(enhancement)
-
-        # Intensity statistics (only if intensity data exists)
-        if intensity is not None:
-            analysis['intensity_stats'] = self._calculate_statistics(intensity)
-        else:
-            analysis['intensity_stats'] = None
-        
-        # Find hotspots
-        hotspots = self._find_hotspots(enhancement, x_grid, y_grid, z_grid)
-        analysis['hotspots'] = hotspots
-        
-        # Volume above threshold
-        analysis['high_field_regions'] = self._analyze_high_field_regions(
-            enhancement, x_grid, y_grid, z_grid
-        )
-        
-        if self.verbose:
-            self._print_analysis(analysis)
-        
-        return analysis
-    
-    def _calculate_statistics(self, data):
-        """Calculate statistical measures of field data."""
-        if not isinstance(data, np.ndarray):
-            data = np.array([data])
-
-        if data.ndim == 0:
-            data = np.array([data.item()])
-        
-        data_flat = data.flatten()
-        data_flat = data_flat[np.isfinite(data_flat)]  # Remove inf/nan
-        
-        if len(data_flat) == 0:
-            return {
-                'max': 0.0,
-                'min': 0.0,
-                'mean': 0.0,
-                'median': 0.0,
-                'std': 0.0,
-                'percentile_90': 0.0,
-                'percentile_95': 0.0,
-                'percentile_99': 0.0
-            }
-        
-        stats = {
-            'max': float(np.max(data_flat)),
-            'min': float(np.min(data_flat)),
-            'mean': float(np.mean(data_flat)),
-            'median': float(np.median(data_flat)),
-            'std': float(np.std(data_flat)),
-            'percentile_90': float(np.percentile(data_flat, 90)),
-            'percentile_95': float(np.percentile(data_flat, 95)),
-            'percentile_99': float(np.percentile(data_flat, 99))
-        }
-        
-        return stats
-    
-    def _find_hotspots(self, enhancement, x_grid, y_grid, z_grid, 
-                       num_hotspots=10, min_distance=3):
-        """
-        Find local maximum enhancement hotspots.
-        """
-        if not isinstance(enhancement, np.ndarray):
-            enhancement = np.array([enhancement])
-        
-        if enhancement.ndim == 0:
-            enhancement = np.array([enhancement.item()])
-        
-        if enhancement.size == 1:
-            hotspot = {
-                'rank': 1,
-                'position': [float(x_grid), float(y_grid), float(z_grid)],
-                'enhancement': float(enhancement.item()),
-                'intensity_enhancement': float(enhancement.item()**2)
-            }
-            return [hotspot]
-
-        if np.iscomplexobj(enhancement):
-            enhancement = np.abs(enhancement)
-            if self.verbose:
-                print("  Converting complex enhancement to magnitude")
-
-        neighborhood_size = min_distance * 2 + 1
-        local_max = maximum_filter(enhancement, size=neighborhood_size)
-        
-        # Points that are equal to local max are local maxima
-        is_local_max = (enhancement == local_max)
-        
-        # Also require enhancement > 1 (at least some enhancement)
-        is_local_max = is_local_max & (enhancement > 1.0)
-        
-        # Get indices of local maxima
-        max_indices = np.where(is_local_max)
-        max_values = enhancement[max_indices]
-        
-        # Sort by enhancement value (descending)
-        sorted_idx = np.argsort(max_values)[::-1]
-        
-        # Take top N hotspots
-        hotspots = []
-        for i in range(min(num_hotspots, len(sorted_idx))):
-            idx = sorted_idx[i]
-            
-            # Get position indices
-            if enhancement.ndim == 2:
-                row_idx, col_idx = max_indices[0][idx], max_indices[1][idx]
-                x_pos = float(x_grid[row_idx, col_idx])
-                y_pos = float(y_grid[row_idx, col_idx])
-                z_pos = float(z_grid[row_idx, col_idx])
-            else:  # 3D
-                i_idx, j_idx, k_idx = max_indices[0][idx], max_indices[1][idx], max_indices[2][idx]
-                x_pos = float(x_grid[i_idx, j_idx, k_idx])
-                y_pos = float(y_grid[i_idx, j_idx, k_idx])
-                z_pos = float(z_grid[i_idx, j_idx, k_idx])
-            
-            hotspot = {
-                'rank': i + 1,
-                'position': [x_pos, y_pos, z_pos],
-                'enhancement': float(max_values[idx]),
-                'intensity_enhancement': float(max_values[idx]**2)
-            }
-            hotspots.append(hotspot)
-        
-        return hotspots
-    
-    def _analyze_high_field_regions(self, enhancement, x_grid, y_grid, z_grid):
-        """
-        Analyze regions with high field enhancement.
-        
-        Returns volume/area above various enhancement thresholds.
-        """
-        if not isinstance(enhancement, np.ndarray):
-            enhancement = np.array([enhancement])
-        
-        if enhancement.ndim == 0:
-            enhancement = np.array([enhancement.item()])
-        
-        if not isinstance(x_grid, np.ndarray):
-            x_grid = np.array([x_grid])
-            y_grid = np.array([y_grid])
-            z_grid = np.array([z_grid])
-        
-        if enhancement.ndim == 1:
-            enhancement = enhancement.reshape(1, 1)
-            x_grid = x_grid.reshape(1, 1) if x_grid.ndim == 1 else x_grid
-            y_grid = y_grid.reshape(1, 1) if y_grid.ndim == 1 else y_grid
-            z_grid = z_grid.reshape(1, 1) if z_grid.ndim == 1 else z_grid
-
-        # Calculate grid spacing (assuming uniform)
-        if enhancement.ndim == 2:
-            dx = np.abs(x_grid[0, 1] - x_grid[0, 0]) if x_grid.shape[1] > 1 else 1.0
-            dy = np.abs(y_grid[1, 0] - y_grid[0, 0]) if y_grid.shape[0] > 1 else 1.0
-            dz = 0
-            element_area = dx * dy if dx > 0 and dy > 0 else 1.0
-            is_3d = False
-        else:  # 3D
-            dx = np.abs(x_grid[0, 0, 1] - x_grid[0, 0, 0]) if x_grid.shape[2] > 1 else 1.0
-            dy = np.abs(y_grid[0, 1, 0] - y_grid[0, 0, 0]) if y_grid.shape[1] > 1 else 1.0
-            dz = np.abs(z_grid[1, 0, 0] - z_grid[0, 0, 0]) if z_grid.shape[0] > 1 else 1.0
-            element_volume = dx * dy * dz if dx > 0 and dy > 0 and dz > 0 else 1.0
-            is_3d = True
-        
-        thresholds = [2, 5, 10, 20, 50, 100]
-        regions = {}
-        
-        for threshold in thresholds:
-            mask = enhancement > threshold
-            count = np.sum(mask)
-            
-            if is_3d:
-                volume = count * element_volume
-                regions[f'enhancement_above_{threshold}'] = {
-                    'num_points': int(count),
-                    'volume_nm3': float(volume)
-                }
+            if self.enhancement.ndim == 2:
+                x = float(self.X[max_idx])
+                y = float(self.Y[max_idx])
+                z = float(self.Z[max_idx])
             else:
-                area = count * element_area
-                regions[f'enhancement_above_{threshold}'] = {
-                    'num_points': int(count),
-                    'area_nm2': float(area)
-                }
-        
-        return regions
-    
-    def _print_analysis(self, analysis):
-        """Print field analysis summary."""
-        pol_idx = analysis.get('polarization_idx', '?')
-        wl_idx = analysis.get('wavelength_idx', '?')
-        print(f"\n  Field Analysis (λ = {analysis['wavelength']:.1f} nm, wl_idx={wl_idx}, pol_idx={pol_idx}):")
-        print("  " + "-"*50)
-        
-        # Enhancement statistics
-        stats = analysis['enhancement_stats']
-        print(f"  Enhancement Statistics:")
-        print(f"    Max:       {stats['max']:.2f}")
-        print(f"    Mean:      {stats['mean']:.2f}")
-        print(f"    Median:    {stats['median']:.2f}")
-        print(f"    95th %ile: {stats['percentile_95']:.2f}")
-        
-        # Top hotspots
-        if analysis['hotspots']:
-            print(f"\n  Top {len(analysis['hotspots'])} Hotspots:")
-            for hotspot in analysis['hotspots'][:5]:  # Print top 5
-                pos = hotspot['position']
-                print(f"    #{hotspot['rank']}: ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}) nm "
-                      f"| E/E₀ = {hotspot['enhancement']:.2f}")
+                x = float(self.X[max_idx])
+                y = float(self.Y[max_idx])
+                z = float(self.Z[max_idx])
+
+            return {
+                'position': [x, y, z],
+                'enhancement': float(self.enhancement[max_idx]),
+                'grid_index': list(max_idx),
+            }
+
+        return None
+
+    def get_enhancement_profile(self, axis: str = 'x',
+                                 position: float = 0.0) -> Dict[str, np.ndarray]:
+        """
+        Extract enhancement profile along an axis.
+
+        Args:
+            axis: 'x', 'y', or 'z'
+            position: Position along the other axes
+
+        Returns:
+            Dictionary with coordinates and enhancement values
+        """
+        if self.enhancement is None:
+            return {}
+
+        if axis == 'x' and len(self.y) == 1:
+            # XZ plane, profile along x at given z
+            z_idx = np.argmin(np.abs(self.z - position))
+            return {
+                'coordinate': self.x,
+                'enhancement': self.enhancement[:, z_idx] if self.enhancement.ndim == 2 else self.enhancement[:, 0, z_idx],
+                'axis': 'x',
+                'position': float(self.z[z_idx])
+            }
+        elif axis == 'z' and len(self.y) == 1:
+            # XZ plane, profile along z at given x
+            x_idx = np.argmin(np.abs(self.x - position))
+            return {
+                'coordinate': self.z,
+                'enhancement': self.enhancement[x_idx, :] if self.enhancement.ndim == 2 else self.enhancement[x_idx, 0, :],
+                'axis': 'z',
+                'position': float(self.x[x_idx])
+            }
+
+        return {}

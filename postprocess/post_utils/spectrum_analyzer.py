@@ -1,303 +1,290 @@
 """
-Spectrum Analyzer
+Spectrum Analyzer for pyMNPBEM simulation results.
 
-Analyzes optical spectra to extract key features.
-Includes unpolarized light calculation (FDTD-style incoherent averaging).
+Provides analysis of optical spectra:
+- Peak finding (resonance wavelengths)
+- FWHM calculation
+- Enhancement factors
+- Unpolarized spectrum calculation
 """
 
 import numpy as np
-from scipy import signal
+from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
+from typing import Dict, List, Any, Optional, Tuple
 
 
 class SpectrumAnalyzer:
-    """Analyzes optical spectrum data."""
+    """
+    Analyzes optical spectra from plasmonic simulations.
 
-    def __init__(self, config, verbose=False):
-        self.config = config
-        self.verbose = verbose
+    Features:
+    - Peak detection and characterization
+    - Full Width at Half Maximum (FWHM)
+    - Quality factor estimation
+    - Polarization analysis
+    """
 
-    def analyze(self, data):
+    def __init__(self, spectrum_data: Dict[str, np.ndarray]):
         """
-        Perform comprehensive spectrum analysis.
+        Initialize the spectrum analyzer.
 
         Args:
-            data (dict): Data dictionary with wavelength, scattering, etc.
+            spectrum_data: Dictionary with wavelengths and cross-sections
+        """
+        self.wavelengths = spectrum_data['wavelengths']
+        self.scattering = spectrum_data.get('scattering')
+        self.absorption = spectrum_data.get('absorption')
+        self.extinction = spectrum_data.get('extinction')
+
+        self.n_wavelengths = len(self.wavelengths)
+        self.n_polarizations = self.extinction.shape[1] if self.extinction is not None else 0
+
+    def find_peaks(self, spectrum_type: str = 'extinction',
+                   pol_idx: int = 0,
+                   prominence: float = 0.1,
+                   min_distance: int = 5) -> List[Dict[str, float]]:
+        """
+        Find peaks in the spectrum.
+
+        Args:
+            spectrum_type: 'extinction', 'scattering', or 'absorption'
+            pol_idx: Polarization index
+            prominence: Minimum prominence of peaks (fraction of max)
+            min_distance: Minimum distance between peaks (in points)
 
         Returns:
-            dict: Analysis results
+            List of peak dictionaries with wavelength, value, and index
         """
-        results = {}
+        spectrum = self._get_spectrum(spectrum_type, pol_idx)
 
-        # Find peaks for each polarization
-        peak_wavelengths, peak_values, peak_indices = self._find_peaks(
-            data['wavelength'],
-            data['scattering']
+        if spectrum is None:
+            return []
+
+        # Normalize spectrum for peak finding
+        spectrum_norm = spectrum / np.max(spectrum)
+
+        # Find peaks
+        peak_indices, properties = find_peaks(
+            spectrum_norm,
+            prominence=prominence,
+            distance=min_distance
         )
 
-        results['peak_wavelengths'] = peak_wavelengths
-        results['peak_values'] = peak_values
-        results['peak_indices'] = peak_indices
+        peaks = []
+        for idx in peak_indices:
+            peaks.append({
+                'wavelength': float(self.wavelengths[idx]),
+                'value': float(spectrum[idx]),
+                'index': int(idx),
+                'prominence': float(properties['prominences'][np.where(peak_indices == idx)[0][0]])
+                              if 'prominences' in properties else None
+            })
 
-        # Calculate FWHM (Full Width at Half Maximum)
-        fwhm_values = self._calculate_fwhm(
-            data['wavelength'],
-            data['scattering'],
-            peak_indices
-        )
-        results['fwhm'] = fwhm_values
+        # Sort by value (highest first)
+        peaks.sort(key=lambda x: x['value'], reverse=True)
 
-        # Calculate enhancement factors (if multiple polarizations)
-        if data['n_polarizations'] > 1:
-            enhancement = self._calculate_enhancement(data['scattering'])
-            results['enhancement_factors'] = enhancement
+        return peaks
 
-        # Calculate average cross sections
-        results['avg_scattering'] = np.mean(data['scattering'], axis=0)
-        results['avg_extinction'] = np.mean(data['extinction'], axis=0)
-        results['avg_absorption'] = np.mean(data['absorption'], axis=0)
-
-        # Calculate max cross sections
-        results['max_scattering'] = np.max(data['scattering'], axis=0)
-        results['max_extinction'] = np.max(data['extinction'], axis=0)
-        results['max_absorption'] = np.max(data['absorption'], axis=0)
-
-        # ============================================================
-        # UNPOLARIZED CALCULATION (FDTD-style incoherent averaging)
-        # ============================================================
-        excitation_type = self.config.get('excitation_type', 'planewave')
-        polarizations = data.get('polarizations', self.config.get('polarizations', []))
-
-        unpolarized_info = self._check_unpolarized_conditions(
-            polarizations, excitation_type, data['n_polarizations']
-        )
-        results['unpolarized'] = unpolarized_info
-
-        if unpolarized_info['can_calculate']:
-            unpol_data = self._calculate_unpolarized_spectrum(data, unpolarized_info)
-            results['unpolarized_spectrum'] = unpol_data
-
-            if self.verbose:
-                print(f"  Unpolarized calculation: {unpolarized_info['method']}")
-                print(f"    Peak wavelength: {unpol_data['peak_wavelength']:.1f} nm")
-                print(f"    Peak absorption: {unpol_data['peak_absorption']:.2f} nm²")
-
-        if self.verbose:
-            print("Spectrum analysis complete:")
-            print(f"  Peak wavelengths: {peak_wavelengths}")
-            print(f"  Peak values: {peak_values}")
-            print(f"  FWHM: {fwhm_values}")
-
-        return results
-
-    def _check_unpolarized_conditions(self, polarizations, excitation_type, n_polarizations):
+    def calculate_fwhm(self, spectrum_type: str = 'extinction',
+                       pol_idx: int = 0,
+                       peak_idx: int = 0) -> Optional[Dict[str, float]]:
         """
-        Check if unpolarized calculation is possible.
+        Calculate Full Width at Half Maximum for a peak.
 
-        FDTD-style unpolarized calculation requires:
-        - Plane wave: 2 orthogonal polarizations
-        - Dipole: 3 orthogonal directions
+        Args:
+            spectrum_type: 'extinction', 'scattering', or 'absorption'
+            pol_idx: Polarization index
+            peak_idx: Index of peak to analyze (from find_peaks)
 
         Returns:
-            dict: Information about unpolarized calculation possibility
+            Dictionary with FWHM, peak wavelength, and half-max wavelengths
         """
-        result = {
-            'can_calculate': False,
-            'method': None,
-            'reason': None
+        spectrum = self._get_spectrum(spectrum_type, pol_idx)
+        if spectrum is None:
+            return None
+
+        peaks = self.find_peaks(spectrum_type, pol_idx)
+        if peak_idx >= len(peaks):
+            return None
+
+        peak = peaks[peak_idx]
+        peak_wavelength = peak['wavelength']
+        peak_value = peak['value']
+        peak_index = peak['index']
+
+        half_max = peak_value / 2
+
+        # Find left half-max point
+        left_idx = peak_index
+        while left_idx > 0 and spectrum[left_idx] > half_max:
+            left_idx -= 1
+
+        # Interpolate for precise left wavelength
+        if left_idx > 0:
+            left_wl = np.interp(half_max,
+                                [spectrum[left_idx], spectrum[left_idx + 1]],
+                                [self.wavelengths[left_idx], self.wavelengths[left_idx + 1]])
+        else:
+            left_wl = self.wavelengths[0]
+
+        # Find right half-max point
+        right_idx = peak_index
+        while right_idx < len(spectrum) - 1 and spectrum[right_idx] > half_max:
+            right_idx += 1
+
+        # Interpolate for precise right wavelength
+        if right_idx < len(spectrum) - 1:
+            right_wl = np.interp(half_max,
+                                 [spectrum[right_idx], spectrum[right_idx - 1]],
+                                 [self.wavelengths[right_idx], self.wavelengths[right_idx - 1]])
+        else:
+            right_wl = self.wavelengths[-1]
+
+        fwhm = right_wl - left_wl
+
+        # Quality factor
+        q_factor = peak_wavelength / fwhm if fwhm > 0 else float('inf')
+
+        return {
+            'fwhm': float(fwhm),
+            'peak_wavelength': float(peak_wavelength),
+            'half_max_left': float(left_wl),
+            'half_max_right': float(right_wl),
+            'quality_factor': float(q_factor),
+            'peak_value': float(peak_value),
         }
 
-        # EELS doesn't support unpolarized
-        if excitation_type == 'eels':
-            result['reason'] = 'EELS excitation does not support unpolarized calculation'
-            return result
+    def calculate_unpolarized(self) -> Dict[str, np.ndarray]:
+        """
+        Calculate unpolarized spectrum from orthogonal polarizations.
 
-        # Convert polarizations to numpy array
-        if isinstance(polarizations, list):
-            polarizations = np.array(polarizations)
+        Uses FDTD-style incoherent averaging:
+        sigma_unpol = (sigma_pol1 + sigma_pol2) / 2
 
-        if len(polarizations) == 0:
-            result['reason'] = 'No polarization data available'
-            return result
+        Returns:
+            Dictionary with unpolarized spectra
+        """
+        if self.n_polarizations < 2:
+            return {
+                'wavelengths': self.wavelengths,
+                'scattering_unpolarized': self.scattering[:, 0] if self.scattering is not None else None,
+                'absorption_unpolarized': self.absorption[:, 0] if self.absorption is not None else None,
+                'extinction_unpolarized': self.extinction[:, 0] if self.extinction is not None else None,
+            }
 
-        # Plane wave: need exactly 2 orthogonal polarizations
-        if excitation_type == 'planewave':
-            if n_polarizations != 2:
-                result['reason'] = f'Plane wave unpolarized requires exactly 2 polarizations (got {n_polarizations})'
-                return result
+        result = {'wavelengths': self.wavelengths}
 
-            if self._are_orthogonal(polarizations[0], polarizations[1]):
-                result['can_calculate'] = True
-                result['method'] = 'orthogonal_2pol_average'
-                result['reason'] = 'Two orthogonal polarizations detected'
-            else:
-                result['reason'] = 'Polarizations are not orthogonal'
+        if self.scattering is not None:
+            result['scattering_unpolarized'] = np.mean(self.scattering, axis=1)
 
-        # Dipole: need exactly 3 orthogonal directions
-        elif excitation_type == 'dipole':
-            if n_polarizations != 3:
-                result['reason'] = f'Dipole unpolarized requires exactly 3 directions (got {n_polarizations})'
-                return result
+        if self.absorption is not None:
+            result['absorption_unpolarized'] = np.mean(self.absorption, axis=1)
 
-            if (self._are_orthogonal(polarizations[0], polarizations[1]) and
-                self._are_orthogonal(polarizations[1], polarizations[2]) and
-                self._are_orthogonal(polarizations[0], polarizations[2])):
-                result['can_calculate'] = True
-                result['method'] = 'orthogonal_3dir_average'
-                result['reason'] = 'Three orthogonal directions detected'
-            else:
-                result['reason'] = 'Directions are not mutually orthogonal'
+        if self.extinction is not None:
+            result['extinction_unpolarized'] = np.mean(self.extinction, axis=1)
 
         return result
 
-    def _are_orthogonal(self, v1, v2, tolerance=1e-6):
-        """Check if two vectors are orthogonal."""
-        v1 = np.array(v1, dtype=float)
-        v2 = np.array(v2, dtype=float)
-
-        # Normalize vectors
-        norm1 = np.linalg.norm(v1)
-        norm2 = np.linalg.norm(v2)
-
-        if norm1 < tolerance or norm2 < tolerance:
-            return False
-
-        v1_normalized = v1 / norm1
-        v2_normalized = v2 / norm2
-
-        dot_product = np.abs(np.dot(v1_normalized, v2_normalized))
-        return dot_product < tolerance
-
-    def _calculate_unpolarized_spectrum(self, data, unpolarized_info):
+    def get_statistics(self, spectrum_type: str = 'extinction',
+                       pol_idx: int = 0) -> Dict[str, float]:
         """
-        Calculate unpolarized spectrum using FDTD-style incoherent averaging.
+        Get statistical measures of a spectrum.
 
-        For plane wave (2 orthogonal polarizations):
-            σ_unpol = (σ_pol1 + σ_pol2) / 2
+        Args:
+            spectrum_type: Type of spectrum
+            pol_idx: Polarization index
 
-        For dipole (3 orthogonal directions):
-            σ_unpol = (σ_x + σ_y + σ_z) / 3
+        Returns:
+            Dictionary with statistics
         """
-        n_pol = data['n_polarizations']
+        spectrum = self._get_spectrum(spectrum_type, pol_idx)
 
-        # Incoherent average (arithmetic mean of cross sections)
-        unpol_scattering = np.mean(data['scattering'], axis=1)
-        unpol_extinction = np.mean(data['extinction'], axis=1)
-        unpol_absorption = np.mean(data['absorption'], axis=1)
-
-        # Find peak in unpolarized absorption spectrum
-        peak_idx = np.argmax(unpol_absorption)
-        peak_wavelength = data['wavelength'][peak_idx]
-        peak_absorption = unpol_absorption[peak_idx]
-        peak_extinction = unpol_extinction[peak_idx]
-        peak_scattering = unpol_scattering[peak_idx]
+        if spectrum is None:
+            return {}
 
         return {
-            'wavelength': data['wavelength'],
-            'scattering': unpol_scattering,
-            'extinction': unpol_extinction,
-            'absorption': unpol_absorption,
-            'peak_wavelength': peak_wavelength,
-            'peak_wavelength_idx': peak_idx,
-            'peak_absorption': peak_absorption,
-            'peak_extinction': peak_extinction,
-            'peak_scattering': peak_scattering,
-            'method': unpolarized_info['method'],
-            'n_averaged': n_pol
+            'max': float(np.max(spectrum)),
+            'min': float(np.min(spectrum)),
+            'mean': float(np.mean(spectrum)),
+            'std': float(np.std(spectrum)),
+            'integral': float(np.trapz(spectrum, self.wavelengths)),
         }
-    
-    def _find_peaks(self, wavelength, cross_sections):
+
+    def get_resonance_summary(self) -> Dict[str, Any]:
         """
-        Find peak positions in spectrum.
-        
-        FIXED: Now handles complex cross_sections properly.
+        Get a summary of all resonances in the spectra.
+
+        Returns:
+            Dictionary with resonance information for all polarizations
         """
-        n_pol = cross_sections.shape[1]
-        
-        # ✅ FIX: Handle complex data by taking magnitude
-        if np.iscomplexobj(cross_sections):
-            if self.verbose:
-                print("  Note: Converting complex cross_sections to magnitude")
-            cross_sections = np.abs(cross_sections)
-        
-        peak_wavelengths = np.zeros(n_pol)
-        peak_values = np.zeros(n_pol)
-        peak_indices = np.zeros(n_pol, dtype=int)
-        
-        for i in range(n_pol):
-            # Find peaks
-            peaks, properties = signal.find_peaks(
-                cross_sections[:, i],
-                prominence=0.1 * np.max(cross_sections[:, i])
-            )
-            
-            if len(peaks) > 0:
-                # Get the highest peak
-                max_peak_idx = peaks[np.argmax(cross_sections[peaks, i])]
-                peak_indices[i] = max_peak_idx
-                peak_wavelengths[i] = wavelength[max_peak_idx]
-                peak_values[i] = cross_sections[max_peak_idx, i]
-            else:
-                # No peak found, use maximum value
-                max_idx = np.argmax(cross_sections[:, i])
-                peak_indices[i] = max_idx
-                peak_wavelengths[i] = wavelength[max_idx]
-                peak_values[i] = cross_sections[max_idx, i]
-        
-        return peak_wavelengths, peak_values, peak_indices
-    
-    def _calculate_fwhm(self, wavelength, cross_sections, peak_indices):
+        summary = {
+            'n_polarizations': self.n_polarizations,
+            'wavelength_range': [float(self.wavelengths[0]), float(self.wavelengths[-1])],
+            'resonances': {}
+        }
+
+        for pol_idx in range(self.n_polarizations):
+            peaks = self.find_peaks('extinction', pol_idx)
+
+            pol_summary = {
+                'n_peaks': len(peaks),
+                'peaks': []
+            }
+
+            for i, peak in enumerate(peaks[:3]):  # Top 3 peaks
+                fwhm_data = self.calculate_fwhm('extinction', pol_idx, i)
+                pol_summary['peaks'].append({
+                    'wavelength': peak['wavelength'],
+                    'extinction': peak['value'],
+                    'fwhm': fwhm_data['fwhm'] if fwhm_data else None,
+                    'quality_factor': fwhm_data['quality_factor'] if fwhm_data else None,
+                })
+
+            summary['resonances'][f'pol_{pol_idx+1}'] = pol_summary
+
+        return summary
+
+    def _get_spectrum(self, spectrum_type: str, pol_idx: int) -> Optional[np.ndarray]:
+        """Get spectrum array by type and polarization."""
+        if spectrum_type == 'extinction':
+            data = self.extinction
+        elif spectrum_type == 'scattering':
+            data = self.scattering
+        elif spectrum_type == 'absorption':
+            data = self.absorption
+        else:
+            return None
+
+        if data is None:
+            return None
+
+        if pol_idx >= data.shape[1]:
+            return None
+
+        return data[:, pol_idx]
+
+    def interpolate_spectrum(self, wavelengths_new: np.ndarray,
+                             spectrum_type: str = 'extinction',
+                             pol_idx: int = 0) -> np.ndarray:
         """
-        Calculate Full Width at Half Maximum.
-        
-        FIXED: Now handles complex cross_sections properly.
+        Interpolate spectrum to new wavelength grid.
+
+        Args:
+            wavelengths_new: New wavelength array
+            spectrum_type: Type of spectrum
+            pol_idx: Polarization index
+
+        Returns:
+            Interpolated spectrum array
         """
-        n_pol = cross_sections.shape[1]
-        
-        # ✅ FIX: Handle complex data
-        if np.iscomplexobj(cross_sections):
-            cross_sections = np.abs(cross_sections)
-        
-        fwhm_values = np.zeros(n_pol)
-        
-        for i in range(n_pol):
-            peak_idx = peak_indices[i]
-            peak_value = cross_sections[peak_idx, i]
-            half_max = peak_value / 2
-            
-            # Find points where spectrum crosses half maximum
-            above_half = cross_sections[:, i] > half_max
-            
-            # Find left edge
-            left_indices = np.where(above_half[:peak_idx])[0]
-            if len(left_indices) > 0:
-                left_idx = left_indices[0]
-            else:
-                left_idx = 0
-            
-            # Find right edge
-            right_indices = np.where(above_half[peak_idx:])[0]
-            if len(right_indices) > 0:
-                right_idx = peak_idx + right_indices[-1]
-            else:
-                right_idx = len(wavelength) - 1
-            
-            # Calculate FWHM
-            fwhm_values[i] = wavelength[right_idx] - wavelength[left_idx]
-        
-        return fwhm_values
-    
-    def _calculate_enhancement(self, cross_sections):
-        """Calculate enhancement factors between polarizations."""
-        n_pol = cross_sections.shape[1]
-        enhancement = {}
-        
-        # Calculate enhancement of first polarization relative to others
-        if n_pol > 1:
-            max_vals = np.max(cross_sections, axis=0)
-            enhancement['pol1_vs_pol2'] = max_vals[0] / max_vals[1] if max_vals[1] > 0 else 0
-            
-            if n_pol > 2:
-                enhancement['pol1_vs_pol3'] = max_vals[0] / max_vals[2] if max_vals[2] > 0 else 0
-                enhancement['pol2_vs_pol3'] = max_vals[1] / max_vals[2] if max_vals[2] > 0 else 0
-        
-        return enhancement
+        spectrum = self._get_spectrum(spectrum_type, pol_idx)
+
+        if spectrum is None:
+            return np.zeros_like(wavelengths_new)
+
+        interp_func = interp1d(self.wavelengths, spectrum,
+                               kind='cubic', bounds_error=False,
+                               fill_value='extrapolate')
+
+        return interp_func(wavelengths_new)

@@ -1,39 +1,27 @@
+"""
+pyMNPBEM Simulation Configuration
+
+This file contains all simulation parameters for running
+plasmonic BEM simulations using pyMNPBEM.
+"""
+
 import os
 from pathlib import Path
 
 args = {}
 
-
 # ============================================================================
-# PARALLEL COMPUTING OPTIONS (NEW!)
+# pyMNPBEM PATH (REQUIRED)
 # ============================================================================
-# Enable parallel computing with multiple cores
-args['use_parallel'] = True  # Set to False to disable parallel computing
+# Path to your pyMNPBEM installation directory
+# This should point to the directory containing the mnpbem package
 
-# Number of workers (cores) to use
-# Options:
-#   - Integer (e.g., 10): Use exactly 10 workers
-#   - 'auto': Automatically detect available cores
-#   - 'env': Read from environment variable MNPBEM_NUM_WORKERS
-# args['num_workers'] = 'env'  # Recommended for Slurm clusters
-
-# Alternative: specify exact number
-args['num_workers'] = 2
-args['max_comp_threads'] = 64
-args['wavelength_chunk_size'] = 10
-
-# ============================================================================
-# MNPBEM TOOLBOX PATH (REQUIRED)
-# ============================================================================
-# Path to your MNPBEM installation directory
-# This path will be added to MATLAB's search path during execution
-
-args['mnpbem_path'] = os.path.join(Path.home(), 'scratch/bins/MNPBEM')
+args['pymnpbem_path'] = os.path.join(Path.home(), 'pyMNPBEM')
 
 # Examples:
-# args['mnpbem_path'] = '/usr/local/MNPBEM17'
-# args['mnpbem_path'] = Path.home() / 'MNPBEM'
-# args['mnpbem_path'] = '/opt/mnpbem/MNPBEM17'
+# args['pymnpbem_path'] = '/usr/local/pyMNPBEM'
+# args['pymnpbem_path'] = Path.home() / 'pyMNPBEM'
+# args['pymnpbem_path'] = '/opt/pyMNPBEM'
 
 # ============================================================================
 # SIMULATION NAME (IDENTIFIER)
@@ -56,11 +44,11 @@ args['simulation_type'] = 'stat'
 
 args['interp'] = 'curv'
 
-# Wait bar (progress indicator):
+# Progress bar (waitbar):
 #   - 0 : Off (recommended for batch jobs)
-#   - 1 : On (shows progress in MATLAB)
+#   - 1 : On (shows progress)
 
-args['waitbar'] = 0
+args['waitbar'] = 1
 
 # ============================================================================
 # EXCITATION TYPE
@@ -82,10 +70,10 @@ args['excitation_type'] = 'planewave'
 # UNPOLARIZED LIGHT CALCULATION (FDTD-style, automatic detection)
 # ============================================================================
 # To calculate unpolarized light response, specify TWO ORTHOGONAL polarizations.
-# The system will automatically detect orthogonal polarizations and calculate:
-#   - Unpolarized spectrum: σ_unpol = (σ_pol1 + σ_pol2) / 2
+# The system will automatically calculate:
+#   - Unpolarized spectrum: sigma_unpol = (sigma_pol1 + sigma_pol2) / 2
 #   - Unpolarized field: I_unpol = (I_pol1 + I_pol2) / 2
-#                        enh_unpol = sqrt((enh1² + enh2²) / 2)
+#                        enh_unpol = sqrt((enh1^2 + enh2^2) / 2)
 #
 # This follows the FDTD (Lumerical) convention for incoherent averaging.
 # Reference: https://optics.ansys.com/hc/en-us/articles/1500006149562
@@ -96,7 +84,7 @@ args['excitation_type'] = 'planewave'
 #
 # For dipole excitation, use THREE ORTHOGONAL directions for unpolarized:
 #   args['polarizations'] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]  # x, y, z
-#   → σ_unpol = (σ_x + σ_y + σ_z) / 3
+#   -> sigma_unpol = (sigma_x + sigma_y + sigma_z) / 3
 # ============================================================================
 
 args['polarizations'] = [
@@ -146,7 +134,6 @@ args['wavelength_range'] = [400, 800, 100]  # 400-800 nm, 100 points
 args['refine'] = 3
 
 # Relative cutoff for interaction matrices
-# CORRECTED: Default should be 3 (recommended by MNPBEM)
 # Higher = more accurate but more memory
 # Typical values: 2-3, default is 3 for sufficient accuracy
 args['relcutoff'] = 3
@@ -161,6 +148,9 @@ args['calculate_cross_sections'] = True
 # Calculate electric field distribution
 args['calculate_fields'] = True
 
+# Calculate surface charge distributions for mode analysis
+args['calculate_surface_charges'] = True
+
 # Field calculation region (only used if calculate_fields=True)
 args['field_region'] = {
     'x_range': [-80, 80, 161],  # [min, max, num_points] in nm
@@ -170,17 +160,17 @@ args['field_region'] = {
 
 # Field calculation options
 args['field_mindist'] = 0.5     # Minimum distance from particle surface (nm)
-args['field_nmax'] = 2000       # Work off calculation in portions (for large grids)
-args['field_wavelength_idx'] = 'peak'  # Which wavelength to calculate fields: 'middle', 'peak', 'peak_ext', 'peak_sca', or integer index
-                                        # 'peak' now finds absorption max for EACH polarization separately
+args['field_wavelength_idx'] = 'peak'  # Which wavelength to calculate fields:
+                                        # 'middle', 'peak', 'peak_ext', 'peak_sca',
+                                        # 'peak_abs', or integer index
 
 # ============================================================================
-# FIELD DATA EXPORT OPTIONS (NEW)
+# FIELD DATA EXPORT OPTIONS
 # ============================================================================
 
 # Export field arrays to JSON (can create large files!)
 # Set to True only if you need field data in JSON format
-# Full resolution data is always available in field_data.mat
+# Full resolution data is always available in numpy .npy files
 args['export_field_arrays'] = False  # Exports downsampled field arrays to JSON
 
 # Field analysis options
@@ -192,11 +182,10 @@ args['field_hotspot_min_distance'] = 3  # Minimum distance between hotspots (gri
 # ============================================================================
 
 # Output directory for results
-args['output_dir'] = os.path.join(Path.home(), 'research/mnpbem/sphere_test')
+args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/results')
 
 # Data file save formats (for postprocessing)
 # Available: 'txt', 'csv', 'json'
-# Note: MATLAB always saves 'txt' and 'mat' formats automatically
 args['output_formats'] = ['txt', 'csv', 'json']
 
 # Generate plots
@@ -208,7 +197,10 @@ args['plot_format'] = ['png', 'pdf']
 
 # Plot DPI (resolution)
 args['plot_dpi'] = 300
-args['spectrum_xaxis'] = 'energy'
+
+# Spectrum x-axis type
+# Options: 'wavelength' (nm) or 'energy' (eV)
+args['spectrum_xaxis'] = 'wavelength'
 
 # ============================================================================
 # ADVANCED OPTIONS
@@ -226,25 +218,6 @@ args['use_mirror_symmetry'] = False
 # Uses less memory but may be slower
 # Enable if you encounter out-of-memory errors
 args['use_iterative_solver'] = False
-
-# Nonlocal effects (advanced, for very small particles <5nm)
-# Includes quantum effects at metal surfaces
-# Requires additional setup
-args['use_nonlocality'] = False
-
-# ============================================================================
-# MATLAB SETTINGS (ADVANCED)
-# ============================================================================
-
-# MATLAB executable path
-# Options:
-#   - 'matlab' : Use system default
-#   - '/path/to/matlab' : Use specific installation
-
-args['matlab_executable'] = 'matlab'
-
-# MATLAB command-line options
-args['matlab_options'] = '-nodisplay -nosplash -nodesktop'
 
 # ============================================================================
 # ADDITIONAL SIMULATION EXAMPLES
@@ -265,11 +238,10 @@ args['matlab_options'] = '-nodisplay -nosplash -nodesktop'
 
 # Example 3: Angle-resolved measurements
 # args['polarizations'] = [[1, 0, 0]] * 37  # Same polarization
-# # Generate angles from 0° to 90°
 # import numpy as np
 # angles = np.linspace(0, 90, 37)
 # args['propagation_dirs'] = [
-#     [0, np.sin(np.deg2rad(a)), np.cos(np.deg2rad(a))] 
+#     [0, np.sin(np.deg2rad(a)), np.cos(np.deg2rad(a))]
 #     for a in angles
 # ]
 
@@ -279,18 +251,12 @@ args['matlab_options'] = '-nodisplay -nosplash -nodesktop'
 # args['dipole_moment'] = [0, 0, 1]
 # args['wavelength_range'] = [400, 800, 80]
 
-# Example 5: EELS line scan
-# args['excitation_type'] = 'eels'
-# args['beam_energy'] = 200e3
-# args['beam_width'] = 0.2
-# # For line scan, vary impact_parameter in a loop (not shown here)
-# args['impact_parameter'] = [10, 0]
-
-# Example 6: High accuracy calculation with field
+# Example 5: High accuracy calculation with field
 # args['refine'] = 3
 # args['relcutoff'] = 3
-# args['mesh_density'] = 288  # Double standard density (set in structure config)
-# args['simulation_type'] = 'ret'
 # args['calculate_fields'] = True
-# args['export_field_arrays'] = True  # Export field arrays to JSON
-
+# args['field_region'] = {
+#     'x_range': [-50, 50, 201],
+#     'y_range': [0, 0, 1],
+#     'z_range': [-50, 50, 201]
+# }
