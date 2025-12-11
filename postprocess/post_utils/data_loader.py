@@ -160,9 +160,21 @@ class DataLoader:
 
                 prefix = f'charges_pol{pol_idx+1}'
 
+                charges = np.load(os.path.join(self.data_dir, f'{prefix}_values.npy'))
+
+                # Compute derived charge values (real, imag, magnitude, phase)
+                charge_real = np.real(charges)
+                charge_imag = np.imag(charges)
+                charge_magnitude = np.abs(charges)
+                charge_phase = np.angle(charges)
+
                 charge_data[pol_idx] = {
                     'positions': np.load(os.path.join(self.data_dir, f'{prefix}_positions.npy')),
-                    'charges': np.load(os.path.join(self.data_dir, f'{prefix}_values.npy')),
+                    'charges': charges,
+                    'charge_real': charge_real,
+                    'charge_imag': charge_imag,
+                    'charge_magnitude': charge_magnitude,
+                    'charge_phase': charge_phase,
                     'vertices': np.load(os.path.join(self.data_dir, f'{prefix}_vertices.npy')),
                     'faces': np.load(os.path.join(self.data_dir, f'{prefix}_faces.npy')),
                 }
