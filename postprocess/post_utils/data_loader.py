@@ -235,7 +235,11 @@ class DataLoader:
         """Get the number of polarizations in the data."""
         spectrum = self.load_spectrum()
         if spectrum and 'scattering' in spectrum:
-            return spectrum['scattering'].shape[1]
+            data = spectrum['scattering']
+            if data is not None and data.ndim > 1:
+                return data.shape[1]
+            elif data is not None:
+                return 1
         return 0
 
     def get_wavelength_range(self) -> Optional[tuple]:

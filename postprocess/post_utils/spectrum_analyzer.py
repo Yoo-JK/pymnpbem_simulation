@@ -81,13 +81,16 @@ class SpectrumAnalyzer:
         )
 
         peaks = []
-        for idx in peak_indices:
+        for i, idx in enumerate(peak_indices):
+            # Safely get prominence - use enumerate index directly instead of np.where
+            prominence_val = None
+            if 'prominences' in properties and i < len(properties['prominences']):
+                prominence_val = float(properties['prominences'][i])
             peaks.append({
                 'wavelength': float(self.wavelengths[idx]),
                 'value': float(spectrum[idx]),
                 'index': int(idx),
-                'prominence': float(properties['prominences'][np.where(peak_indices == idx)[0][0]])
-                              if 'prominences' in properties else None
+                'prominence': prominence_val
             })
 
         # Sort by value (highest first)
@@ -193,14 +196,22 @@ class SpectrumAnalyzer:
 
         result = {'wavelengths': self.wavelengths}
 
+        # Helper to safely average across polarizations
+        def safe_mean(arr):
+            if arr is None:
+                return None
+            if arr.ndim > 1:
+                return np.mean(arr, axis=1)
+            return arr  # Already 1D
+
         if self.scattering is not None:
-            result['scattering_unpolarized'] = np.mean(self.scattering, axis=1)
+            result['scattering_unpolarized'] = safe_mean(self.scattering)
 
         if self.absorption is not None:
-            result['absorption_unpolarized'] = np.mean(self.absorption, axis=1)
+            result['absorption_unpolarized'] = safe_mean(self.absorption)
 
         if self.extinction is not None:
-            result['extinction_unpolarized'] = np.mean(self.extinction, axis=1)
+            result['extinction_unpolarized'] = safe_mean(self.extinction)
 
         return result
 

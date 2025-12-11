@@ -347,6 +347,11 @@ class Visualizer:
             matplotlib Figure object
         """
         n_pol = len(field_data)
+        if n_pol == 0:
+            fig, ax = plt.subplots(figsize=(6, 5))
+            ax.text(0.5, 0.5, 'No field data available', ha='center', va='center')
+            return fig
+
         fig, axes = plt.subplots(1, n_pol, figsize=(6 * n_pol, 5))
 
         if n_pol == 1:
@@ -354,9 +359,12 @@ class Visualizer:
 
         # Find global vmax
         def safe_max(data):
-            positive = data['enhancement'][data['enhancement'] > 0]
+            enh = data.get('enhancement')
+            if enh is None:
+                return 1.0
+            positive = enh[enh > 0]
             return np.max(positive) if len(positive) > 0 else 1.0
-        vmax = max(safe_max(data) for data in field_data.values())
+        vmax = max((safe_max(data) for data in field_data.values()), default=1.0)
 
         for i, (pol_idx, data) in enumerate(sorted(field_data.items())):
             ax = axes[i]

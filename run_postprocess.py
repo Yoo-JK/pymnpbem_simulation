@@ -107,8 +107,12 @@ def main():
             # Print spectrum info
             if 'spectrum' in data:
                 print(f"\n  Spectrum data processed:")
-                print(f"    Wavelength range: {data['wavelengths'][0]:.1f} - {data['wavelengths'][-1]:.1f} nm")
-                print(f"    Number of points: {len(data['wavelengths'])}")
+                wavelengths = data.get('wavelengths', [])
+                if len(wavelengths) > 0:
+                    print(f"    Wavelength range: {wavelengths[0]:.1f} - {wavelengths[-1]:.1f} nm")
+                    print(f"    Number of points: {len(wavelengths)}")
+                else:
+                    print(f"    No wavelength data available")
 
             # Print field data info if available
             if 'fields' in data and data['fields']:
@@ -143,3 +147,4 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+

@@ -209,21 +209,27 @@ class FieldAnalyzer:
             return None
 
         # Simple heuristic: find maximum near x=0 for face-to-face dimers
-        if self.X is not None:
+        if self.X is not None and self.x is not None and len(self.x) > 0:
             # Create mask for gap region (near x=0)
-            gap_mask = np.abs(self.X) < np.max(np.abs(self.x)) * 0.3
+            x_max = np.max(np.abs(self.x))
+            if x_max == 0:
+                return None
+            gap_mask = np.abs(self.X) < x_max * 0.3
             gap_enhancement = np.where(gap_mask, self.enhancement, 0)
+
+            # Check if there's any valid enhancement in gap
+            max_gap_val = np.max(gap_enhancement)
+            if max_gap_val <= 0:
+                return None
 
             max_idx = np.unravel_index(np.argmax(gap_enhancement), gap_enhancement.shape)
 
-            if self.enhancement.ndim == 2:
+            try:
                 x = float(self.X[max_idx])
-                y = float(self.Y[max_idx])
-                z = float(self.Z[max_idx])
-            else:
-                x = float(self.X[max_idx])
-                y = float(self.Y[max_idx])
-                z = float(self.Z[max_idx])
+                y = float(self.Y[max_idx]) if self.Y is not None else 0.0
+                z = float(self.Z[max_idx]) if self.Z is not None else 0.0
+            except (IndexError, TypeError):
+                return None
 
             return {
                 'position': [x, y, z],
@@ -248,24 +254,36 @@ class FieldAnalyzer:
         if self.enhancement is None:
             return {}
 
-        if axis == 'x' and len(self.y) == 1:
+        if axis == 'x' and self.y is not None and len(self.y) == 1:
             # XZ plane, profile along x at given z
+            if self.z is None or len(self.z) == 0:
+                return {}
             z_idx = np.argmin(np.abs(self.z - position))
-            return {
-                'coordinate': self.x,
-                'enhancement': self.enhancement[:, z_idx] if self.enhancement.ndim == 2 else self.enhancement[:, 0, z_idx],
-                'axis': 'x',
-                'position': float(self.z[z_idx])
-            }
-        elif axis == 'z' and len(self.y) == 1:
+            try:
+                enh = self.enhancement[:, z_idx] if self.enhancement.ndim == 2 else self.enhancement[:, 0, z_idx]
+                return {
+                    'coordinate': self.x,
+                    'enhancement': enh,
+                    'axis': 'x',
+                    'position': float(self.z[z_idx])
+                }
+            except IndexError:
+                return {}
+        elif axis == 'z' and self.y is not None and len(self.y) == 1:
             # XZ plane, profile along z at given x
+            if self.x is None or len(self.x) == 0:
+                return {}
             x_idx = np.argmin(np.abs(self.x - position))
-            return {
-                'coordinate': self.z,
-                'enhancement': self.enhancement[x_idx, :] if self.enhancement.ndim == 2 else self.enhancement[x_idx, 0, :],
-                'axis': 'z',
-                'position': float(self.x[x_idx])
-            }
+            try:
+                enh = self.enhancement[x_idx, :] if self.enhancement.ndim == 2 else self.enhancement[x_idx, 0, :]
+                return {
+                    'coordinate': self.z,
+                    'enhancement': enh,
+                    'axis': 'z',
+                    'position': float(self.x[x_idx])
+                }
+            except IndexError:
+                return {}
 
         return {}
 
