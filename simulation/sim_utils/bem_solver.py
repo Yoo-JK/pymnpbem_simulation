@@ -54,6 +54,7 @@ class BEMSolver:
 
         # Store solver state
         self.particle = None
+        self.particles_list = None
         self.bem = None
         self.excitations = []
         self.wavelengths = None
@@ -162,6 +163,9 @@ class BEMSolver:
         """
         # Store epstab for later use
         self.epstab = epstab
+
+        # Store original particles list for later access (mesh data)
+        self.particles_list = particles
 
         # Create ComParticle
         self.particle = self.ComParticle(epstab, particles, inout, closed=1)
@@ -682,7 +686,7 @@ class BEMSolver:
 
         return {
             'n_faces': self.particle.n_faces,
-            'n_particles': len(self.particle.particles) if hasattr(self.particle, 'particles') else 1,
+            'n_particles': len(self.particles_list) if self.particles_list else 1,
         }
 
     def get_solver_info(self) -> Dict[str, Any]:

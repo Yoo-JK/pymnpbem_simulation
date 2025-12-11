@@ -80,13 +80,21 @@ class SurfaceChargeCalculator:
         all_faces = []
         vert_offset = 0
 
-        for p in particle.particles:
+        # Access the original particles list from bem_solver
+        particles_list = bem_solver.particles_list if hasattr(bem_solver, 'particles_list') else []
+
+        for p in particles_list:
             all_verts.append(p.verts)
             all_faces.append(p.faces + vert_offset)
             vert_offset += len(p.verts)
 
-        vertices = np.vstack(all_verts)
-        faces = np.vstack(all_faces)
+        if all_verts:
+            vertices = np.vstack(all_verts)
+            faces = np.vstack(all_faces)
+        else:
+            # Fallback: use positions as vertices (face centroids)
+            vertices = positions
+            faces = np.array([[i, i, i] for i in range(len(positions))])
 
         # Compute derived quantities
         charge_real = np.real(charges)
@@ -362,3 +370,4 @@ class SurfaceChargeCalculator:
             'quadrupole_strength': quadrupole_strength,
             'octupole_strength': octupole_strength,
         }
+
