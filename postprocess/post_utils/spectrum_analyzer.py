@@ -32,7 +32,9 @@ class SpectrumAnalyzer:
         Args:
             spectrum_data: Dictionary with wavelengths and cross-sections
         """
-        self.wavelengths = spectrum_data['wavelengths']
+        self.wavelengths = spectrum_data.get('wavelengths')
+        if self.wavelengths is None:
+            self.wavelengths = np.array([])
         self.scattering = spectrum_data.get('scattering')
         self.absorption = spectrum_data.get('absorption')
         self.extinction = spectrum_data.get('extinction')
@@ -320,6 +322,16 @@ class SpectrumAnalyzer:
         spectrum = self._get_spectrum(spectrum_type, pol_idx)
 
         if spectrum is None:
+            return np.zeros_like(wavelengths_new)
+
+        # Check for NaN/Inf values that would corrupt interpolation
+        if np.any(np.isnan(spectrum)) or np.any(np.isnan(self.wavelengths)):
+            return np.zeros_like(wavelengths_new)
+        if np.any(np.isinf(spectrum)) or np.any(np.isinf(self.wavelengths)):
+            return np.zeros_like(wavelengths_new)
+
+        # Need at least 4 points for cubic interpolation
+        if len(self.wavelengths) < 4 or len(spectrum) < 4:
             return np.zeros_like(wavelengths_new)
 
         interp_func = interp1d(self.wavelengths, spectrum,

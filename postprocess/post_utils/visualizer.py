@@ -71,7 +71,11 @@ class Visualizer:
         """
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        wavelengths = spectrum_data['wavelengths']
+        wavelengths = spectrum_data.get('wavelengths')
+        if wavelengths is None or len(wavelengths) == 0:
+            ax.text(0.5, 0.5, 'No wavelength data available',
+                    transform=ax.transAxes, ha='center', va='center')
+            return fig
 
         # Convert to energy if requested
         if self.x_axis == 'energy':
@@ -129,10 +133,12 @@ class Visualizer:
         """
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        wavelengths = spectrum_data['wavelengths']
+        wavelengths = spectrum_data.get('wavelengths')
         data = spectrum_data.get(spectrum_type)
 
-        if data is None:
+        if wavelengths is None or len(wavelengths) == 0 or data is None:
+            ax.text(0.5, 0.5, 'No spectrum data available',
+                    transform=ax.transAxes, ha='center', va='center')
             return fig
 
         if self.x_axis == 'energy':
@@ -182,7 +188,11 @@ class Visualizer:
         """
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        wavelengths = spectrum_data['wavelengths']
+        wavelengths = spectrum_data.get('wavelengths')
+        if wavelengths is None or len(wavelengths) == 0:
+            ax.text(0.5, 0.5, 'No wavelength data available',
+                    transform=ax.transAxes, ha='center', va='center')
+            return fig
 
         if self.x_axis == 'energy':
             x_values = 1239.84 / wavelengths
@@ -244,8 +254,17 @@ class Visualizer:
         """
         fig, ax = plt.subplots(figsize=(8, 7))
 
-        enhancement = field_data['enhancement']
-        x_coords = field_data['x']
+        enhancement = field_data.get('enhancement')
+        x_coords = field_data.get('x')
+
+        # Check for missing data
+        if enhancement is None or x_coords is None or len(x_coords) == 0:
+            ax.text(0.5, 0.5, 'No field data available',
+                    transform=ax.transAxes, ha='center', va='center')
+            if title:
+                ax.set_title(title, fontsize=14)
+            return fig
+
         y_coords_arr = field_data.get('y', np.array([0.0]))
         z_coords_arr = field_data.get('z', np.array([0.0]))
 
@@ -369,8 +388,16 @@ class Visualizer:
         for i, (pol_idx, data) in enumerate(sorted(field_data.items())):
             ax = axes[i]
 
-            enhancement = data['enhancement']
-            x_coords = data['x']
+            enhancement = data.get('enhancement')
+            x_coords = data.get('x')
+
+            # Check for missing data
+            if enhancement is None or x_coords is None or len(x_coords) == 0:
+                ax.text(0.5, 0.5, 'No field data',
+                        transform=ax.transAxes, ha='center', va='center')
+                ax.set_title(f'Polarization {pol_idx + 1}', fontsize=12)
+                continue
+
             y_coords_arr = data.get('y', np.array([0.0]))
             z_coords_arr = data.get('z', np.array([0.0]))
 
