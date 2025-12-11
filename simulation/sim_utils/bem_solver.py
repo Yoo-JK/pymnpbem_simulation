@@ -6,11 +6,15 @@ Provides a high-level interface to:
 - Excitation generation (plane wave, dipole, EELS)
 - Spectrum calculation (scattering, absorption, extinction)
 - Solution extraction (surface charges, currents)
+- Parallel wavelength computation (ThreadPoolExecutor)
+- H-matrix compression and iterative solvers for large structures
 """
 
 import numpy as np
-from typing import Dict, List, Any, Optional, Tuple, Union
-from tqdm import tqdm
+import os
+from typing import Dict, List, Any, Optional, Tuple, Union, Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 import sys
 
 
@@ -23,6 +27,9 @@ class BEMSolver:
     - Plane wave, dipole, and EELS excitations
     - Multi-polarization spectrum calculations
     - Substrate effects (layer BEM)
+    - H-matrix compression for large structures
+    - Iterative solvers (GMRES, BiCGSTAB)
+    - Parallel wavelength computation
     """
 
     def __init__(self, sim_config: Dict[str, Any], pymnpbem_path: Optional[str] = None):
@@ -34,10 +41,14 @@ class BEMSolver:
             pymnpbem_path: Path to pyMNPBEM installation (optional)
         """
         self.config = sim_config
+        self.pymnpbem_path = pymnpbem_path
 
         # Import pyMNPBEM modules
         if pymnpbem_path:
             sys.path.insert(0, pymnpbem_path)
+
+        # Set up threading environment BEFORE importing numpy-dependent modules
+        self._setup_threading_env()
 
         self._import_modules()
 
@@ -46,6 +57,21 @@ class BEMSolver:
         self.bem = None
         self.excitations = []
         self.wavelengths = None
+        self.epstab = None
+
+        # Parallel computing settings
+        self.num_cores = sim_config.get('num_cores', 1)
+
+    def _setup_threading_env(self):
+        """Set up threading environment variables for BLAS/LAPACK."""
+        max_threads = str(self.config.get('max_comp_threads', 1))
+
+        # Set all common threading environment variables
+        os.environ['OMP_NUM_THREADS'] = max_threads
+        os.environ['MKL_NUM_THREADS'] = max_threads
+        os.environ['OPENBLAS_NUM_THREADS'] = max_threads
+        os.environ['NUMEXPR_NUM_THREADS'] = max_threads
+        os.environ['VECLIB_MAXIMUM_THREADS'] = max_threads
 
     def _import_modules(self):
         """Import required pyMNPBEM modules."""
@@ -79,6 +105,27 @@ class BEMSolver:
             except ImportError:
                 self._layer_available = False
 
+            # Try to import iterative solvers
+            try:
+                from mnpbem.bem import BEMStatIter, BEMRetIter
+                self.BEMStatIter = BEMStatIter
+                self.BEMRetIter = BEMRetIter
+                self._iter_available = True
+            except ImportError:
+                self._iter_available = False
+
+            # Try to import H-matrix modules
+            try:
+                from mnpbem.greenfun.hmatrix import HMatrix, ClusterTree
+                from mnpbem.greenfun.aca import aca, ACAMatrix
+                self.HMatrix = HMatrix
+                self.ClusterTree = ClusterTree
+                self.aca = aca
+                self.ACAMatrix = ACAMatrix
+                self._hmatrix_available = True
+            except ImportError:
+                self._hmatrix_available = False
+
             # Try to import EELS
             try:
                 from mnpbem.simulation import EELSStat, EELSRet
@@ -103,6 +150,9 @@ class BEMSolver:
             epstab: List of dielectric function objects
             substrate: Optional substrate configuration
         """
+        # Store epstab for later use
+        self.epstab = epstab
+
         # Create ComParticle
         self.particle = self.ComParticle(epstab, particles, inout, closed=1)
 
@@ -111,22 +161,19 @@ class BEMSolver:
         interp = self.config.get('interp', 'curv')
         waitbar = self.config.get('waitbar', 0)
 
+        # Get solver options
+        use_iterative = self.config.get('use_iterative_solver', False)
+        use_h2 = self.config.get('use_h2_compression', False)
+
         # Create options
         self.options = self.bemoptions(sim=sim_type, interp=interp, waitbar=waitbar)
 
         # Select appropriate BEM solver
         use_substrate = substrate is not None
+        self.substrate = substrate
 
-        if sim_type == 'stat':
-            if use_substrate and self._layer_available:
-                self.bem = self.BEMStatLayer(self.particle, substrate['position'])
-            else:
-                self.bem = self.BEMStat(self.particle)
-        else:  # 'ret'
-            if use_substrate and self._layer_available:
-                self.bem = self.BEMRetLayer(self.particle, substrate['position'])
-            else:
-                self.bem = self.BEMRet(self.particle)
+        # Create the BEM solver based on options
+        self.bem = self._create_bem_solver(sim_type, use_substrate, use_iterative, use_h2)
 
         # Set up wavelengths
         wl_range = self.config.get('wavelength_range', [400, 800, 100])
@@ -134,6 +181,64 @@ class BEMSolver:
 
         # Set up excitations
         self._setup_excitations()
+
+    def _create_bem_solver(self, sim_type: str, use_substrate: bool,
+                           use_iterative: bool, use_h2: bool) -> Any:
+        """
+        Create the appropriate BEM solver based on configuration.
+
+        Args:
+            sim_type: 'stat' or 'ret'
+            use_substrate: Whether substrate is used
+            use_iterative: Whether to use iterative solver
+            use_h2: Whether to use H-matrix compression
+
+        Returns:
+            BEM solver object
+        """
+        # Get iterative solver parameters
+        iter_tol = self.config.get('iter_tolerance', 1e-6)
+        iter_maxiter = self.config.get('iter_maxiter', 1000)
+        h2_tol = self.config.get('h2_tolerance', 1e-4)
+
+        # Check availability
+        if use_iterative and not self._iter_available:
+            print("Warning: Iterative solver requested but not available. Using direct solver.")
+            use_iterative = False
+
+        if use_h2 and not self._hmatrix_available:
+            print("Warning: H-matrix compression requested but not available. Using dense matrices.")
+            use_h2 = False
+
+        # Build solver kwargs
+        solver_kwargs = {}
+        if use_iterative:
+            solver_kwargs['tol'] = iter_tol
+            solver_kwargs['maxiter'] = iter_maxiter
+        if use_h2:
+            solver_kwargs['use_hmatrix'] = True
+            solver_kwargs['hmatrix_tol'] = h2_tol
+
+        # Select solver class
+        if sim_type == 'stat':
+            if use_substrate and self._layer_available:
+                # Layer solver (substrate)
+                if use_iterative and hasattr(self, 'BEMStatLayerIter'):
+                    return self.BEMStatLayerIter(self.particle, self.substrate['position'], **solver_kwargs)
+                return self.BEMStatLayer(self.particle, self.substrate['position'])
+            elif use_iterative:
+                return self.BEMStatIter(self.particle, **solver_kwargs)
+            else:
+                return self.BEMStat(self.particle)
+        else:  # 'ret'
+            if use_substrate and self._layer_available:
+                if use_iterative and hasattr(self, 'BEMRetLayerIter'):
+                    return self.BEMRetLayerIter(self.particle, self.substrate['position'], **solver_kwargs)
+                return self.BEMRetLayer(self.particle, self.substrate['position'])
+            elif use_iterative:
+                return self.BEMRetIter(self.particle, **solver_kwargs)
+            else:
+                return self.BEMRet(self.particle)
 
     def _setup_excitations(self):
         """Set up excitation objects based on configuration."""
@@ -200,9 +305,40 @@ class BEMSolver:
         exc = EELS(impact=impact, beam_energy=beam_energy, width=beam_width)
         self.excitations = [exc]
 
+    def _solve_single_wavelength(self, wl_idx: int, exc_idx: int) -> Tuple[int, int, float, float, float]:
+        """
+        Solve BEM at a single wavelength for a single excitation.
+
+        This method is designed to be called in parallel.
+
+        Args:
+            wl_idx: Wavelength index
+            exc_idx: Excitation index
+
+        Returns:
+            Tuple of (wl_idx, exc_idx, scattering, absorption, extinction)
+        """
+        wavelength = self.wavelengths[wl_idx]
+        exc = self.excitations[exc_idx]
+
+        # Generate excitation at this wavelength
+        exc_struct = exc(self.particle, wavelength)
+
+        # Solve
+        sig = self.bem.solve(exc_struct)
+
+        # Compute cross sections
+        sca = sig.scattering()
+        ext = sig.extinction()
+        abs_val = ext - sca
+
+        return (wl_idx, exc_idx, float(sca), float(abs_val), float(ext))
+
     def compute_spectrum(self, show_progress: bool = True) -> Dict[str, np.ndarray]:
         """
         Compute optical cross-section spectra.
+
+        Uses parallel computation if num_cores > 1.
 
         Args:
             show_progress: Whether to show progress bar
@@ -214,9 +350,6 @@ class BEMSolver:
                 - 'absorption': Absorption cross-section (n_wavelengths, n_excitations)
                 - 'extinction': Extinction cross-section (n_wavelengths, n_excitations)
         """
-        sim_type = self.config.get('simulation_type', 'stat')
-        Spectrum = self.SpectrumStat if sim_type == 'stat' else self.SpectrumRet
-
         n_wl = len(self.wavelengths)
         n_exc = len(self.excitations)
 
@@ -226,6 +359,25 @@ class BEMSolver:
 
         # Store solutions for field calculation
         self.solutions = {}
+
+        if self.num_cores > 1:
+            # Parallel computation
+            return self._compute_spectrum_parallel(show_progress)
+        else:
+            # Serial computation
+            return self._compute_spectrum_serial(show_progress)
+
+    def _compute_spectrum_serial(self, show_progress: bool = True) -> Dict[str, np.ndarray]:
+        """Compute spectrum using serial execution."""
+        sim_type = self.config.get('simulation_type', 'stat')
+        Spectrum = self.SpectrumStat if sim_type == 'stat' else self.SpectrumRet
+
+        n_wl = len(self.wavelengths)
+        n_exc = len(self.excitations)
+
+        scattering = np.zeros((n_wl, n_exc))
+        absorption = np.zeros((n_wl, n_exc))
+        extinction = np.zeros((n_wl, n_exc))
 
         for i, exc in enumerate(self.excitations):
             if show_progress:
@@ -249,6 +401,57 @@ class BEMSolver:
 
             # Store spectrum object for later use
             self.solutions[i] = spec
+
+        return {
+            'wavelengths': self.wavelengths,
+            'scattering': scattering,
+            'absorption': absorption,
+            'extinction': extinction,
+        }
+
+    def _compute_spectrum_parallel(self, show_progress: bool = True) -> Dict[str, np.ndarray]:
+        """Compute spectrum using parallel ThreadPoolExecutor."""
+        n_wl = len(self.wavelengths)
+        n_exc = len(self.excitations)
+
+        scattering = np.zeros((n_wl, n_exc))
+        absorption = np.zeros((n_wl, n_exc))
+        extinction = np.zeros((n_wl, n_exc))
+
+        # Create list of all (wavelength, excitation) pairs to compute
+        tasks = [(wl_idx, exc_idx) for exc_idx in range(n_exc) for wl_idx in range(n_wl)]
+        total_tasks = len(tasks)
+
+        if show_progress:
+            print(f"Computing spectrum with {self.num_cores} cores ({total_tasks} calculations)")
+
+        # Use ThreadPoolExecutor for parallel computation
+        completed = 0
+        with ThreadPoolExecutor(max_workers=self.num_cores) as executor:
+            # Submit all tasks
+            futures = {
+                executor.submit(self._solve_single_wavelength, wl_idx, exc_idx): (wl_idx, exc_idx)
+                for wl_idx, exc_idx in tasks
+            }
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                try:
+                    wl_idx, exc_idx, sca, abs_val, ext = future.result()
+                    scattering[wl_idx, exc_idx] = sca
+                    absorption[wl_idx, exc_idx] = abs_val
+                    extinction[wl_idx, exc_idx] = ext
+
+                    completed += 1
+                    if show_progress and completed % max(1, total_tasks // 20) == 0:
+                        print(f"  Progress: {completed}/{total_tasks} ({100*completed//total_tasks}%)")
+
+                except Exception as e:
+                    wl_idx, exc_idx = futures[future]
+                    print(f"Error at wavelength {self.wavelengths[wl_idx]:.1f} nm, excitation {exc_idx}: {e}")
+
+        if show_progress:
+            print(f"  Completed: {completed}/{total_tasks}")
 
         return {
             'wavelengths': self.wavelengths,
@@ -367,10 +570,21 @@ class BEMSolver:
 
     def get_solver_info(self) -> Dict[str, Any]:
         """Get information about the solver setup."""
-        return {
+        info = {
             'simulation_type': self.config.get('simulation_type', 'stat'),
             'excitation_type': self.config.get('excitation_type', 'planewave'),
             'n_wavelengths': len(self.wavelengths) if self.wavelengths is not None else 0,
             'n_excitations': len(self.excitations),
             'wavelength_range': [float(self.wavelengths[0]), float(self.wavelengths[-1])] if self.wavelengths is not None else None,
+            'num_cores': self.num_cores,
+            'max_comp_threads': self.config.get('max_comp_threads', 1),
+            'use_iterative_solver': self.config.get('use_iterative_solver', False),
+            'use_h2_compression': self.config.get('use_h2_compression', False),
         }
+
+        # Add availability info
+        info['iterative_available'] = self._iter_available if hasattr(self, '_iter_available') else False
+        info['hmatrix_available'] = self._hmatrix_available if hasattr(self, '_hmatrix_available') else False
+
+        return info
+

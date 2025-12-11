@@ -233,6 +233,54 @@ args['use_nonlocality'] = False
 # }
 
 # ============================================================================
+# PARALLEL COMPUTING
+# ============================================================================
+# Parallelization settings for multi-core systems.
+# Uses ThreadPoolExecutor for wavelength-parallel computation with shared memory.
+
+# Number of cores for wavelength-parallel computation
+# Each core handles one wavelength calculation independently
+# Recommended: Set to number of wavelengths or available cores (whichever is smaller)
+args['num_cores'] = 1
+
+# BLAS/LAPACK threads per wavelength calculation
+# Controls threads used by NumPy linear algebra operations (matrix multiply, solve)
+# Recommended: 1 for most cases (wavelength-parallel is more efficient)
+# For very large structures (>10K mesh elements), try 2-4
+args['max_comp_threads'] = 1
+
+# Note: Total CPU usage = num_cores × max_comp_threads
+# Example for 128-core system:
+#   - Small particles: num_cores=128, max_comp_threads=1
+#   - Large particles: num_cores=32, max_comp_threads=4
+
+# ============================================================================
+# ADVANCED SOLVER OPTIONS
+# ============================================================================
+# For large structures (>10,000 mesh elements), these options reduce memory usage.
+
+# H-matrix compression (Hierarchical matrices with ACA)
+# Reduces memory from O(N²) to O(N log N)
+# Recommended for large particles or limited memory systems
+args['use_h2_compression'] = False
+
+# H-matrix tolerance (only used if use_h2_compression=True)
+# Lower = more accurate but less compression
+# Typical values: 1e-3 to 1e-5
+# args['h2_tolerance'] = 1e-4
+
+# Iterative solver (GMRES/BiCGSTAB instead of direct LU)
+# Uses less memory but may require more iterations
+# Recommended for very large structures (>10,000 elements)
+args['use_iterative_solver'] = False
+
+# Iterative solver tolerance (only used if use_iterative_solver=True)
+# args['iter_tolerance'] = 1e-6
+
+# Iterative solver maximum iterations
+# args['iter_maxiter'] = 1000
+
+# ============================================================================
 # ADVANCED OPTIONS
 # ============================================================================
 
@@ -243,11 +291,6 @@ args['use_mirror_symmetry'] = False
 
 # Example: Use x-symmetry for symmetric dimer with x-polarization
 # args['use_mirror_symmetry'] = 'x'
-
-# Iterative solver (for very large structures with >10,000 elements)
-# Uses less memory but may be slower
-# Enable if you encounter out-of-memory errors
-args['use_iterative_solver'] = False
 
 # ============================================================================
 # ADDITIONAL SIMULATION EXAMPLES
