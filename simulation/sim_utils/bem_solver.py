@@ -275,7 +275,7 @@ class BEMSolver:
                 exc = PlaneWave(pol=pol)
             else:
                 # Retarded: both polarization and direction matter
-                exc = PlaneWave(pol=pol, direction=prop_dir)
+                exc = PlaneWave(pol=pol, dir=prop_dir)
             self.excitations.append(exc)
 
     def _setup_dipole_excitations(self, sim_type: str):
