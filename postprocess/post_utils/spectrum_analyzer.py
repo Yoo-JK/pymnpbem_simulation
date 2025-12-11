@@ -62,7 +62,10 @@ class SpectrumAnalyzer:
             return []
 
         # Normalize spectrum for peak finding
-        spectrum_norm = spectrum / np.max(spectrum)
+        max_val = np.max(spectrum)
+        if max_val == 0 or np.isnan(max_val):
+            return []
+        spectrum_norm = spectrum / max_val
 
         # Find peaks
         peak_indices, properties = find_peaks(
@@ -288,3 +291,4 @@ class SpectrumAnalyzer:
                                fill_value='extrapolate')
 
         return interp_func(wavelengths_new)
+
