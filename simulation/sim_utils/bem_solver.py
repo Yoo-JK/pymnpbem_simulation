@@ -270,12 +270,16 @@ class BEMSolver:
         PlaneWave = self.PlaneWaveStat if sim_type == 'stat' else self.PlaneWaveRet
 
         for pol, prop_dir in zip(polarizations, propagation_dirs):
+            # Ensure 2D array shape (1, 3) for pyMNPBEM
+            pol_arr = np.atleast_2d(pol)
+            dir_arr = np.atleast_2d(prop_dir)
+
             if sim_type == 'stat':
                 # Quasistatic: only polarization matters
-                exc = PlaneWave(pol=pol)
+                exc = PlaneWave(pol=pol_arr)
             else:
                 # Retarded: both polarization and direction matter
-                exc = PlaneWave(pol=pol, dir=prop_dir)
+                exc = PlaneWave(pol=pol_arr, dir=dir_arr)
             self.excitations.append(exc)
 
     def _setup_dipole_excitations(self, sim_type: str):
