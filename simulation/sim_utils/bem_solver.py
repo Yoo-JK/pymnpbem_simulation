@@ -99,8 +99,10 @@ class BEMSolver:
             # Try to import layer solvers
             try:
                 from mnpbem.bem import BEMStatLayer, BEMRetLayer
+                from mnpbem.particles import LayerStructure
                 self.BEMStatLayer = BEMStatLayer
                 self.BEMRetLayer = BEMRetLayer
+                self.LayerStructure = LayerStructure
                 self._layer_available = True
             except ImportError:
                 self._layer_available = False
@@ -222,23 +224,65 @@ class BEMSolver:
         # Select solver class
         if sim_type == 'stat':
             if use_substrate and self._layer_available:
+                # Create LayerStructure from substrate config
+                layer = self._create_layer_structure()
                 # Layer solver (substrate)
                 if use_iterative and hasattr(self, 'BEMStatLayerIter'):
-                    return self.BEMStatLayerIter(self.particle, self.substrate['position'], **solver_kwargs)
-                return self.BEMStatLayer(self.particle, self.substrate['position'])
+                    return self.BEMStatLayerIter(self.particle, layer, **solver_kwargs)
+                return self.BEMStatLayer(self.particle, layer)
             elif use_iterative:
                 return self.BEMStatIter(self.particle, **solver_kwargs)
             else:
                 return self.BEMStat(self.particle)
         else:  # 'ret'
             if use_substrate and self._layer_available:
+                # Create LayerStructure from substrate config
+                layer = self._create_layer_structure()
                 if use_iterative and hasattr(self, 'BEMRetLayerIter'):
-                    return self.BEMRetLayerIter(self.particle, self.substrate['position'], **solver_kwargs)
-                return self.BEMRetLayer(self.particle, self.substrate['position'])
+                    return self.BEMRetLayerIter(self.particle, layer, **solver_kwargs)
+                return self.BEMRetLayer(self.particle, layer)
             elif use_iterative:
                 return self.BEMRetIter(self.particle, **solver_kwargs)
             else:
                 return self.BEMRet(self.particle)
+
+    def _create_layer_structure(self):
+        """
+        Create a LayerStructure from substrate configuration.
+
+        Returns:
+            LayerStructure object for BEM layer solvers
+        """
+        if not self.substrate:
+            raise ValueError("No substrate configuration provided")
+
+        # Get substrate material dielectric function
+        # epstab[0] is typically air/vacuum, epstab[1] is particle material
+        # For substrate, we need: [medium above interface, substrate below]
+
+        # Get the interface position (z-coordinate)
+        z_interface = self.substrate.get('position', 0)
+
+        # Get substrate dielectric function
+        substrate_eps = self.substrate.get('eps')
+        if substrate_eps is None:
+            # If eps not directly provided, try to get from material name
+            material = self.substrate.get('material', 'glass')
+            if material == 'glass':
+                from mnpbem import EpsConst
+                substrate_eps = EpsConst(2.25)  # n=1.5 for glass
+            elif material == 'silicon':
+                from mnpbem import EpsTable
+                substrate_eps = EpsTable('si')
+            else:
+                raise ValueError(f"Unknown substrate material: {material}")
+
+        # Create LayerStructure: [medium, substrate]
+        # Using the ambient medium (first in epstab) and substrate
+        layer_eps = [self.epstab[0], substrate_eps]
+        layer = self.LayerStructure(layer_eps, z_interface=np.array([z_interface]))
+
+        return layer
 
     def _setup_excitations(self):
         """Set up excitation objects based on configuration."""
@@ -325,18 +369,23 @@ class BEMSolver:
         wavelength = self.wavelengths[wl_idx]
         exc = self.excitations[exc_idx]
 
-        # Generate excitation at this wavelength
+        # Generate excitation at this wavelength (also updates exc internal state)
         exc_struct = exc(self.particle, wavelength)
 
-        # Solve
+        # Solve BEM equations
         sig = self.bem.solve(exc_struct)
 
-        # Compute cross sections
-        sca = sig.scattering()
-        ext = sig.extinction()
+        # Compute cross sections using excitation object's methods
+        # Note: sca/ext return arrays with shape (n_pol,), we take first element
+        sca_arr = exc.sca(sig)
+        ext_arr = exc.ext(sig)
+
+        # Handle both scalar and array returns
+        sca = float(np.sum(sca_arr)) if hasattr(sca_arr, '__len__') else float(sca_arr)
+        ext = float(np.sum(ext_arr)) if hasattr(ext_arr, '__len__') else float(ext_arr)
         abs_val = ext - sca
 
-        return (wl_idx, exc_idx, float(sca), float(abs_val), float(ext))
+        return (wl_idx, exc_idx, sca, abs_val, ext)
 
     def compute_spectrum(self, show_progress: bool = True) -> Dict[str, np.ndarray]:
         """
@@ -374,7 +423,6 @@ class BEMSolver:
     def _compute_spectrum_serial(self, show_progress: bool = True) -> Dict[str, np.ndarray]:
         """Compute spectrum using serial execution."""
         sim_type = self.config.get('simulation_type', 'stat')
-        Spectrum = self.SpectrumStat if sim_type == 'stat' else self.SpectrumRet
 
         n_wl = len(self.wavelengths)
         n_exc = len(self.excitations)
@@ -387,21 +435,27 @@ class BEMSolver:
             if show_progress:
                 print(f"Computing spectrum for excitation {i+1}/{n_exc}")
 
-            # Create spectrum calculator
-            spec = Spectrum(self.bem, exc, self.wavelengths, show_progress=show_progress)
+            if sim_type == 'stat':
+                # SpectrumStat API: __init__(bem, exc, wavelengths, show_progress)
+                spec = self.SpectrumStat(self.bem, exc, self.wavelengths, show_progress=show_progress)
+                result = spec.compute()
 
-            # Compute
-            result = spec.compute()
+                # SpectrumStat.compute() returns tuple (sca, ext)
+                if isinstance(result, tuple):
+                    sca, ext = result
+                    scattering[:, i] = sca.flatten()
+                    extinction[:, i] = ext.flatten()
+                    absorption[:, i] = ext.flatten() - sca.flatten()
+            else:
+                # SpectrumRet API: __init__(excitation, particle, bem, options)
+                spec = self.SpectrumRet(exc, self.particle, self.bem, self.options)
+                result = spec.compute(self.wavelengths)
 
-            if isinstance(result, tuple):
-                sca, ext = result
-                scattering[:, i] = sca.flatten()
-                extinction[:, i] = ext.flatten()
-                absorption[:, i] = ext.flatten() - sca.flatten()
-            elif isinstance(result, dict):
-                scattering[:, i] = result.get('sca', np.zeros(n_wl)).flatten()
-                extinction[:, i] = result.get('ext', np.zeros(n_wl)).flatten()
-                absorption[:, i] = result.get('abs', np.zeros(n_wl)).flatten()
+                # SpectrumRet.compute() returns dict {'sca': ..., 'ext': ..., 'abs': ...}
+                if isinstance(result, dict):
+                    scattering[:, i] = result.get('sca', np.zeros(n_wl)).flatten()
+                    extinction[:, i] = result.get('ext', np.zeros(n_wl)).flatten()
+                    absorption[:, i] = result.get('abs', np.zeros(n_wl)).flatten()
 
             # Store spectrum object for later use
             self.solutions[i] = spec
