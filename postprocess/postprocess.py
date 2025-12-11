@@ -323,7 +323,8 @@ class PostprocessManager:
         print(f"      Run folder: {self.run_folder}")
 
         if 'spectrum' in self.data:
-            n_wl = len(self.data['spectrum']['wavelengths'])
+            wavelengths = self.data['spectrum'].get('wavelengths', [])
+            n_wl = len(wavelengths) if wavelengths is not None else 0
             ext = self.data['spectrum'].get('extinction')
             n_pol = ext.shape[1] if ext is not None and ext.ndim > 1 else 1
             wl_range = self.loader.get_wavelength_range()

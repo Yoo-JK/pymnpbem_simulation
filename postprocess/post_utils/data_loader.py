@@ -224,6 +224,27 @@ class DataLoader:
 
         data = np.loadtxt(filepath, skiprows=1)
 
+        # Handle edge cases: empty file or single-column data
+        if data.size == 0:
+            return None
+
+        # Ensure 2D array
+        if data.ndim == 1:
+            # Single row - reshape to 2D
+            data = data.reshape(1, -1)
+
+        # Validate column count
+        if data.shape[1] < 4:
+            # Not enough columns - return what we can
+            result = {}
+            if data.shape[1] >= 1:
+                result['wavelengths'] = data[:, 0]
+            if data.shape[1] >= 2:
+                result['scattering'] = data[:, 1]
+            if data.shape[1] >= 3:
+                result['absorption'] = data[:, 2]
+            return result if result else None
+
         return {
             'wavelengths': data[:, 0],
             'scattering': data[:, 1],
