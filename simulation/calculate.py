@@ -209,6 +209,15 @@ class SimulationManager:
             if wl_range:
                 print(f"      Wavelength range: {wl_range[0]:.0f} - {wl_range[1]:.0f} nm")
             print(f"      Excitations: {solver_info['n_excitations']}")
+            # Print parallel/solver settings
+            num_cores = solver_info.get('num_cores', 1)
+            max_threads = solver_info.get('max_comp_threads', 1)
+            if num_cores > 1:
+                print(f"      Parallel: {num_cores} cores (BLAS threads: {max_threads})")
+            if solver_info.get('use_h2_compression', False):
+                print(f"      H-matrix compression: enabled")
+            if solver_info.get('use_iterative_solver', False):
+                print(f"      Iterative solver: enabled")
 
         # Step 4: Compute optical spectra
         if self.config.get('calculate_cross_sections', True):
@@ -380,6 +389,14 @@ class SimulationManager:
                 'excitation': self.config.get('excitation_type', 'planewave'),
                 'wavelength_range': self.config.get('wavelength_range', []),
             },
+            'parallel': {
+                'num_cores': self.config.get('num_cores', 1),
+                'max_comp_threads': self.config.get('max_comp_threads', 1),
+            },
+            'solver': {
+                'use_h2_compression': self.config.get('use_h2_compression', False),
+                'use_iterative_solver': self.config.get('use_iterative_solver', False),
+            },
         }
 
         # Add field statistics
@@ -420,6 +437,10 @@ class SimulationManager:
             'materials': self.config.get('materials', []),
             'medium': self.config.get('medium', 'air'),
             'use_nonlocality': self.config.get('use_nonlocality', False),
+            'num_cores': self.config.get('num_cores', 1),
+            'max_comp_threads': self.config.get('max_comp_threads', 1),
+            'use_h2_compression': self.config.get('use_h2_compression', False),
+            'use_iterative_solver': self.config.get('use_iterative_solver', False),
         }
 
     def get_results(self) -> Dict[str, Any]:
