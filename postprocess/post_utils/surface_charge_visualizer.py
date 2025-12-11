@@ -86,15 +86,17 @@ class SurfaceChargeVisualizer:
 
         for i, face in enumerate(faces):
             if len(face) >= 3:
+                # Ensure face indices are integers for array indexing
+                face_int = np.asarray(face, dtype=int)
                 # Handle both triangles and quads
                 if len(face) == 3:
-                    verts = vertices[face]
+                    verts = vertices[face_int]
                     polys.append(verts)
                     face_values.append(values[i] if i < len(values) else 0)
                 elif len(face) == 4:
                     # Split quad into two triangles
                     for tri_indices in [[0, 1, 2], [0, 2, 3]]:
-                        verts = vertices[face[tri_indices]]
+                        verts = vertices[face_int[tri_indices]]
                         polys.append(verts)
                         face_values.append(values[i] if i < len(values) else 0)
 
@@ -387,7 +389,9 @@ class SurfaceChargeVisualizer:
 
         for i, face in enumerate(faces):
             if len(face) >= 3:
-                verts = vertices[face[:3]]  # Take first 3 vertices for triangle
+                # Ensure face indices are integers for array indexing
+                face_int = np.asarray(face[:3], dtype=int)  # Take first 3 vertices for triangle
+                verts = vertices[face_int]
                 polys.append(verts)
                 face_values.append(values[i] if i < len(values) else 0)
 
