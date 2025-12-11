@@ -107,7 +107,7 @@ def main():
             # Print spectrum info
             if 'spectrum' in data:
                 print(f"\n  Spectrum data processed:")
-                wavelengths = data.get('wavelengths', [])
+                wavelengths = data['spectrum'].get('wavelengths', [])
                 if len(wavelengths) > 0:
                     print(f"    Wavelength range: {wavelengths[0]:.1f} - {wavelengths[-1]:.1f} nm")
                     print(f"    Number of points: {len(wavelengths)}")
@@ -115,22 +115,22 @@ def main():
                     print(f"    No wavelength data available")
 
             # Print field data info if available
-            if 'fields' in data and data['fields']:
+            if 'field' in data and data['field']:
                 print(f"\n  Field data processed:")
-                for i, field in enumerate(data['fields']):
-                    print(f"    Polarization {i+1}: λ = {field['wavelength']:.1f} nm")
-                    enhancement = field['enhancement']
-                    if hasattr(enhancement, 'shape'):
+                for pol_idx, field in data['field'].items():
+                    print(f"    Polarization {pol_idx+1}:")
+                    enhancement = field.get('enhancement')
+                    if enhancement is not None and hasattr(enhancement, 'shape'):
                         print(f"      Grid size: {enhancement.shape}")
                         print(f"      Max enhancement: {enhancement.max():.1f}")
 
             # Print surface charge info if available
             if 'surface_charges' in data and data['surface_charges']:
                 print(f"\n  Surface charge data processed:")
-                for i, charge in enumerate(data['surface_charges']):
-                    print(f"    Polarization {i+1}: λ = {charge['wavelength']:.1f} nm")
-                    if 'mode_info' in charge:
-                        print(f"      Dominant mode: {charge['mode_info'].get('dominant_mode', 'unknown')}")
+                for pol_idx, charge in data['surface_charges'].items():
+                    print(f"    Polarization {pol_idx+1}:")
+                    if 'charges' in charge and hasattr(charge['charges'], 'shape'):
+                        print(f"      Number of surface elements: {charge['charges'].shape[0]}")
 
         return 0
 
