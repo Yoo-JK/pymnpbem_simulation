@@ -9,6 +9,13 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 
 
+def _safe_sqrt(value: float) -> float:
+    """Safely compute square root, handling floating-point edge cases."""
+    if value < 0:
+        return 0.0
+    return np.sqrt(value)
+
+
 class GeometryCrossSection:
     """
     Calculates 2D cross-sections of 3D structures.
@@ -69,8 +76,8 @@ class GeometryCrossSection:
         if abs(position) > radius:
             return []
 
-        # Calculate intersection circle radius
-        circle_radius = np.sqrt(radius**2 - position**2)
+        # Calculate intersection circle radius (safe for floating-point)
+        circle_radius = _safe_sqrt(radius**2 - position**2)
 
         return [{
             'type': 'circle',
@@ -144,7 +151,7 @@ class GeometryCrossSection:
         if plane == 'xz':  # y = position
             if abs(position) <= b:
                 # Ellipse in xz plane
-                scale_y = np.sqrt(1 - (position/b)**2)
+                scale_y = _safe_sqrt(1 - (position/b)**2)
                 elements.append({
                     'type': 'ellipse',
                     'x': 0,
@@ -156,7 +163,7 @@ class GeometryCrossSection:
                 })
         elif plane == 'xy':  # z = position
             if abs(position) <= c:
-                scale_z = np.sqrt(1 - (position/c)**2)
+                scale_z = _safe_sqrt(1 - (position/c)**2)
                 elements.append({
                     'type': 'ellipse',
                     'x': 0,
@@ -181,7 +188,7 @@ class GeometryCrossSection:
 
         # Shell (outer)
         if abs(position) <= shell_radius:
-            circle_radius = np.sqrt(shell_radius**2 - position**2)
+            circle_radius = _safe_sqrt(shell_radius**2 - position**2)
             elements.append({
                 'type': 'circle',
                 'x': 0,
@@ -193,7 +200,7 @@ class GeometryCrossSection:
 
         # Core (inner)
         if abs(position) <= core_radius:
-            circle_radius = np.sqrt(core_radius**2 - position**2)
+            circle_radius = _safe_sqrt(core_radius**2 - position**2)
             elements.append({
                 'type': 'circle',
                 'x': 0,
@@ -254,7 +261,7 @@ class GeometryCrossSection:
         # Left sphere
         x_left = -separation / 2
         if abs(position) <= radius:
-            circle_radius = np.sqrt(radius**2 - position**2)
+            circle_radius = _safe_sqrt(radius**2 - position**2)
             elements.append({
                 'type': 'circle',
                 'x': x_left,
@@ -267,7 +274,7 @@ class GeometryCrossSection:
         # Right sphere
         x_right = separation / 2
         if abs(position) <= radius:
-            circle_radius = np.sqrt(radius**2 - position**2)
+            circle_radius = _safe_sqrt(radius**2 - position**2)
             elements.append({
                 'type': 'circle',
                 'x': x_right,
@@ -376,7 +383,7 @@ class GeometryCrossSection:
             dist_to_plane = abs(position - pos[1]) if plane == 'xz' else abs(position - pos[2])
 
             if dist_to_plane <= radius:
-                circle_radius = np.sqrt(radius**2 - dist_to_plane**2)
+                circle_radius = _safe_sqrt(radius**2 - dist_to_plane**2)
 
                 if plane == 'xz':
                     x, y = pos[0], pos[2]

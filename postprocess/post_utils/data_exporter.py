@@ -230,10 +230,18 @@ class DataExporter:
 
         # Optionally include downsampled field data
         if self.config.get('export_field_arrays', False):
-            # Downsample for reasonable file size
-            step = max(1, len(field_data['x']) // 50)
-            export_data['enhancement_downsampled'] = field_data['enhancement'][::step, ::step].tolist()
-            export_data['downsample_step'] = step
+            enh = field_data.get('enhancement')
+            x_arr = field_data.get('x', [])
+            if enh is not None and len(x_arr) > 0:
+                # Downsample for reasonable file size
+                step = max(1, len(x_arr) // 50)
+                if enh.ndim == 2:
+                    export_data['enhancement_downsampled'] = enh[::step, ::step].tolist()
+                elif enh.ndim == 1:
+                    export_data['enhancement_downsampled'] = enh[::step].tolist()
+                else:  # 3D or higher
+                    export_data['enhancement_downsampled'] = enh[::step, ::step, ::step].tolist() if enh.ndim == 3 else enh.tolist()
+                export_data['downsample_step'] = step
 
         with open(filepath, 'w') as f:
             json.dump(export_data, f, indent=2)
