@@ -100,8 +100,24 @@ class SurfaceChargeVisualizer:
 
         face_values = np.array(face_values)
 
+        # Handle empty face_values array
+        if len(face_values) == 0:
+            ax.text2D(0.5, 0.5, 'No face data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=12)
+            ax.set_xlabel('x (nm)', fontsize=12)
+            ax.set_ylabel('y (nm)', fontsize=12)
+            ax.set_zlabel('z (nm)', fontsize=12)
+            if title:
+                ax.set_title(title, fontsize=14)
+            plt.tight_layout()
+            if save_path:
+                self._save_figure(fig, save_path)
+            return fig
+
         # Normalize colors
         vmax = np.max(np.abs(face_values))
+        if vmax == 0:
+            vmax = 1.0  # Prevent division by zero in normalization
         if component in ['real', 'imag']:
             # Symmetric colormap centered at 0
             norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
@@ -377,7 +393,15 @@ class SurfaceChargeVisualizer:
 
         face_values = np.array(face_values)
 
-        vmax = np.max(np.abs(face_values)) if len(face_values) > 0 else 1.0
+        # Handle empty face_values array
+        if len(face_values) == 0:
+            ax.text2D(0.5, 0.5, 'No face data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=10)
+            return
+
+        vmax = np.max(np.abs(face_values))
+        if vmax == 0:
+            vmax = 1.0  # Prevent division by zero in normalization
         if component in ['real', 'imag']:
             norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
             cmap = plt.cm.RdBu_r
@@ -422,3 +446,4 @@ class SurfaceChargeVisualizer:
             filepath = f"{base_path}.{fmt}"
             fig.savefig(filepath, dpi=self.dpi, bbox_inches='tight',
                         facecolor='white', edgecolor='none')
+
