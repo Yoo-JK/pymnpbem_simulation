@@ -27,18 +27,17 @@ class MaterialBuilder:
     """
 
     # Built-in materials and their corresponding pyMNPBEM data files
+    # Note: pyMNPBEM has gold.dat, silver.dat, goldpalik.dat, silverpalik.dat, copperpalik.dat
     BUILTIN_MATERIALS = {
         'gold': 'gold.dat',
         'au': 'gold.dat',
         'silver': 'silver.dat',
         'ag': 'silver.dat',
-        'aluminum': 'aluminum.dat',
-        'al': 'aluminum.dat',
-        'copper': 'copper.dat',
-        'cu': 'copper.dat',
         'goldpalik': 'goldpalik.dat',
         'silverpalik': 'silverpalik.dat',
         'copperpalik': 'copperpalik.dat',
+        'copper': 'copperpalik.dat',  # Use Palik data for copper
+        'cu': 'copperpalik.dat',
     }
 
     # Common dielectric constants
