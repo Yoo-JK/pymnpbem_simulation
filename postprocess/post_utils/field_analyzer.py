@@ -51,11 +51,13 @@ class FieldAnalyzer:
         Returns:
             List of hotspot dictionaries
         """
-        if self.enhancement is None:
+        if self.enhancement is None or self.enhancement.size == 0:
             return []
 
         enhancement = self.enhancement
         max_val = np.max(enhancement)
+        if max_val == 0 or np.isnan(max_val):
+            return []
         threshold_val = max_val * threshold
 
         # Find local maxima
@@ -150,10 +152,10 @@ class FieldAnalyzer:
         if self.enhancement is None or self.x is None:
             return {t: 0.0 for t in thresholds}
 
-        # Calculate voxel volume
-        dx = self.x[1] - self.x[0] if len(self.x) > 1 else 1.0
-        dy = self.y[1] - self.y[0] if len(self.y) > 1 else 1.0
-        dz = self.z[1] - self.z[0] if len(self.z) > 1 else 1.0
+        # Calculate voxel volume (handle None and single-element arrays)
+        dx = self.x[1] - self.x[0] if self.x is not None and len(self.x) > 1 else 1.0
+        dy = self.y[1] - self.y[0] if self.y is not None and len(self.y) > 1 else 1.0
+        dz = self.z[1] - self.z[0] if self.z is not None and len(self.z) > 1 else 1.0
         voxel_volume = abs(dx * dy * dz)
 
         volumes = {}
@@ -173,9 +175,10 @@ class FieldAnalyzer:
         if self.enhancement is None or self.x is None:
             return 0.0
 
-        dx = self.x[1] - self.x[0] if len(self.x) > 1 else 1.0
-        dy = self.y[1] - self.y[0] if len(self.y) > 1 else 1.0
-        dz = self.z[1] - self.z[0] if len(self.z) > 1 else 1.0
+        # Handle None and single-element arrays
+        dx = self.x[1] - self.x[0] if self.x is not None and len(self.x) > 1 else 1.0
+        dy = self.y[1] - self.y[0] if self.y is not None and len(self.y) > 1 else 1.0
+        dz = self.z[1] - self.z[0] if self.z is not None and len(self.z) > 1 else 1.0
         voxel_volume = abs(dx * dy * dz)
 
         # Exclude inside particle
@@ -257,3 +260,4 @@ class FieldAnalyzer:
             }
 
         return {}
+

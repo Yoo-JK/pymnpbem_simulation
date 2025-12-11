@@ -54,9 +54,16 @@ class DataExporter:
         filepath = os.path.join(self.output_dir, f'{filename}.txt')
 
         wavelengths = spectrum_data['wavelengths']
-        scattering = spectrum_data['scattering'][:, pol_idx]
-        absorption = spectrum_data['absorption'][:, pol_idx]
-        extinction = spectrum_data['extinction'][:, pol_idx]
+
+        # Handle both 1D and 2D arrays
+        def get_column(data, idx):
+            if data is None:
+                return np.zeros_like(wavelengths)
+            return data[:, idx] if data.ndim > 1 else data
+
+        scattering = get_column(spectrum_data.get('scattering'), pol_idx)
+        absorption = get_column(spectrum_data.get('absorption'), pol_idx)
+        extinction = get_column(spectrum_data.get('extinction'), pol_idx)
 
         with open(filepath, 'w') as f:
             f.write("# Optical Cross-Section Spectrum\n")
@@ -83,9 +90,16 @@ class DataExporter:
         filepath = os.path.join(self.output_dir, f'{filename}.csv')
 
         wavelengths = spectrum_data['wavelengths']
-        scattering = spectrum_data['scattering'][:, pol_idx]
-        absorption = spectrum_data['absorption'][:, pol_idx]
-        extinction = spectrum_data['extinction'][:, pol_idx]
+
+        # Handle both 1D and 2D arrays
+        def get_column(data, idx):
+            if data is None:
+                return np.zeros_like(wavelengths)
+            return data[:, idx] if data.ndim > 1 else data
+
+        scattering = get_column(spectrum_data.get('scattering'), pol_idx)
+        absorption = get_column(spectrum_data.get('absorption'), pol_idx)
+        extinction = get_column(spectrum_data.get('extinction'), pol_idx)
 
         with open(filepath, 'w') as f:
             f.write("Wavelength_nm,Scattering_nm2,Absorption_nm2,Extinction_nm2\n")
@@ -274,7 +288,8 @@ class DataExporter:
         """
         # Export spectra
         if 'spectrum' in data:
-            n_pol = data['spectrum']['extinction'].shape[1]
+            ext_data = data['spectrum'].get('extinction')
+            n_pol = ext_data.shape[1] if ext_data is not None and ext_data.ndim > 1 else 1
             for pol_idx in range(n_pol):
                 self.export_spectrum_txt(data['spectrum'], pol_idx)
                 self.export_spectrum_csv(data['spectrum'], pol_idx)
@@ -294,3 +309,4 @@ class DataExporter:
 
         # Export summary
         self.export_summary(analysis)
+

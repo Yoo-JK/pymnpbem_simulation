@@ -279,7 +279,8 @@ class Visualizer:
 
         # Set color scale
         if vmax is None:
-            vmax = np.max(enhancement[enhancement > 0])
+            positive_values = enhancement[enhancement > 0]
+            vmax = np.max(positive_values) if len(positive_values) > 0 else 1.0
         if vmin is None:
             vmin = 1.0 if log_scale else 0.0
 
@@ -341,8 +342,10 @@ class Visualizer:
             axes = [axes]
 
         # Find global vmax
-        vmax = max(np.max(data['enhancement'][data['enhancement'] > 0])
-                   for data in field_data.values())
+        def safe_max(data):
+            positive = data['enhancement'][data['enhancement'] > 0]
+            return np.max(positive) if len(positive) > 0 else 1.0
+        vmax = max(safe_max(data) for data in field_data.values())
 
         for i, (pol_idx, data) in enumerate(sorted(field_data.items())):
             ax = axes[i]

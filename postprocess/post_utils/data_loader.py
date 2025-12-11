@@ -122,6 +122,9 @@ class DataLoader:
         Returns:
             Dictionary mapping polarization index to field data
         """
+        if not os.path.exists(self.data_dir):
+            return None
+
         field_data = {}
 
         # Find all field files
@@ -133,6 +136,16 @@ class DataLoader:
                 pol_idx = int(pol_str[3:]) - 1  # Convert to 0-indexed
 
                 prefix = f'field_pol{pol_idx+1}'
+
+                # Check all required files exist
+                required_files = [
+                    f'{prefix}_enhancement.npy',
+                    f'{prefix}_x.npy',
+                    f'{prefix}_y.npy',
+                    f'{prefix}_z.npy',
+                ]
+                if not all(os.path.exists(os.path.join(self.data_dir, f)) for f in required_files):
+                    continue
 
                 field_data[pol_idx] = {
                     'enhancement': np.load(os.path.join(self.data_dir, f'{prefix}_enhancement.npy')),
@@ -150,6 +163,9 @@ class DataLoader:
         Returns:
             Dictionary mapping polarization index to charge data
         """
+        if not os.path.exists(self.data_dir):
+            return None
+
         charge_data = {}
 
         for filename in os.listdir(self.data_dir):
@@ -159,6 +175,16 @@ class DataLoader:
                 pol_idx = int(pol_str[3:]) - 1
 
                 prefix = f'charges_pol{pol_idx+1}'
+
+                # Check all required files exist
+                required_files = [
+                    f'{prefix}_values.npy',
+                    f'{prefix}_positions.npy',
+                    f'{prefix}_vertices.npy',
+                    f'{prefix}_faces.npy',
+                ]
+                if not all(os.path.exists(os.path.join(self.data_dir, f)) for f in required_files):
+                    continue
 
                 charges = np.load(os.path.join(self.data_dir, f'{prefix}_values.npy'))
 
