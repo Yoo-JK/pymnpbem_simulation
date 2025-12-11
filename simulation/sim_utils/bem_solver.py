@@ -256,10 +256,6 @@ class BEMSolver:
         if not self.substrate:
             raise ValueError("No substrate configuration provided")
 
-        # Get substrate material dielectric function
-        # epstab[0] is typically air/vacuum, epstab[1] is particle material
-        # For substrate, we need: [medium above interface, substrate below]
-
         # Get the interface position (z-coordinate)
         z_interface = self.substrate.get('position', 0)
 
@@ -267,13 +263,36 @@ class BEMSolver:
         substrate_eps = self.substrate.get('eps')
         if substrate_eps is None:
             # If eps not directly provided, try to get from material name
-            material = self.substrate.get('material', 'glass')
-            if material == 'glass':
-                from mnpbem import EpsConst
-                substrate_eps = EpsConst(2.25)  # n=1.5 for glass
-            elif material == 'silicon':
-                from mnpbem import EpsTable
-                substrate_eps = EpsTable('si')
+            material = self.substrate.get('material', 'glass').lower()
+
+            # Constant dielectric materials
+            constant_materials = {
+                'glass': 2.25,      # n=1.5
+                'sio2': 2.13,       # n=1.46
+                'water': 1.77,      # n=1.33
+                'ito': 3.8,
+                'tio2': 6.25,       # n=2.5
+            }
+
+            # Tabulated materials (from pyMNPBEM data files)
+            table_materials = {
+                'gold': 'gold.dat',
+                'au': 'gold.dat',
+                'silver': 'silver.dat',
+                'ag': 'silver.dat',
+                'goldpalik': 'goldpalik.dat',
+                'silverpalik': 'silverpalik.dat',
+                'copperpalik': 'copperpalik.dat',
+                'copper': 'copperpalik.dat',
+                'cu': 'copperpalik.dat',
+            }
+
+            from mnpbem import EpsConst, EpsTable
+
+            if material in constant_materials:
+                substrate_eps = EpsConst(constant_materials[material])
+            elif material in table_materials:
+                substrate_eps = EpsTable(table_materials[material])
             else:
                 raise ValueError(f"Unknown substrate material: {material}")
 
