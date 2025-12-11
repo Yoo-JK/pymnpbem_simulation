@@ -164,17 +164,28 @@ class DataExporter:
             if len(z) > 0:
                 f.write(f"# Z range: {z[0]:.1f} to {z[-1]:.1f} nm\n\n")
 
-            # Header row (x values)
+            # Get actual enhancement array shape
+            enh_shape = enhancement.shape
+
+            # Header row (x values) - use actual shape
             f.write("x/z")
-            for xi in x:
+            n_x = min(len(x), enh_shape[0]) if len(enh_shape) > 0 else len(x)
+            for i in range(n_x):
+                xi = x[i] if i < len(x) else i
                 f.write(f"\t{xi:.1f}")
             f.write("\n")
 
-            # Data rows
-            for j, zi in enumerate(z):
+            # Data rows - use actual shape
+            n_z = min(len(z), enh_shape[1]) if len(enh_shape) > 1 else len(z)
+            for j in range(n_z):
+                zi = z[j] if j < len(z) else j
                 f.write(f"{zi:.1f}")
-                for i in range(len(x)):
-                    f.write(f"\t{enhancement[i, j]:.4e}")
+                for i in range(n_x):
+                    # Safe indexing with bounds check
+                    if i < enh_shape[0] and j < enh_shape[1]:
+                        f.write(f"\t{enhancement[i, j]:.4e}")
+                    else:
+                        f.write(f"\t0.0000e+00")
                 f.write("\n")
 
     def export_field_json(self, field_data: Dict[str, np.ndarray],

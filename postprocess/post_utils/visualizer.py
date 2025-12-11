@@ -291,7 +291,18 @@ class Visualizer:
             norm = None
             enhancement = np.clip(enhancement, vmin, vmax)
 
-        im = ax.pcolormesh(X, Y, enhancement, cmap='hot', norm=norm, shading='auto')
+        # Ensure shapes are compatible for pcolormesh
+        # enhancement should be transposed if X, Y are from meshgrid
+        try:
+            if X.shape != enhancement.shape:
+                enhancement = enhancement.T
+            im = ax.pcolormesh(X, Y, enhancement, cmap='hot', norm=norm, shading='auto')
+        except Exception as e:
+            # Fallback: create simple meshgrid from coordinates
+            X_new, Y_new = np.meshgrid(x_coords, y_coords)
+            if X_new.shape != enhancement.shape:
+                enhancement = enhancement.T
+            im = ax.pcolormesh(X_new, Y_new, enhancement, cmap='hot', norm=norm, shading='auto')
 
         # Add colorbar
         divider = make_axes_locatable(ax)
@@ -374,7 +385,16 @@ class Visualizer:
             else:
                 norm = None
 
-            im = ax.pcolormesh(X, Y, enhancement, cmap='hot', norm=norm, shading='auto')
+            # Ensure shapes are compatible for pcolormesh
+            try:
+                if X.shape != enhancement.shape:
+                    enhancement = enhancement.T
+                im = ax.pcolormesh(X, Y, enhancement, cmap='hot', norm=norm, shading='auto')
+            except Exception:
+                X_new, Y_new = np.meshgrid(x_coords, z_coords_arr if len(y_coords_arr) == 1 else y_coords_arr)
+                if X_new.shape != enhancement.shape:
+                    enhancement = enhancement.T
+                im = ax.pcolormesh(X_new, Y_new, enhancement, cmap='hot', norm=norm, shading='auto')
             ax.set_xlabel('x (nm)', fontsize=12)
             if i == 0:
                 ax.set_ylabel('z (nm)' if len(y_coords_arr) == 1 else 'y (nm)', fontsize=12)
@@ -408,7 +428,10 @@ class Visualizer:
         figures = []
         os.makedirs(save_dir, exist_ok=True)
 
-        n_pol = spectrum_data['extinction'].shape[1] if spectrum_data['extinction'].ndim > 1 else 1
+        ext = spectrum_data.get('extinction')
+        if ext is None:
+            return figures
+        n_pol = ext.shape[1] if ext.ndim > 1 else 1
 
         # Individual polarization plots
         for pol_idx in range(n_pol):
