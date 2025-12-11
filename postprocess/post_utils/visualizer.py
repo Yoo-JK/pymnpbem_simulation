@@ -245,26 +245,37 @@ class Visualizer:
         fig, ax = plt.subplots(figsize=(8, 7))
 
         enhancement = field_data['enhancement']
-        x = field_data['x']
-        y = field_data.get('y', field_data.get('z'))
+        x_coords = field_data['x']
+        y_coords_arr = field_data.get('y', np.array([0.0]))
+        z_coords_arr = field_data.get('z', np.array([0.0]))
 
-        # Determine plane orientation
-        if len(field_data['y']) == 1:
+        # Determine plane orientation and get/create meshgrid arrays
+        if len(y_coords_arr) == 1:
             # XZ plane
-            Y = field_data['Z']
             y_label = 'z (nm)'
-            y_coords = field_data['z']
-        elif len(field_data['z']) == 1:
+            y_coords = z_coords_arr
+            if 'X' in field_data and 'Z' in field_data:
+                X = field_data['X']
+                Y = field_data['Z']
+            else:
+                X, Y = np.meshgrid(x_coords, z_coords_arr)
+        elif len(z_coords_arr) == 1:
             # XY plane
-            Y = field_data['Y']
             y_label = 'y (nm)'
-            y_coords = field_data['y']
+            y_coords = y_coords_arr
+            if 'X' in field_data and 'Y' in field_data:
+                X = field_data['X']
+                Y = field_data['Y']
+            else:
+                X, Y = np.meshgrid(x_coords, y_coords_arr)
         else:
-            Y = field_data['Y']
             y_label = 'y (nm)'
-            y_coords = field_data['y']
-
-        X = field_data['X']
+            y_coords = y_coords_arr
+            if 'X' in field_data and 'Y' in field_data:
+                X = field_data['X']
+                Y = field_data['Y']
+            else:
+                X, Y = np.meshgrid(x_coords, y_coords_arr)
 
         # Set color scale
         if vmax is None:
@@ -337,8 +348,23 @@ class Visualizer:
             ax = axes[i]
 
             enhancement = data['enhancement']
-            X = data['X']
-            Y = data['Z'] if len(data['y']) == 1 else data['Y']
+            x_coords = data['x']
+            y_coords_arr = data.get('y', np.array([0.0]))
+            z_coords_arr = data.get('z', np.array([0.0]))
+
+            # Get or create meshgrid arrays
+            if len(y_coords_arr) == 1:
+                # XZ plane
+                if 'X' in data and 'Z' in data:
+                    X, Y = data['X'], data['Z']
+                else:
+                    X, Y = np.meshgrid(x_coords, z_coords_arr)
+            else:
+                # XY plane
+                if 'X' in data and 'Y' in data:
+                    X, Y = data['X'], data['Y']
+                else:
+                    X, Y = np.meshgrid(x_coords, y_coords_arr)
 
             if log_scale:
                 norm = LogNorm(vmin=1.0, vmax=vmax)
@@ -348,7 +374,7 @@ class Visualizer:
             im = ax.pcolormesh(X, Y, enhancement, cmap='hot', norm=norm, shading='auto')
             ax.set_xlabel('x (nm)', fontsize=12)
             if i == 0:
-                ax.set_ylabel('z (nm)' if len(data['y']) == 1 else 'y (nm)', fontsize=12)
+                ax.set_ylabel('z (nm)' if len(y_coords_arr) == 1 else 'y (nm)', fontsize=12)
             ax.set_aspect('equal')
             ax.set_title(f'Polarization {pol_idx + 1}', fontsize=12)
 
