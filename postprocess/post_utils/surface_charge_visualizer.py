@@ -60,25 +60,47 @@ class SurfaceChargeVisualizer:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
 
-        vertices = charge_data['vertices']
-        faces = charge_data['faces']
+        vertices = charge_data.get('vertices')
+        faces = charge_data.get('faces')
+
+        # Check for missing or empty data
+        if vertices is None or faces is None or len(vertices) == 0 or len(faces) == 0:
+            ax.text2D(0.5, 0.5, 'No surface data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=12)
+            if title:
+                ax.set_title(title, fontsize=14)
+            plt.tight_layout()
+            if save_path:
+                self._save_figure(fig, save_path)
+            return fig
 
         # Get charge values to plot
         if component == 'real':
-            values = charge_data['charge_real']
+            values = charge_data.get('charge_real')
             label = 'Re(σ)'
         elif component == 'imag':
-            values = charge_data['charge_imag']
+            values = charge_data.get('charge_imag')
             label = 'Im(σ)'
         elif component == 'magnitude':
-            values = charge_data['charge_magnitude']
+            values = charge_data.get('charge_magnitude')
             label = '|σ|'
         elif component == 'phase':
-            values = charge_data['charge_phase']
+            values = charge_data.get('charge_phase')
             label = 'Phase(σ)'
         else:
-            values = charge_data['charge_real']
+            values = charge_data.get('charge_real')
             label = 'Re(σ)'
+
+        # Handle missing values
+        if values is None or len(values) == 0:
+            ax.text2D(0.5, 0.5, 'No charge data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=12)
+            if title:
+                ax.set_title(title, fontsize=14)
+            plt.tight_layout()
+            if save_path:
+                self._save_figure(fig, save_path)
+            return fig
 
         # Create polygons
         polys = []
@@ -303,8 +325,19 @@ class SurfaceChargeVisualizer:
         """
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        positions = charge_data['positions']
-        charges = charge_data['charge_real']
+        positions = charge_data.get('positions')
+        charges = charge_data.get('charge_real')
+
+        # Handle missing data
+        if positions is None or charges is None or len(positions) == 0 or len(charges) == 0:
+            ax.text(0.5, 0.5, 'No position/charge data available',
+                    transform=ax.transAxes, ha='center', va='center')
+            if title:
+                ax.set_title(title, fontsize=14)
+            plt.tight_layout()
+            if save_path:
+                self._save_figure(fig, save_path)
+            return fig
 
         # Select faces near the plane
         tolerance = 5.0  # nm
@@ -384,17 +417,28 @@ class SurfaceChargeVisualizer:
                                        component: str = 'real',
                                        view_angles: Tuple[float, float] = (30, 45)):
         """Helper method to plot surface charges on a given axis."""
-        vertices = charge_data['vertices']
-        faces = charge_data['faces']
+        vertices = charge_data.get('vertices')
+        faces = charge_data.get('faces')
+
+        # Check for missing or empty data
+        if vertices is None or faces is None or len(vertices) == 0 or len(faces) == 0:
+            ax.text2D(0.5, 0.5, 'No surface data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=10)
+            return
 
         if component == 'real':
-            values = charge_data['charge_real']
+            values = charge_data.get('charge_real')
         elif component == 'imag':
-            values = charge_data['charge_imag']
+            values = charge_data.get('charge_imag')
         elif component == 'magnitude':
-            values = charge_data['charge_magnitude']
+            values = charge_data.get('charge_magnitude')
         else:
-            values = charge_data['charge_real']
+            values = charge_data.get('charge_real')
+
+        if values is None or len(values) == 0:
+            ax.text2D(0.5, 0.5, 'No charge data available',
+                      transform=ax.transAxes, ha='center', va='center', fontsize=10)
+            return
 
         # Create polygons
         polys = []
@@ -403,18 +447,26 @@ class SurfaceChargeVisualizer:
         n_vertices = len(vertices)
         for i, face in enumerate(faces):
             if len(face) >= 3:
-                # Skip faces with NaN or invalid values
-                face_arr = np.asarray(face[:3])
+                # Convert face to array for validation
+                face_arr = np.asarray(face)
                 if np.any(np.isnan(face_arr)) or np.any(np.isinf(face_arr)):
                     continue
                 # Ensure face indices are integers for array indexing
-                face_int = face_arr.astype(int)  # Take first 3 vertices for triangle
+                face_int = face_arr.astype(int)
                 # Skip faces with out-of-bounds indices
                 if np.any(face_int < 0) or np.any(face_int >= n_vertices):
                     continue
-                verts = vertices[face_int]
-                polys.append(verts)
-                face_values.append(values[i] if i < len(values) else 0)
+                # Handle both triangles and quads
+                if len(face) == 3:
+                    verts = vertices[face_int]
+                    polys.append(verts)
+                    face_values.append(values[i] if i < len(values) else 0)
+                elif len(face) >= 4:
+                    # Split quad into two triangles (take first 4 indices)
+                    for tri_indices in [[0, 1, 2], [0, 2, 3]]:
+                        verts = vertices[face_int[tri_indices]]
+                        polys.append(verts)
+                        face_values.append(values[i] if i < len(values) else 0)
 
         face_values = np.array(face_values)
 

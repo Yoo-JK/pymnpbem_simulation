@@ -56,7 +56,7 @@ class FieldAnalyzer:
 
         enhancement = self.enhancement
         max_val = np.max(enhancement)
-        if max_val == 0 or np.isnan(max_val):
+        if max_val == 0 or np.isnan(max_val) or np.isinf(max_val):
             return []
         threshold_val = max_val * threshold
 
@@ -254,13 +254,22 @@ class FieldAnalyzer:
         if self.enhancement is None:
             return {}
 
+        # Handle 1D enhancement arrays
+        if self.enhancement.ndim < 2:
+            return {}
+
         if axis == 'x' and self.y is not None and len(self.y) == 1:
             # XZ plane, profile along x at given z
             if self.z is None or len(self.z) == 0:
                 return {}
             z_idx = np.argmin(np.abs(self.z - position))
             try:
-                enh = self.enhancement[:, z_idx] if self.enhancement.ndim == 2 else self.enhancement[:, 0, z_idx]
+                if self.enhancement.ndim == 2:
+                    enh = self.enhancement[:, z_idx]
+                elif self.enhancement.ndim == 3:
+                    enh = self.enhancement[:, 0, z_idx]
+                else:
+                    return {}
                 return {
                     'coordinate': self.x,
                     'enhancement': enh,
@@ -275,7 +284,12 @@ class FieldAnalyzer:
                 return {}
             x_idx = np.argmin(np.abs(self.x - position))
             try:
-                enh = self.enhancement[x_idx, :] if self.enhancement.ndim == 2 else self.enhancement[x_idx, 0, :]
+                if self.enhancement.ndim == 2:
+                    enh = self.enhancement[x_idx, :]
+                elif self.enhancement.ndim == 3:
+                    enh = self.enhancement[x_idx, 0, :]
+                else:
+                    return {}
                 return {
                     'coordinate': self.z,
                     'enhancement': enh,

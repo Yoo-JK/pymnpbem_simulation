@@ -53,7 +53,9 @@ class DataExporter:
 
         filepath = os.path.join(self.output_dir, f'{filename}.txt')
 
-        wavelengths = spectrum_data['wavelengths']
+        wavelengths = spectrum_data.get('wavelengths')
+        if wavelengths is None or len(wavelengths) == 0:
+            return  # Skip export if wavelengths missing
 
         # Handle both 1D and 2D arrays
         def get_column(data, idx):
@@ -89,7 +91,9 @@ class DataExporter:
 
         filepath = os.path.join(self.output_dir, f'{filename}.csv')
 
-        wavelengths = spectrum_data['wavelengths']
+        wavelengths = spectrum_data.get('wavelengths')
+        if wavelengths is None or len(wavelengths) == 0:
+            return  # Skip export if wavelengths missing
 
         # Handle both 1D and 2D arrays
         def get_column(data, idx):
@@ -119,7 +123,9 @@ class DataExporter:
         """
         filepath = os.path.join(self.output_dir, f'{filename}.txt')
 
-        wavelengths = unpolarized_data['wavelengths']
+        wavelengths = unpolarized_data.get('wavelengths')
+        if wavelengths is None or len(wavelengths) == 0:
+            return  # Skip export if wavelengths missing
 
         with open(filepath, 'w') as f:
             f.write("# Unpolarized Optical Cross-Section Spectrum\n")
@@ -264,16 +270,25 @@ class DataExporter:
 
         filepath = os.path.join(self.output_dir, f'{filename}.json')
 
+        # Safely get charge arrays with defaults
+        charge_real = charge_data.get('charge_real')
+        charge_magnitude = charge_data.get('charge_magnitude')
+        charges = charge_data.get('charges')
+
+        # Build charge statistics safely
+        charge_stats = {}
+        if charge_real is not None and len(charge_real) > 0:
+            charge_stats['max_real'] = float(np.max(charge_real))
+            charge_stats['min_real'] = float(np.min(charge_real))
+        if charge_magnitude is not None and len(charge_magnitude) > 0:
+            charge_stats['rms'] = float(np.sqrt(np.mean(charge_magnitude**2)))
+
         export_data = {
             'wavelength': float(charge_data.get('wavelength', 0)),
             'polarization_idx': pol_idx,
             'mode_analysis': mode_info,
-            'charge_statistics': {
-                'max_real': float(np.max(charge_data['charge_real'])),
-                'min_real': float(np.min(charge_data['charge_real'])),
-                'rms': float(np.sqrt(np.mean(charge_data['charge_magnitude']**2))),
-            },
-            'n_faces': len(charge_data['charges']),
+            'charge_statistics': charge_stats,
+            'n_faces': len(charges) if charges is not None else 0,
         }
 
         with open(filepath, 'w') as f:

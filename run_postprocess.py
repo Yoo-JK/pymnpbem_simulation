@@ -120,7 +120,7 @@ def main():
                 for pol_idx, field in data['field'].items():
                     print(f"    Polarization {pol_idx+1}:")
                     enhancement = field.get('enhancement')
-                    if enhancement is not None and hasattr(enhancement, 'shape'):
+                    if enhancement is not None and hasattr(enhancement, 'shape') and enhancement.size > 0:
                         print(f"      Grid size: {enhancement.shape}")
                         print(f"      Max enhancement: {enhancement.max():.1f}")
 
