@@ -100,9 +100,17 @@ class BEMSolver:
             try:
                 from mnpbem.bem import BEMStatLayer, BEMRetLayer
                 from mnpbem.particles import LayerStructure
+                from mnpbem.simulation import (
+                    PlaneWaveStatLayer, PlaneWaveRetLayer,
+                    DipoleStatLayer, DipoleRetLayer
+                )
                 self.BEMStatLayer = BEMStatLayer
                 self.BEMRetLayer = BEMRetLayer
                 self.LayerStructure = LayerStructure
+                self.PlaneWaveStatLayer = PlaneWaveStatLayer
+                self.PlaneWaveRetLayer = PlaneWaveRetLayer
+                self.DipoleStatLayer = DipoleStatLayer
+                self.DipoleRetLayer = DipoleRetLayer
                 self._layer_available = True
             except ImportError:
                 self._layer_available = False
@@ -173,6 +181,13 @@ class BEMSolver:
         # Select appropriate BEM solver
         use_substrate = substrate is not None
         self.substrate = substrate
+        self.use_substrate = use_substrate
+
+        # Create layer structure if substrate is used
+        if use_substrate and self._layer_available:
+            self.layer = self._create_layer_structure()
+        else:
+            self.layer = None
 
         # Create the BEM solver based on options
         self.bem = self._create_bem_solver(sim_type, use_substrate, use_iterative, use_h2)
@@ -181,8 +196,8 @@ class BEMSolver:
         wl_range = self.config.get('wavelength_range', [400, 800, 100])
         self.wavelengths = np.linspace(wl_range[0], wl_range[1], wl_range[2])
 
-        # Set up excitations
-        self._setup_excitations()
+        # Set up excitations (pass use_substrate flag)
+        self._setup_excitations(use_substrate)
 
     def _create_bem_solver(self, sim_type: str, use_substrate: bool,
                            use_iterative: bool, use_h2: bool) -> Any:
@@ -223,24 +238,21 @@ class BEMSolver:
 
         # Select solver class
         if sim_type == 'stat':
-            if use_substrate and self._layer_available:
-                # Create LayerStructure from substrate config
-                layer = self._create_layer_structure()
-                # Layer solver (substrate)
+            if use_substrate and self._layer_available and self.layer is not None:
+                # Layer solver (substrate) - use pre-created layer structure
                 if use_iterative and hasattr(self, 'BEMStatLayerIter'):
-                    return self.BEMStatLayerIter(self.particle, layer, **solver_kwargs)
-                return self.BEMStatLayer(self.particle, layer)
+                    return self.BEMStatLayerIter(self.particle, self.layer, **solver_kwargs)
+                return self.BEMStatLayer(self.particle, self.layer)
             elif use_iterative:
                 return self.BEMStatIter(self.particle, **solver_kwargs)
             else:
                 return self.BEMStat(self.particle)
         else:  # 'ret'
-            if use_substrate and self._layer_available:
-                # Create LayerStructure from substrate config
-                layer = self._create_layer_structure()
+            if use_substrate and self._layer_available and self.layer is not None:
+                # Layer solver (substrate) - use pre-created layer structure
                 if use_iterative and hasattr(self, 'BEMRetLayerIter'):
-                    return self.BEMRetLayerIter(self.particle, layer, **solver_kwargs)
-                return self.BEMRetLayer(self.particle, layer)
+                    return self.BEMRetLayerIter(self.particle, self.layer, **solver_kwargs)
+                return self.BEMRetLayer(self.particle, self.layer)
             elif use_iterative:
                 return self.BEMRetIter(self.particle, **solver_kwargs)
             else:
@@ -303,21 +315,21 @@ class BEMSolver:
 
         return layer
 
-    def _setup_excitations(self):
+    def _setup_excitations(self, use_substrate: bool = False):
         """Set up excitation objects based on configuration."""
         exc_type = self.config.get('excitation_type', 'planewave')
         sim_type = self.config.get('simulation_type', 'stat')
 
         if exc_type == 'planewave':
-            self._setup_planewave_excitations(sim_type)
+            self._setup_planewave_excitations(sim_type, use_substrate)
         elif exc_type == 'dipole':
-            self._setup_dipole_excitations(sim_type)
+            self._setup_dipole_excitations(sim_type, use_substrate)
         elif exc_type == 'eels':
             self._setup_eels_excitations(sim_type)
         else:
             raise ValueError(f"Unknown excitation type: {exc_type}")
 
-    def _setup_planewave_excitations(self, sim_type: str):
+    def _setup_planewave_excitations(self, sim_type: str, use_substrate: bool = False):
         """Set up plane wave excitations."""
         polarizations = self.config.get('polarizations', [[1, 0, 0]])
         propagation_dirs = self.config.get('propagation_dirs', [[0, 0, 1]])
@@ -330,32 +342,60 @@ class BEMSolver:
                 raise ValueError("Number of polarizations and propagation directions must match")
 
         self.excitations = []
-        PlaneWave = self.PlaneWaveStat if sim_type == 'stat' else self.PlaneWaveRet
+
+        # Select appropriate PlaneWave class based on sim_type and substrate
+        if use_substrate and self._layer_available and self.layer is not None:
+            # Use layer excitation classes for substrate
+            if sim_type == 'stat':
+                PlaneWave = self.PlaneWaveStatLayer
+            else:
+                PlaneWave = self.PlaneWaveRetLayer
+        else:
+            # Use regular excitation classes
+            if sim_type == 'stat':
+                PlaneWave = self.PlaneWaveStat
+            else:
+                PlaneWave = self.PlaneWaveRet
 
         for pol, prop_dir in zip(polarizations, propagation_dirs):
-            # Ensure 2D array shape (1, 3) for pyMNPBEM
+            # Ensure 2D array shape (n_pol, 3) for pyMNPBEM
             pol_arr = np.atleast_2d(pol)
             dir_arr = np.atleast_2d(prop_dir)
 
-            if sim_type == 'stat':
-                # Quasistatic: only polarization matters
-                exc = PlaneWave(pol=pol_arr)
+            if use_substrate and self._layer_available and self.layer is not None:
+                # Layer excitations need layer structure
+                if sim_type == 'stat':
+                    exc = PlaneWave(pol=pol_arr, layer=self.layer)
+                else:
+                    exc = PlaneWave(pol=pol_arr, dir=dir_arr, layer=self.layer)
             else:
-                # Retarded: both polarization and direction matter
-                exc = PlaneWave(pol=pol_arr, dir=dir_arr)
+                # Regular excitations
+                if sim_type == 'stat':
+                    exc = PlaneWave(pol=pol_arr)
+                else:
+                    exc = PlaneWave(pol=pol_arr, dir=dir_arr)
             self.excitations.append(exc)
 
-    def _setup_dipole_excitations(self, sim_type: str):
+    def _setup_dipole_excitations(self, sim_type: str, use_substrate: bool = False):
         """Set up dipole excitations."""
         position = self.config.get('dipole_position', [0, 0, 15])
         moment = self.config.get('dipole_moment', [0, 0, 1])
 
-        Dipole = self.DipoleStat if sim_type == 'stat' else self.DipoleRet
-
         pt = np.array([position])
         dip = np.array([moment])
 
-        exc = Dipole(pt=pt, dip=dip)
+        # Select appropriate Dipole class based on sim_type and substrate
+        if use_substrate and self._layer_available and self.layer is not None:
+            if sim_type == 'stat':
+                Dipole = self.DipoleStatLayer
+                exc = Dipole(pt=pt, dip=dip, layer=self.layer)
+            else:
+                Dipole = self.DipoleRetLayer
+                exc = Dipole(pt=pt, dip=dip, layer=self.layer)
+        else:
+            Dipole = self.DipoleStat if sim_type == 'stat' else self.DipoleRet
+            exc = Dipole(pt=pt, dip=dip)
+
         self.excitations = [exc]
 
     def _setup_eels_excitations(self, sim_type: str):
