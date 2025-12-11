@@ -245,22 +245,31 @@ class SimulationManager:
         if self.config.get('calculate_fields', False):
             if self.verbose:
                 print("\n[5/6] Computing electric field distributions...")
+                # Warn about substrate limitations
+                if self.bem_solver.use_substrate:
+                    print("      Note: Field calculation with substrate may be limited")
 
             if 'spectrum' in self.results:
-                field_data = self.field_calculator.compute_field_at_peaks(
-                    self.bem_solver, self.results['spectrum'], show_progress=self.verbose
-                )
-                self.results['field'] = field_data
+                try:
+                    field_data = self.field_calculator.compute_field_at_peaks(
+                        self.bem_solver, self.results['spectrum'], show_progress=self.verbose
+                    )
+                    self.results['field'] = field_data
 
-                # Compute field statistics
-                for exc_idx, data in field_data.items():
-                    stats = self.field_calculator.get_field_statistics(data)
-                    self.results.setdefault('field_stats', {})[exc_idx] = stats
-                    hotspots = self.field_calculator.find_hotspots(data)
-                    self.results.setdefault('hotspots', {})[exc_idx] = hotspots
+                    # Compute field statistics
+                    for exc_idx, data in field_data.items():
+                        stats = self.field_calculator.get_field_statistics(data)
+                        self.results.setdefault('field_stats', {})[exc_idx] = stats
+                        hotspots = self.field_calculator.find_hotspots(data)
+                        self.results.setdefault('hotspots', {})[exc_idx] = hotspots
 
+                        if self.verbose:
+                            print(f"      Max enhancement (pol {exc_idx+1}): {stats['max']:.1f}")
+                except Exception as e:
                     if self.verbose:
-                        print(f"      Max enhancement (pol {exc_idx+1}): {stats['max']:.1f}")
+                        print(f"      Warning: Field calculation failed: {e}")
+                        print(f"      Continuing without field data...")
+                    self.results['field_error'] = str(e)
         else:
             if self.verbose:
                 print("\n[5/6] Skipping field calculation...")

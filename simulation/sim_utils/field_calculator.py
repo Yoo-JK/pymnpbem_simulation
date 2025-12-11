@@ -178,8 +178,49 @@ class FieldCalculator:
         # Create Point object
         pts = self.Point(points)
 
-        # Compute field using BEM
-        field = bem_solver.bem.field(sig, pts)
+        # Check if using Layer BEM (substrate)
+        use_substrate = getattr(bem_solver, 'use_substrate', False)
+
+        try:
+            if use_substrate and hasattr(bem_solver, 'layer') and bem_solver.layer is not None:
+                # For Layer BEM, try to pass layer information to field calculation
+                # Some versions of pyMNPBEM require layer structure for field computation
+                if hasattr(bem_solver.bem, 'field'):
+                    try:
+                        # Try calling with layer argument if supported
+                        field = bem_solver.bem.field(sig, pts, layer=bem_solver.layer)
+                    except TypeError:
+                        # If layer argument not supported, try without
+                        field = bem_solver.bem.field(sig, pts)
+                else:
+                    raise AttributeError("BEM solver does not have field method")
+            else:
+                # Regular BEM field calculation
+                field = bem_solver.bem.field(sig, pts)
+
+        except (ValueError, AttributeError) as e:
+            # Field calculation not supported for this BEM configuration
+            # Return only incident field (scattered field unavailable)
+            print(f"    Warning: Scattered field calculation not available ({e})")
+            print(f"    Computing incident field only...")
+
+            # Return zeros for scattered field, incident field will be added below
+            n_pts = len(points)
+            Ex = np.zeros(n_pts, dtype=complex)
+            Ey = np.zeros(n_pts, dtype=complex)
+            Ez = np.zeros(n_pts, dtype=complex)
+
+            # Add incident field for plane wave excitation
+            exc = bem_solver.excitations[excitation_idx]
+            if hasattr(exc, 'pol'):
+                pol = np.array(exc.pol)
+                if pol.ndim == 2:
+                    pol = pol[0]
+                Ex = Ex + pol[0]
+                Ey = Ey + pol[1]
+                Ez = Ez + pol[2]
+
+            return Ex, Ey, Ez
 
         # field shape is (n_points, 3) for [Ex, Ey, Ez]
         if field.ndim == 2 and field.shape[1] == 3:
