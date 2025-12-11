@@ -100,8 +100,25 @@ class SurfaceChargeVisualizer:
 
         face_values = np.array(face_values)
 
+        # Handle empty arrays
+        if len(face_values) == 0 or len(polys) == 0:
+            ax.text2D(0.5, 0.5, 'No valid surface data',
+                      transform=ax.transAxes, ha='center', va='center',
+                      fontsize=12, color='gray')
+            ax.set_xlabel('x (nm)', fontsize=12)
+            ax.set_ylabel('y (nm)', fontsize=12)
+            ax.set_zlabel('z (nm)', fontsize=12)
+            if title:
+                ax.set_title(title, fontsize=14)
+            plt.tight_layout()
+            if save_path:
+                self._save_figure(fig, save_path)
+            return fig
+
         # Normalize colors
-        vmax = np.max(np.abs(face_values))
+        vmax = np.max(np.abs(face_values)) if len(face_values) > 0 else 1.0
+        if vmax == 0:
+            vmax = 1.0  # Avoid division by zero in normalization
         if component in ['real', 'imag']:
             # Symmetric colormap centered at 0
             norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
@@ -297,7 +314,9 @@ class SurfaceChargeVisualizer:
             ax.text(0.5, 0.5, 'No data in selected plane',
                     transform=ax.transAxes, ha='center')
         else:
-            vmax = np.max(np.abs(values))
+            vmax = np.max(np.abs(values)) if len(values) > 0 else 1.0
+            if vmax == 0:
+                vmax = 1.0  # Avoid division by zero in normalization
             scatter = ax.scatter(x, y, c=values, cmap='RdBu_r',
                                  vmin=-vmax, vmax=vmax, s=50)
             plt.colorbar(scatter, ax=ax, label='Surface Charge')
@@ -377,7 +396,16 @@ class SurfaceChargeVisualizer:
 
         face_values = np.array(face_values)
 
+        # Handle empty arrays
+        if len(face_values) == 0 or len(polys) == 0:
+            ax.text2D(0.5, 0.5, 'No valid surface data',
+                      transform=ax.transAxes, ha='center', va='center',
+                      fontsize=10, color='gray')
+            return
+
         vmax = np.max(np.abs(face_values)) if len(face_values) > 0 else 1.0
+        if vmax == 0:
+            vmax = 1.0  # Avoid division by zero in normalization
         if component in ['real', 'imag']:
             norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
             cmap = plt.cm.RdBu_r
