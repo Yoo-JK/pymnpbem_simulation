@@ -6,9 +6,8 @@ args = {}
 # ============================================================================
 # PARALLEL COMPUTING
 # ============================================================================
-args['use_parallel'] = False
-args['num_workers'] = 2  # Adjust: N=1-3: 8-16, N=4-5: 16-32, N=6-7: 32-64
-args['wavelength_chunk_size'] = 10
+args['num_cores'] = 2
+args['max_comp_threads'] = 1
 
 # ============================================================================
 # PATHS
@@ -80,13 +79,3 @@ args['save_plots'] = True
 args['plot_format'] = ['png']
 args['plot_dpi'] = 300
 args['spectrum_xaxis'] = 'eV'
-
-# ============================================================================
-# ADVANCED
-# ============================================================================
-args['use_mirror_symmetry'] = False
-args['use_iterative_solver'] = False
-args['use_h2_compression'] = False
-args['use_nonlocality'] = False
-
-

@@ -6,15 +6,14 @@ args = {}
 # ============================================================================
 # PARALLEL COMPUTING
 # ============================================================================
-args['use_parallel'] = False
-args['num_workers'] = 2  # Adjust: N=1-3: 8-16, N=4-5: 16-32, N=6-7: 32-64
-args['wavelength_chunk_size'] = 10
+args['num_cores'] = 2
+args['max_comp_threads'] = 1
 
 # ============================================================================
 # PATHS
 # ============================================================================
-args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/MNPBEM')
-args['output_dir'] = os.path.join(Path.home(), 'research/mnpbem/sphere_cluster')
+args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/pyMNPBEM')
+args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/sphere_cluster')
 
 # ============================================================================
 # SIMULATION SETTINGS
@@ -87,11 +86,5 @@ args['spectrum_xaxis'] = 'eV'
 args['use_mirror_symmetry'] = False
 args['use_iterative_solver'] = False
 args['use_h2_compression'] = False
-args['use_nonlocality'] = False
-
-# ============================================================================
-# MATLAB
-# ============================================================================
-args['matlab_executable'] = 'matlab'
-args['matlab_options'] = '-nodisplay -nosplash -nodesktop'
+args['use_nonlocality'] = True
 
