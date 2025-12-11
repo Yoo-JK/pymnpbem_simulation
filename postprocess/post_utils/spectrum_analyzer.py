@@ -38,7 +38,13 @@ class SpectrumAnalyzer:
         self.extinction = spectrum_data.get('extinction')
 
         self.n_wavelengths = len(self.wavelengths)
-        self.n_polarizations = self.extinction.shape[1] if self.extinction is not None else 0
+        # Safely get number of polarizations with dimension check
+        if self.extinction is not None and self.extinction.ndim > 1:
+            self.n_polarizations = self.extinction.shape[1]
+        elif self.extinction is not None:
+            self.n_polarizations = 1
+        else:
+            self.n_polarizations = 0
 
     def find_peaks(self, spectrum_type: str = 'extinction',
                    pol_idx: int = 0,
@@ -169,11 +175,20 @@ class SpectrumAnalyzer:
             Dictionary with unpolarized spectra
         """
         if self.n_polarizations < 2:
+            # Helper to safely get first column or 1D array
+            def get_first(arr):
+                if arr is None:
+                    return None
+                if arr.ndim == 1:
+                    return arr
+                if arr.shape[1] > 0:
+                    return arr[:, 0]
+                return None
             return {
                 'wavelengths': self.wavelengths,
-                'scattering_unpolarized': self.scattering[:, 0] if self.scattering is not None else None,
-                'absorption_unpolarized': self.absorption[:, 0] if self.absorption is not None else None,
-                'extinction_unpolarized': self.extinction[:, 0] if self.extinction is not None else None,
+                'scattering_unpolarized': get_first(self.scattering),
+                'absorption_unpolarized': get_first(self.absorption),
+                'extinction_unpolarized': get_first(self.extinction),
             }
 
         result = {'wavelengths': self.wavelengths}
@@ -221,9 +236,15 @@ class SpectrumAnalyzer:
         Returns:
             Dictionary with resonance information for all polarizations
         """
+        # Safe wavelength range access
+        if len(self.wavelengths) > 0:
+            wl_range = [float(self.wavelengths[0]), float(self.wavelengths[-1])]
+        else:
+            wl_range = [0.0, 0.0]
+
         summary = {
             'n_polarizations': self.n_polarizations,
-            'wavelength_range': [float(self.wavelengths[0]), float(self.wavelengths[-1])],
+            'wavelength_range': wl_range,
             'resonances': {}
         }
 
@@ -261,6 +282,10 @@ class SpectrumAnalyzer:
 
         if data is None:
             return None
+
+        # Handle both 1D and 2D arrays
+        if data.ndim == 1:
+            return data if pol_idx == 0 else None
 
         if pol_idx >= data.shape[1]:
             return None
