@@ -45,7 +45,7 @@ class GeometryBuilder:
         try:
             from mnpbem.particles.shapes import (
                 trisphere, tricube, trirod, triellipsoid,
-                trinanodisk, tritorus, tricone, triplate, triprism
+                trinanodisk, tritorus, tricone, triplate, triprism, tripolygon
             )
             from mnpbem.particles import Particle
 
@@ -58,7 +58,8 @@ class GeometryBuilder:
                 'tritorus': tritorus,
                 'tricone': tricone,
                 'triplate': triplate,
-                'triprism': triprism
+                'triprism': triprism,
+                'tripolygon': tripolygon
             }
             self.Particle = Particle
             self._pymnpbem_available = True
@@ -131,7 +132,7 @@ class GeometryBuilder:
         rounding = self._get_rounding(0.25)
         n = self._get_mesh_density(12)
 
-        cube = self.shapes['tricube'](n, size, round=rounding)
+        cube = self.shapes['tricube'](n, size, edge_rounding=rounding)
 
         return [cube], [[2, 1]]
 
@@ -141,12 +142,13 @@ class GeometryBuilder:
         height = self.config.get('height', 80)
 
         # Handle different mesh specification methods
+        # trirod expects n as tuple (nphi, ntheta, nz)
         if 'rod_mesh' in self.config:
             nphi, ntheta, nz = self.config['rod_mesh']
             rod = self.shapes['trirod'](diameter, height, n=(nphi, ntheta, nz))
         else:
-            n = self._get_mesh_density(144)
-            rod = self.shapes['trirod'](diameter, height, n=n)
+            # Default mesh density as tuple
+            rod = self.shapes['trirod'](diameter, height, n=(15, 20, 20))
 
         return [rod], [[2, 1]]
 
@@ -163,6 +165,7 @@ class GeometryBuilder:
         """Build a triangular nanoparticle (extruded triangle)."""
         side_length = self.config.get('side_length', 50)
         thickness = self.config.get('thickness', 10)
+        n_z = self.config.get('triangle_nz', 10)
 
         # Create triangular polygon vertices
         h = side_length * np.sqrt(3) / 2
@@ -172,7 +175,8 @@ class GeometryBuilder:
             [side_length/2, -h/3]
         ])
 
-        triangle = self.shapes['triprism'](polygon, thickness)
+        # Use tripolygon for custom polygon extrusion
+        triangle = self.shapes['tripolygon'](polygon, thickness, n_z=n_z)
 
         return [triangle], [[2, 1]]
 
@@ -205,8 +209,8 @@ class GeometryBuilder:
 
         outer_size = core_size + 2 * shell_thickness
 
-        core = self.shapes['tricube'](n, core_size, round=rounding)
-        shell = self.shapes['tricube'](n, outer_size, round=rounding)
+        core = self.shapes['tricube'](n, core_size, edge_rounding=rounding)
+        shell = self.shapes['tricube'](n, outer_size, edge_rounding=rounding)
 
         return [core, shell], [[3, 2], [2, 1]]
 
@@ -223,9 +227,9 @@ class GeometryBuilder:
             core = self.shapes['trirod'](core_diameter, height, n=(nphi, ntheta, nz))
             shell = self.shapes['trirod'](outer_diameter, height, n=(nphi, ntheta, nz))
         else:
-            n = self._get_mesh_density(144)
-            core = self.shapes['trirod'](core_diameter, height, n=n)
-            shell = self.shapes['trirod'](outer_diameter, height, n=n)
+            # trirod expects n as tuple (nphi, ntheta, nz)
+            core = self.shapes['trirod'](core_diameter, height, n=(15, 20, 20))
+            shell = self.shapes['trirod'](outer_diameter, height, n=(15, 20, 20))
 
         return [core, shell], [[3, 2], [2, 1]]
 
@@ -260,10 +264,10 @@ class GeometryBuilder:
         # Center-to-center distance
         separation = size + gap
 
-        cube1 = self.shapes['tricube'](n, size, round=rounding)
+        cube1 = self.shapes['tricube'](n, size, edge_rounding=rounding)
         cube1 = cube1.shift([-separation/2, 0, 0])
 
-        cube2 = self.shapes['tricube'](n, size, round=rounding)
+        cube2 = self.shapes['tricube'](n, size, edge_rounding=rounding)
         cube2 = cube2.shift([separation/2, 0, 0])
 
         return [cube1, cube2], [[2, 1], [2, 1]]
@@ -280,17 +284,17 @@ class GeometryBuilder:
         separation = outer_size + gap
 
         # Particle 1 (left)
-        core1 = self.shapes['tricube'](n, core_size, round=rounding)
+        core1 = self.shapes['tricube'](n, core_size, edge_rounding=rounding)
         core1 = core1.shift([-separation/2, 0, 0])
 
-        shell1 = self.shapes['tricube'](n, outer_size, round=rounding)
+        shell1 = self.shapes['tricube'](n, outer_size, edge_rounding=rounding)
         shell1 = shell1.shift([-separation/2, 0, 0])
 
         # Particle 2 (right)
-        core2 = self.shapes['tricube'](n, core_size, round=rounding)
+        core2 = self.shapes['tricube'](n, core_size, edge_rounding=rounding)
         core2 = core2.shift([separation/2, 0, 0])
 
-        shell2 = self.shapes['tricube'](n, outer_size, round=rounding)
+        shell2 = self.shapes['tricube'](n, outer_size, edge_rounding=rounding)
         shell2 = shell2.shift([separation/2, 0, 0])
 
         # materials: [shell, core] -> 2=shell, 3=core
@@ -339,7 +343,7 @@ class GeometryBuilder:
         # Build particle 1 (left)
         particles1 = []
         for i, (size, rnd) in enumerate(zip(sizes, roundings)):
-            particle = self.shapes['tricube'](n, size, round=rnd)
+            particle = self.shapes['tricube'](n, size, edge_rounding=rnd)
             particles1.append(particle)
 
         # Shift particle 1 to the left
@@ -349,7 +353,7 @@ class GeometryBuilder:
         # Build particle 2 (right) with transformations
         particles2 = []
         for i, (size, rnd) in enumerate(zip(sizes, roundings)):
-            particle = self.shapes['tricube'](n, size, round=rnd)
+            particle = self.shapes['tricube'](n, size, edge_rounding=rnd)
             particles2.append(particle)
 
         # Apply transformations to particle 2:
@@ -579,7 +583,7 @@ class GeometryBuilder:
             all_faces = []
 
             for i, voxel in enumerate(mat_voxels):
-                cube = self.shapes['tricube'](4, voxel_size, round=0.0)
+                cube = self.shapes['tricube'](4, voxel_size, edge_rounding=0.0)
                 cube = cube.shift(voxel.tolist())
 
                 # Offset face indices for combined mesh
@@ -623,3 +627,4 @@ class GeometryBuilder:
             'materials': self.config.get('materials', []),
             'medium': self.config.get('medium', 'air'),
         }
+
