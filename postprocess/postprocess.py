@@ -220,7 +220,10 @@ class PostprocessManager:
     def _generate_spectrum_plots(self):
         """Generate spectrum plots."""
         spectrum = self.data['spectrum']
-        n_pol = spectrum['extinction'].shape[1]
+        ext = spectrum.get('extinction')
+        if ext is None:
+            return
+        n_pol = ext.shape[1] if ext.ndim > 1 else 1
 
         # Individual polarization plots
         for pol_idx in range(n_pol):
@@ -321,10 +324,12 @@ class PostprocessManager:
 
         if 'spectrum' in self.data:
             n_wl = len(self.data['spectrum']['wavelengths'])
-            n_pol = self.data['spectrum']['extinction'].shape[1]
+            ext = self.data['spectrum'].get('extinction')
+            n_pol = ext.shape[1] if ext is not None and ext.ndim > 1 else 1
             wl_range = self.loader.get_wavelength_range()
             print(f"      Spectrum: {n_wl} wavelengths, {n_pol} polarization(s)")
-            print(f"      Wavelength range: {wl_range[0]:.0f} - {wl_range[1]:.0f} nm")
+            if wl_range:
+                print(f"      Wavelength range: {wl_range[0]:.0f} - {wl_range[1]:.0f} nm")
 
         if 'field' in self.data:
             print(f"      Field data: {len(self.data['field'])} polarization(s)")
