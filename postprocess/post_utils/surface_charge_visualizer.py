@@ -87,8 +87,12 @@ class SurfaceChargeVisualizer:
         n_vertices = len(vertices)
         for i, face in enumerate(faces):
             if len(face) >= 3:
+                # Skip faces with NaN or invalid values
+                face_arr = np.asarray(face)
+                if np.any(np.isnan(face_arr)) or np.any(np.isinf(face_arr)):
+                    continue
                 # Ensure face indices are integers for array indexing
-                face_int = np.asarray(face, dtype=int)
+                face_int = face_arr.astype(int)
                 # Skip faces with out-of-bounds indices
                 if np.any(face_int < 0) or np.any(face_int >= n_vertices):
                     continue
@@ -399,8 +403,12 @@ class SurfaceChargeVisualizer:
         n_vertices = len(vertices)
         for i, face in enumerate(faces):
             if len(face) >= 3:
+                # Skip faces with NaN or invalid values
+                face_arr = np.asarray(face[:3])
+                if np.any(np.isnan(face_arr)) or np.any(np.isinf(face_arr)):
+                    continue
                 # Ensure face indices are integers for array indexing
-                face_int = np.asarray(face[:3], dtype=int)  # Take first 3 vertices for triangle
+                face_int = face_arr.astype(int)  # Take first 3 vertices for triangle
                 # Skip faces with out-of-bounds indices
                 if np.any(face_int < 0) or np.any(face_int >= n_vertices):
                     continue
