@@ -196,6 +196,9 @@ class FieldCalculator:
         exc = bem_solver.excitations[excitation_idx]
         if hasattr(exc, 'pol'):
             pol = np.array(exc.pol)
+            # Handle 2D polarization array (n_pol, 3) - take first polarization
+            if pol.ndim == 2:
+                pol = pol[0]
             # Plane wave: E_inc = E0 * pol (normalized to 1)
             Ex = Ex + pol[0]
             Ey = Ey + pol[1]
@@ -395,3 +398,4 @@ class FieldCalculator:
             'std': float(np.std(valid)),
             'median': float(np.median(valid)),
         }
+
