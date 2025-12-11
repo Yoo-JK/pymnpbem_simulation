@@ -84,10 +84,14 @@ class SurfaceChargeVisualizer:
         polys = []
         face_values = []
 
+        n_vertices = len(vertices)
         for i, face in enumerate(faces):
             if len(face) >= 3:
                 # Ensure face indices are integers for array indexing
                 face_int = np.asarray(face, dtype=int)
+                # Skip faces with out-of-bounds indices
+                if np.any(face_int < 0) or np.any(face_int >= n_vertices):
+                    continue
                 # Handle both triangles and quads
                 if len(face) == 3:
                     verts = vertices[face_int]
@@ -245,20 +249,25 @@ class SurfaceChargeVisualizer:
 
         # Mode strength bar chart
         ax2 = fig.add_subplot(122)
-        modes = list(mode_info['mode_strengths'].keys())
-        strengths = [mode_info['mode_strengths'][m] for m in modes]
+        mode_strengths = mode_info.get('mode_strengths', {})
+        dominant_mode = mode_info.get('dominant_mode', 'unknown')
+        modes = list(mode_strengths.keys()) if mode_strengths else ['N/A']
+        strengths = [mode_strengths.get(m, 0) for m in modes] if mode_strengths else [0]
 
-        colors = ['#2ecc71' if m == mode_info['dominant_mode'] else '#3498db'
+        colors = ['#2ecc71' if m == dominant_mode else '#3498db'
                   for m in modes]
 
         bars = ax2.bar(modes, strengths, color=colors, edgecolor='black')
         ax2.set_ylabel('Relative Strength', fontsize=12)
-        ax2.set_title(f"Mode Analysis: {mode_info['dominant_mode'].capitalize()}", fontsize=12)
+        ax2.set_title(f"Mode Analysis: {dominant_mode.capitalize() if dominant_mode else 'Unknown'}", fontsize=12)
 
-        # Add text annotation
-        info_text = (f"Dipole: {mode_info['dipole_strength']:.2e}\n"
-                     f"Quadrupole: {mode_info['quadrupole_strength']:.2e}\n"
-                     f"Charge asymmetry: {mode_info['charge_asymmetry']:.2f}")
+        # Add text annotation with safe defaults
+        dipole_strength = mode_info.get('dipole_strength', 0)
+        quadrupole_strength = mode_info.get('quadrupole_strength', 0)
+        charge_asymmetry = mode_info.get('charge_asymmetry', 0)
+        info_text = (f"Dipole: {dipole_strength:.2e}\n"
+                     f"Quadrupole: {quadrupole_strength:.2e}\n"
+                     f"Charge asymmetry: {charge_asymmetry:.2f}")
         ax2.text(0.95, 0.95, info_text, transform=ax2.transAxes,
                  fontsize=10, verticalalignment='top', horizontalalignment='right',
                  bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
@@ -387,10 +396,14 @@ class SurfaceChargeVisualizer:
         polys = []
         face_values = []
 
+        n_vertices = len(vertices)
         for i, face in enumerate(faces):
             if len(face) >= 3:
                 # Ensure face indices are integers for array indexing
                 face_int = np.asarray(face[:3], dtype=int)  # Take first 3 vertices for triangle
+                # Skip faces with out-of-bounds indices
+                if np.any(face_int < 0) or np.any(face_int >= n_vertices):
+                    continue
                 verts = vertices[face_int]
                 polys.append(verts)
                 face_values.append(values[i] if i < len(values) else 0)

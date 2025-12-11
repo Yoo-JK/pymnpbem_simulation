@@ -147,15 +147,22 @@ class DataExporter:
 
         filepath = os.path.join(self.output_dir, f'{filename}.txt')
 
-        enhancement = field_data['enhancement']
-        x = field_data['x']
-        z = field_data['z'] if len(field_data['y']) == 1 else field_data['y']
+        enhancement = field_data.get('enhancement')
+        x = field_data.get('x', np.array([]))
+        y = field_data.get('y', np.array([]))
+        z_arr = field_data.get('z', np.array([]))
+        z = z_arr if len(y) <= 1 else y
+
+        if enhancement is None or len(x) == 0 or len(z) == 0:
+            return  # Skip export if data is missing
 
         with open(filepath, 'w') as f:
             f.write(f"# Field Enhancement |E|^2/|E0|^2\n")
             f.write(f"# Grid size: {len(x)} x {len(z)}\n")
-            f.write(f"# X range: {x[0]:.1f} to {x[-1]:.1f} nm\n")
-            f.write(f"# Z range: {z[0]:.1f} to {z[-1]:.1f} nm\n\n")
+            if len(x) > 0:
+                f.write(f"# X range: {x[0]:.1f} to {x[-1]:.1f} nm\n")
+            if len(z) > 0:
+                f.write(f"# Z range: {z[0]:.1f} to {z[-1]:.1f} nm\n\n")
 
             # Header row (x values)
             f.write("x/z")
@@ -190,14 +197,19 @@ class DataExporter:
 
         filepath = os.path.join(self.output_dir, f'{filename}.json')
 
+        # Safely get arrays with defaults
+        x = field_data.get('x', np.array([0]))
+        y = field_data.get('y', np.array([0]))
+        z = field_data.get('z', np.array([0]))
+
         export_data = {
             'grid': {
-                'x_range': [float(field_data['x'][0]), float(field_data['x'][-1])],
-                'y_range': [float(field_data['y'][0]), float(field_data['y'][-1])],
-                'z_range': [float(field_data['z'][0]), float(field_data['z'][-1])],
-                'nx': len(field_data['x']),
-                'ny': len(field_data['y']),
-                'nz': len(field_data['z']),
+                'x_range': [float(x[0]), float(x[-1])] if len(x) > 0 else [0, 0],
+                'y_range': [float(y[0]), float(y[-1])] if len(y) > 0 else [0, 0],
+                'z_range': [float(z[0]), float(z[-1])] if len(z) > 0 else [0, 0],
+                'nx': len(x),
+                'ny': len(y),
+                'nz': len(z),
             },
             'statistics': field_stats,
             'hotspots': hotspots,

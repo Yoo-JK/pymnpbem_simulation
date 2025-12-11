@@ -78,15 +78,23 @@ class FieldAnalyzer:
             # Get grid indices and coordinates
             if enhancement.ndim == 2:
                 gi, gj = max_positions[0][idx], max_positions[1][idx]
-                x = float(self.X[gi, gj]) if self.X is not None else float(gi)
-                y = float(self.Y[gi, gj]) if self.Y is not None else float(gj)
-                z = float(self.Z[gi, gj]) if self.Z is not None else 0.0
+                # Safe coordinate access with bounds checking
+                try:
+                    x = float(self.X[gi, gj]) if self.X is not None and self.X.shape == enhancement.shape else float(gi)
+                    y = float(self.Y[gi, gj]) if self.Y is not None and self.Y.shape == enhancement.shape else float(gj)
+                    z = float(self.Z[gi, gj]) if self.Z is not None and self.Z.shape == enhancement.shape else 0.0
+                except (IndexError, ValueError):
+                    x, y, z = float(gi), float(gj), 0.0
                 grid_idx = [int(gi), int(gj)]
             else:
                 gi, gj, gk = max_positions[0][idx], max_positions[1][idx], max_positions[2][idx]
-                x = float(self.X[gi, gj, gk]) if self.X is not None else float(gi)
-                y = float(self.Y[gi, gj, gk]) if self.Y is not None else float(gj)
-                z = float(self.Z[gi, gj, gk]) if self.Z is not None else float(gk)
+                # Safe coordinate access with bounds checking
+                try:
+                    x = float(self.X[gi, gj, gk]) if self.X is not None and self.X.shape == enhancement.shape else float(gi)
+                    y = float(self.Y[gi, gj, gk]) if self.Y is not None and self.Y.shape == enhancement.shape else float(gj)
+                    z = float(self.Z[gi, gj, gk]) if self.Z is not None and self.Z.shape == enhancement.shape else float(gk)
+                except (IndexError, ValueError):
+                    x, y, z = float(gi), float(gj), float(gk)
                 grid_idx = [int(gi), int(gj), int(gk)]
 
             hotspots.append({

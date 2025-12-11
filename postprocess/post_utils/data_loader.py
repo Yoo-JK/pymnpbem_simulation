@@ -243,6 +243,7 @@ class DataLoader:
         spectrum = self.load_spectrum()
         if spectrum and 'wavelengths' in spectrum:
             wavelengths = spectrum['wavelengths']
-            return (float(wavelengths[0]), float(wavelengths[-1]))
+            if len(wavelengths) > 0:
+                return (float(wavelengths[0]), float(wavelengths[-1]))
         return None
 
