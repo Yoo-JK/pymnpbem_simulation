@@ -13,7 +13,7 @@ module load matlab/24.1
 module load miniconda3/24.9.2
 
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate mnpbem
+conda activate pymnpbem
 
 echo "Job started on $(date)"
 
