@@ -330,10 +330,10 @@ class Visualizer(object):
                         cmap = 'hot', aspect = 'auto', vmin = vmin_linear, vmax = vmax_linear)
         ax1.set_xlabel(x_label, fontsize = 11)
         ax1.set_ylabel(y_label, fontsize = 11)
-        ax1.set_title('Intensity Enhancement (Linear)\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        ax1.set_title('Intensity Enhancement (Linear)\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                      fontsize = 11, fontweight = 'bold')
         cbar1 = plt.colorbar(im1, ax = ax1)
-        cbar1.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar1.set_label('|E|²/|E₀|²', fontsize = 11)
 
         z_plane = float(z_grid.flat[0])
         sections = self.geometry.get_cross_section(z_plane)
@@ -354,23 +354,23 @@ class Visualizer(object):
                             norm = LogNorm(vmin = vmin_log, vmax = vmax_log))
             ax2.set_xlabel(x_label, fontsize = 11)
             ax2.set_ylabel(y_label, fontsize = 11)
-            ax2.set_title('Intensity Enhancement (Log Scale)\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+            ax2.set_title('Intensity Enhancement (Log Scale)\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                          fontsize = 11, fontweight = 'bold')
             cbar2 = plt.colorbar(im2, ax = ax2)
             for section in sections:
                 self._draw_material_boundary(ax2, section, plane_type)
-            cbar2.set_label('|E|^2/|E0|^2', fontsize = 11)
+            cbar2.set_label('|E|²/|E₀|²', fontsize = 11)
         else:
             im2 = ax2.imshow(enhancement_masked, extent = extent, origin = 'lower',
                             cmap = 'hot', aspect = 'auto')
             ax2.set_xlabel(x_label, fontsize = 11)
             ax2.set_ylabel(y_label, fontsize = 11)
-            ax2.set_title('Intensity Enhancement\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+            ax2.set_title('Intensity Enhancement\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                          fontsize = 11, fontweight = 'bold')
             cbar2 = plt.colorbar(im2, ax = ax2)
             for section in sections:
                 self._draw_material_boundary(ax2, section, plane_type)
-            cbar2.set_label('|E|^2/|E0|^2', fontsize = 11)
+            cbar2.set_label('|E|²/|E₀|²', fontsize = 11)
 
         plt.tight_layout()
 
@@ -439,11 +439,11 @@ class Visualizer(object):
 
         ax.set_xlabel(x_label, fontsize = 11)
         ax.set_ylabel(y_label, fontsize = 11)
-        ax.set_title('Field Intensity |E|^2 (Log Scale)\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        ax.set_title('Field Intensity |E|² (Log Scale)\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                     fontsize = 12, fontweight = 'bold')
 
         cbar = plt.colorbar(im, ax = ax)
-        cbar.set_label('|E|^2 (a.u.)', fontsize = 11)
+        cbar.set_label('|E|² (a.u.)', fontsize = 11)
 
         z_plane = float(z_grid.flat[0])
         sections = self.geometry.get_cross_section(z_plane)
@@ -580,10 +580,10 @@ class Visualizer(object):
 
         ax.set_xlabel(x_label, fontsize = 11)
         ax.set_ylabel(y_label, fontsize = 11)
-        ax.set_title('Electric Field Vectors\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        ax.set_title('Electric Field Vectors\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                     fontsize = 12, fontweight = 'bold')
 
-        cbar1 = plt.colorbar(im, ax = ax, pad = 0.12, label = '|E|^2/|E0|^2')
+        cbar1 = plt.colorbar(im, ax = ax, pad = 0.12, label = '|E|²/|E₀|²')
         cbar2 = plt.colorbar(q, ax = ax, label = 'Field Magnitude')
 
         plt.tight_layout()
@@ -739,11 +739,11 @@ class Visualizer(object):
                             cmap = 'hot', aspect = 'auto', vmin = vmin, vmax = vmax)
         axes[0].set_xlabel(x_label, fontsize = 11)
         axes[0].set_ylabel(y_label, fontsize = 11)
-        axes[0].set_title('External Field Only\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        axes[0].set_title('External Field Only\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                          fontsize = 12, fontweight = 'bold')
 
         cbar1 = plt.colorbar(im1, ax = axes[0])
-        cbar1.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar1.set_label('|E|²/|E₀|²', fontsize = 11)
 
         z_plane = float(z_grid.flat[0]) if isinstance(z_grid, np.ndarray) else float(z_grid)
         sections = self.geometry.get_cross_section(z_plane)
@@ -761,11 +761,11 @@ class Visualizer(object):
                             cmap = 'hot', aspect = 'auto', vmin = vmin, vmax = vmax)
         axes[1].set_xlabel(x_label, fontsize = 11)
         axes[1].set_ylabel(y_label, fontsize = 11)
-        axes[1].set_title('Internal Field Only\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        axes[1].set_title('Internal Field Only\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                          fontsize = 12, fontweight = 'bold')
 
         cbar2 = plt.colorbar(im2, ax = axes[1])
-        cbar2.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar2.set_label('|E|²/|E₀|²', fontsize = 11)
 
         for section in sections:
             self._draw_material_boundary(axes[1], section, plane_type)
@@ -854,11 +854,11 @@ class Visualizer(object):
 
             ax.set_xlabel(x_label, fontsize = 11)
             ax.set_ylabel(y_label, fontsize = 11)
-            ax.set_title('{}\nlambda = {:.1f} nm, {}'.format(title, wavelength, pol_label),
+            ax.set_title('{}\nλ = {:.1f} nm, {}'.format(title, wavelength, pol_label),
                         fontsize = 11, fontweight = 'bold')
 
             cbar = plt.colorbar(im, ax = ax)
-            cbar.set_label('|E|^2/|E0|^2', fontsize = 10)
+            cbar.set_label('|E|²/|E₀|²', fontsize = 10)
 
             for section in sections:
                 self._draw_material_boundary(ax, section, plane_type)
@@ -953,10 +953,10 @@ class Visualizer(object):
                                label = 'Internal ({} pts)'.format(len(x_int)))
 
             cbar_int = plt.colorbar(scatter, ax = ax, pad = 0.12)
-            cbar_int.set_label('|E|^2/|E0|^2 (Internal)', fontsize = 11)
+            cbar_int.set_label('|E|²/|E₀|² (Internal)', fontsize = 11)
 
         cbar_ext = plt.colorbar(im_ext, ax = ax)
-        cbar_ext.set_label('|E|^2/|E0|^2 (External)', fontsize = 11)
+        cbar_ext.set_label('|E|²/|E₀|² (External)', fontsize = 11)
 
         z_plane = float(z_grid.flat[0]) if isinstance(z_grid, np.ndarray) else float(z_grid)
         sections = self.geometry.get_cross_section(z_plane)
@@ -965,7 +965,7 @@ class Visualizer(object):
 
         ax.set_xlabel(x_label, fontsize = 11)
         ax.set_ylabel(y_label, fontsize = 11)
-        ax.set_title('Internal (scatter) + External (heatmap) Fields\nlambda = {:.1f} nm, {}'.format(wavelength, pol_label),
+        ax.set_title('Internal (scatter) + External (heatmap) Fields\nλ = {:.1f} nm, {}'.format(wavelength, pol_label),
                     fontsize = 12, fontweight = 'bold')
 
         if np.any(mask_int):
@@ -1467,14 +1467,9 @@ class Visualizer(object):
         if np.iscomplexobj(enhancement):
             enhancement = np.abs(enhancement)
 
-        print('  [DEBUG] enhancement shape: {}'.format(enhancement.shape))
-        print('  [DEBUG] x_grid shape: {}, unique x: {}'.format(x_grid.shape, len(np.unique(x_grid))))
-        print('  [DEBUG] y_grid shape: {}, unique y: {}'.format(y_grid.shape, len(np.unique(y_grid))))
-
         n_unique_x = len(np.unique(x_grid))
         n_unique_y = len(np.unique(y_grid))
         if enhancement.shape == (n_unique_x, n_unique_y):
-            print('  [DEBUG] Transposing enhancement from {} to {}'.format(enhancement.shape, (n_unique_y, n_unique_x)))
             enhancement = enhancement.T
 
         plane_type, extent, x_label, y_label = self._determine_plane(x_grid, y_grid, z_grid)
@@ -1495,10 +1490,10 @@ class Visualizer(object):
         ax1.set_xlabel(x_label, fontsize = 11)
         ax1.set_ylabel(y_label, fontsize = 11)
         ax1.set_title('Unpolarized Intensity Enhancement (Linear)\n'
-                     'lambda = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
+                     'λ = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
                      fontsize = 11, fontweight = 'bold')
         cbar1 = plt.colorbar(im1, ax = ax1)
-        cbar1.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar1.set_label('|E|²/|E₀|²', fontsize = 11)
 
         z_plane = float(z_grid.flat[0]) if isinstance(z_grid, np.ndarray) else float(z_grid)
         sections = self.geometry.get_cross_section(z_plane)
@@ -1523,10 +1518,10 @@ class Visualizer(object):
         ax2.set_xlabel(x_label, fontsize = 11)
         ax2.set_ylabel(y_label, fontsize = 11)
         ax2.set_title('Unpolarized Intensity Enhancement (Log)\n'
-                     'lambda = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
+                     'λ = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
                      fontsize = 11, fontweight = 'bold')
         cbar2 = plt.colorbar(im2, ax = ax2)
-        cbar2.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar2.set_label('|E|²/|E₀|²', fontsize = 11)
 
         for section in sections:
             self._draw_material_boundary(ax2, section, plane_type)
@@ -1592,12 +1587,12 @@ class Visualizer(object):
 
         ax.set_xlabel(x_label, fontsize = 11)
         ax.set_ylabel(y_label, fontsize = 11)
-        ax.set_title('Unpolarized Field Intensity |E|^2 (Log Scale)\n'
-                     'lambda = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
+        ax.set_title('Unpolarized Field Intensity |E|² (Log Scale)\n'
+                     'λ = {:.1f} nm, avg of {} pols'.format(wavelength, n_pol),
                      fontsize = 12, fontweight = 'bold')
 
         cbar = plt.colorbar(im, ax = ax)
-        cbar.set_label('|E|^2 (a.u.)', fontsize = 11)
+        cbar.set_label('|E|² (a.u.)', fontsize = 11)
 
         z_plane = float(z_grid.flat[0]) if isinstance(z_grid, np.ndarray) else float(z_grid)
         sections = self.geometry.get_cross_section(z_plane)
@@ -1712,9 +1707,9 @@ class Visualizer(object):
         fig.subplots_adjust(right = 0.9)
         cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
         cbar = fig.colorbar(im, cax = cbar_ax)
-        cbar.set_label('|E|^2/|E0|^2', fontsize = 11)
+        cbar.set_label('|E|²/|E₀|²', fontsize = 11)
 
-        plt.suptitle('Intensity Enhancement Comparison (lambda = {:.1f} nm)'.format(wavelength),
+        plt.suptitle('Intensity Enhancement Comparison (λ = {:.1f} nm)'.format(wavelength),
                     fontsize = 12, fontweight = 'bold')
 
         base_filename = 'field_comparison_unpolarized_{}'.format(plane_type)
@@ -1870,13 +1865,13 @@ class Visualizer(object):
         pol_str = self._format_vector_label(polarization)
         norm_label = {'linear': 'Linear', 'percentile': 'Percentile (95%)', 'power': 'Power (gamma=0.2)'}
         ax.set_title('Surface Charge Distribution (Plasmon Mode)\n'
-                     'lambda = {:.1f} nm, Pol = {}, Norm: {}'.format(wavelength, pol_str, norm_label[norm_method]),
+                     'λ = {:.1f} nm, Pol = {}, Norm: {}'.format(wavelength, pol_str, norm_label[norm_method]),
                      fontsize = 12, fontweight = 'bold')
 
         cbar = plt.colorbar(poly, ax = ax, pad = 0.1, shrink = 0.8)
         cbar.set_label('Normalized Surface Charge', fontsize = 11)
 
-        moment_text = 'Dipole: |p| = {:.2e} e*nm\n'.format(moments['dipole_mag'])
+        moment_text = 'Dipole: |p| = {:.2e} e·nm\n'.format(moments['dipole_mag'])
         moment_text += 'Q trace: {:.2e}'.format(moments['quadrupole_trace'])
         ax.text2D(0.02, 0.98, moment_text, transform = ax.transAxes,
                  fontsize = 10, verticalalignment = 'top',
@@ -1955,8 +1950,8 @@ class Visualizer(object):
 
         # Plot Gap views (indices 6 and 7)
         gap_view_configs = [
-            ('Gap+ (P1->Gap)', gap_faces.get('particle1', []), (1, 2), 'y (nm)', 'z (nm)'),
-            ('Gap- (P2->Gap)', gap_faces.get('particle2', []), (1, 2), 'y (nm)', 'z (nm)'),
+            ('Gap+ (P1→Gap)', gap_faces.get('particle1', []), (1, 2), 'y (nm)', 'z (nm)'),
+            ('Gap- (P2→Gap)', gap_faces.get('particle2', []), (1, 2), 'y (nm)', 'z (nm)'),
         ]
 
         for idx, (view_name, face_indices, axes_idx, xlabel, ylabel) in enumerate(gap_view_configs):
@@ -1994,12 +1989,12 @@ class Visualizer(object):
         pol_str = self._format_vector_label(polarization)
         norm_label = {'linear': 'Linear', 'percentile': 'Percentile (95%)', 'power': 'Power (gamma=0.2)'}
         fig.suptitle('Surface Charge Distribution - 8 Views\n'
-                     'lambda = {:.1f} nm, Pol = {}, Norm: {}'.format(wavelength, pol_str, norm_label[norm_method]),
+                     'λ = {:.1f} nm, Pol = {}, Norm: {}'.format(wavelength, pol_str, norm_label[norm_method]),
                      fontsize = 13, fontweight = 'bold')
 
-        moment_text = 'Dipole: p = [{:.2e}, {:.2e}, {:.2e}] e*nm\n'.format(
+        moment_text = 'Dipole: p = [{:.2e}, {:.2e}, {:.2e}] e·nm\n'.format(
             moments['dipole'][0], moments['dipole'][1], moments['dipole'][2])
-        moment_text += '|p| = {:.2e} e*nm\n'.format(moments['dipole_mag'])
+        moment_text += '|p| = {:.2e} e·nm\n'.format(moments['dipole_mag'])
         moment_text += 'Quadrupole trace: {:.2e}'.format(moments['quadrupole_trace'])
         fig.text(0.02, 0.02, moment_text, fontsize = 10,
                 bbox = dict(boxstyle = 'round', facecolor = 'wheat', alpha = 0.7))

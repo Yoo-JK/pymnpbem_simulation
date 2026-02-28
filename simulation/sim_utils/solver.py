@@ -133,6 +133,11 @@ class BEMSolver(object):
                         'field': field_result,
                     })
 
+                    # Surface charge calculation
+                    sc_result = self._calculate_surface_charge(
+                        bem, comparticle, exc, enei, pol_index = j)
+                    surface_charges_data.append(sc_result)
+
         t_elapsed = time.time() - t_start
 
         # 7. Assemble results
@@ -548,7 +553,6 @@ class BEMSolver(object):
         x_range = field_region.get('x_range', [-50, 50, 101])
         y_range = field_region.get('y_range', [0, 0, 1])
         z_range = field_region.get('z_range', [-50, 50, 101])
-        mindist = self.config.get('field_mindist', 0.5)
 
         # Build mesh grid
         x = np.linspace(x_range[0], x_range[1], int(x_range[2]))
@@ -557,88 +561,254 @@ class BEMSolver(object):
 
         # Determine which two axes form the 2D grid
         if int(y_range[2]) == 1:
-            # xz-plane at y = y_range[0]
             xx, zz = np.meshgrid(x, z)
             yy = np.full_like(xx, y_range[0])
             grid_shape = xx.shape
         elif int(z_range[2]) == 1:
-            # xy-plane at z = z_range[0]
             xx, yy = np.meshgrid(x, y)
             zz = np.full_like(xx, z_range[0])
             grid_shape = xx.shape
         elif int(x_range[2]) == 1:
-            # yz-plane at x = x_range[0]
             yy, zz = np.meshgrid(y, z)
             xx = np.full_like(yy, x_range[0])
             grid_shape = yy.shape
         else:
-            # Full 3D (rare)
             xx, yy, zz = np.meshgrid(x, y, z, indexing = 'ij')
             grid_shape = xx.shape
 
         positions = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
+        n_pts = positions.shape[0]
 
-        # Filter points too close to particle surface
-        if mindist > 0:
-            positions = self._filter_interior_points(
-                positions, comparticle, mindist)
-
-        if len(positions) == 0:
-            if self.verbose:
-                print('[info] No valid field points after filtering')
-            return {
-                'grid_shape': grid_shape,
-                'x': xx,
-                'y': yy,
-                'z': zz,
-                'e_field': np.zeros((*grid_shape, 3), dtype = complex),
-                'enhancement': np.zeros(grid_shape),
-            }
-
-        # Create ComPoint for field evaluation
-        pt = ComPoint(comparticle, positions)
-
-        # Initialize BEM and solve
+        # Solve BEM at this wavelength
         bem(enei)
         pot = exc(comparticle, enei)
         sig, _ = bem.solve(pot)
 
-        # Get field at external points
-        try:
-            field_result = bem.field(sig, inout = 2)
+        # Determine interior/exterior mask
+        interior_mask = self._compute_interior_mask(positions, comparticle)
+        exterior_mask = ~interior_mask
 
-            if hasattr(field_result, 'e'):
-                e_field = field_result.e
-            elif isinstance(field_result, dict) and 'e' in field_result:
-                e_field = field_result['e']
+        # Get simulation parameters
+        sim_type = self.config['simulation_type']
+        excitation_type = self.config['excitation_type']
+        polarizations = self.config.get('polarizations', [[1, 0, 0]])
+        propagation_dirs = self.config.get('propagation_dirs', [[0, 0, 1]])
+
+        # Compute induced field at grid points using Green function
+        e_induced = np.zeros((n_pts, 3), dtype = complex)
+
+        # Create ComPoint for ALL positions (not just exterior)
+        pt = ComPoint(comparticle, positions)
+
+        if sim_type == 'stat':
+            from mnpbem.greenfun.compgreen_stat import CompGreenStat
+            try:
+                g = CompGreenStat(pt, comparticle)
+                field_result = g.field(sig, inout = 2)
+                e_raw = field_result.e
+            except Exception as e:
+                print('[error] Stat field calculation failed: {}'.format(e))
+                e_raw = np.zeros((pt.n, 3), dtype = complex)
+        else:
+            from mnpbem.greenfun.compgreen_ret import CompGreenRet
+            try:
+                g = CompGreenRet(pt, comparticle)
+                field_result = g.field(sig, inout = 2)
+                e_raw = field_result.e
+            except Exception as e:
+                print('[error] Ret field calculation failed: {}'.format(e))
+                e_raw = np.zeros((pt.n, 3), dtype = complex)
+
+        # Handle multi-polarization: e_raw may be (n_active, 3, n_pol)
+        if e_raw.ndim == 3:
+            if pol_index < e_raw.shape[2]:
+                e_raw = e_raw[:, :, pol_index]
             else:
-                e_field = np.zeros((len(positions), 3), dtype = complex)
-        except Exception as e:
-            print('[error] Field calculation failed: {}'.format(e))
-            e_field = np.zeros((len(positions), 3), dtype = complex)
+                e_raw = e_raw[:, :, 0]
 
-        # For multi-polarization, select the specific polarization
-        if e_field.ndim == 3:
-            # (n_points, 3, n_pol) -> select pol_index
-            if pol_index < e_field.shape[2]:
-                e_field = e_field[:, :, pol_index]
+        # Map active ComPoint positions back to full grid (use complex valdef)
+        e_induced = pt(e_raw, valdef = 0.0 + 0j)
+
+        # Compute incident field
+        if excitation_type == 'planewave':
+            pol_vec = np.array(polarizations[pol_index], dtype = float)
+            if sim_type == 'stat':
+                # Quasistatic: uniform field E0 = pol_vec
+                e_incident = np.tile(pol_vec, (n_pts, 1))
             else:
-                e_field = e_field[:, :, 0]
+                # Retarded: plane wave E0 * exp(i*k*r)
+                dir_vec = np.array(propagation_dirs[pol_index], dtype = float)
+                k_vec = (2.0 * np.pi / enei) * dir_vec
+                phase = np.exp(1j * positions @ k_vec)
+                e_incident = pol_vec[np.newaxis, :] * phase[:, np.newaxis]
+        else:
+            # For dipole/eels, incident field is more complex - use zero
+            e_incident = np.zeros((n_pts, 3), dtype = complex)
 
-        # Compute field enhancement |E|^2 / |E0|^2
-        e_norm_sq = np.sum(np.abs(e_field) ** 2, axis = 1)  # (n_points,)
-        enhancement = e_norm_sq  # |E|^2 (normalize by |E0|^2 = 1 for plane wave)
+        # Total field
+        e_total = e_incident + e_induced
+
+        # Compute field quantities
+        e0_sq = np.sum(np.abs(e_incident) ** 2, axis = 1)
+        e_sq = np.sum(np.abs(e_total) ** 2, axis = 1)
+        e0_sq_safe = np.maximum(e0_sq, 1e-30)
+        enhancement = np.sqrt(e_sq / e0_sq_safe)
+        intensity = e_sq / e0_sq_safe
+
+        # Reshape to grid
+        e_total_grid = e_total.reshape((*grid_shape, 3))
+        enhancement_grid = enhancement.reshape(grid_shape)
+        intensity_grid = intensity.reshape(grid_shape)
+        e_sq_grid = e_sq.reshape(grid_shape)
+        e0_sq_grid = e0_sq.reshape(grid_shape)
+
+        # Internal/external separation
+        int_mask_grid = interior_mask.reshape(grid_shape)
+        ext_mask_grid = exterior_mask.reshape(grid_shape)
+
+        # External
+        enhancement_ext = np.where(ext_mask_grid, enhancement_grid, np.nan)
+        intensity_ext = np.where(ext_mask_grid, intensity_grid, np.nan)
+        e_sq_ext = np.where(ext_mask_grid, e_sq_grid, np.nan)
+        if e_total_grid.ndim == 3:
+            ext_broadcast = ext_mask_grid[:, :, np.newaxis]
+        else:
+            ext_broadcast = ext_mask_grid[..., np.newaxis]
+        e_total_ext = np.where(ext_broadcast, e_total_grid, np.nan + 0j)
+
+        # Internal
+        enhancement_int = np.where(int_mask_grid, enhancement_grid, np.nan)
+        intensity_int = np.where(int_mask_grid, intensity_grid, np.nan)
+        e_sq_int = np.where(int_mask_grid, e_sq_grid, np.nan)
+        if e_total_grid.ndim == 3:
+            int_broadcast = int_mask_grid[:, :, np.newaxis]
+        else:
+            int_broadcast = int_mask_grid[..., np.newaxis]
+        e_total_int = np.where(int_broadcast, e_total_grid, np.nan + 0j)
 
         return {
             'grid_shape': grid_shape,
             'x': xx,
             'y': yy,
             'z': zz,
+            'x_grid': xx,
+            'y_grid': yy,
+            'z_grid': zz,
+            'e_total': e_total_grid,
+            'enhancement': intensity_grid,
+            'intensity': e_sq_grid,
+            'e_sq': e_sq_grid,
+            'e0_sq': e0_sq_grid,
+            'e_total_ext': e_total_ext,
+            'enhancement_ext': enhancement_ext,
+            'intensity_ext': intensity_ext,
+            'e_sq_ext': e_sq_ext,
+            'e_total_int': e_total_int,
+            'enhancement_int': enhancement_int,
+            'intensity_int': intensity_int,
+            'e_sq_int': e_sq_int,
             'positions': positions,
-            'e_field': e_field,
-            'enhancement': enhancement,
+            'e_field': e_total.reshape((*grid_shape, 3)),
             'wavelength': enei,
             'pol_index': pol_index,
+        }
+
+    def _compute_interior_mask(self,
+            positions: np.ndarray,
+            comparticle: Any) -> np.ndarray:
+
+        n_pts = positions.shape[0]
+        mask = np.zeros(n_pts, dtype = bool)
+
+        try:
+            # Get particle surfaces
+            particles = comparticle.p if hasattr(comparticle, 'p') else []
+
+            for particle in particles:
+                if not hasattr(particle, 'pos') or not hasattr(particle, 'nvec'):
+                    continue
+
+                face_pos = particle.pos
+                face_nvec = particle.nvec
+
+                # For each point, find nearest face and check if inside
+                chunk_size = 500
+                for i_start in range(0, n_pts, chunk_size):
+                    i_end = min(i_start + chunk_size, n_pts)
+                    pts_chunk = positions[i_start:i_end]
+
+                    # Distance to all face centroids
+                    diff = pts_chunk[:, np.newaxis, :] - face_pos[np.newaxis, :, :]
+                    dists = np.sqrt(np.sum(diff ** 2, axis = 2))
+                    nearest = np.argmin(dists, axis = 1)
+
+                    # Check sign of dot(point - face_centroid, face_normal)
+                    for k, idx in enumerate(range(i_start, i_end)):
+                        nn = nearest[k]
+                        direction = positions[idx] - face_pos[nn]
+                        dot_val = np.dot(direction, face_nvec[nn])
+                        if dot_val < 0:
+                            mask[idx] = True
+
+        except Exception:
+            pass
+
+        return mask
+
+    def _calculate_surface_charge(self,
+            bem: Any,
+            comparticle: Any,
+            exc: Any,
+            enei: float,
+            pol_index: int = 0) -> Dict[str, Any]:
+
+        sim_type = self.config['simulation_type']
+        polarizations = self.config.get('polarizations', [[1, 0, 0]])
+
+        # Solve BEM
+        bem(enei)
+        pot = exc(comparticle, enei)
+        sig, _ = bem.solve(pot)
+
+        # Extract surface charge
+        if sim_type == 'stat':
+            charge = sig.sig
+        else:
+            charge = sig.sig1
+
+        # Handle multi-polarization
+        if charge.ndim == 2:
+            if pol_index < charge.shape[1]:
+                charge = charge[:, pol_index]
+            else:
+                charge = charge[:, 0]
+
+        # Get mesh information from comparticle
+        pc = comparticle
+        if hasattr(comparticle, 'pc'):
+            pc = comparticle.pc
+
+        vertices = pc.verts if hasattr(pc, 'verts') else np.zeros((0, 3))
+        faces = pc.faces if hasattr(pc, 'faces') else np.zeros((0, 3), dtype = int)
+        centroids = pc.pos
+        normals = pc.nvec
+        areas = pc.area
+
+        # Dipole moment
+        charge_real = np.real(charge)
+        dipole = np.sum(centroids * (charge_real * areas)[:, np.newaxis], axis = 0)
+
+        return {
+            'wavelength': enei,
+            'polarization': polarizations[pol_index] if pol_index < len(polarizations) else [0, 0, 0],
+            'polarization_idx': pol_index + 1,
+            'vertices': vertices,
+            'faces': faces,
+            'centroids': centroids,
+            'normals': normals,
+            'areas': areas.reshape(-1, 1),
+            'charge': charge.reshape(-1, 1),
+            'dipole': dipole,
         }
 
     def _filter_interior_points(self,
@@ -717,8 +887,8 @@ class BEMSolver(object):
                 indices.add(idx)
             return sorted(indices)
 
-        elif isinstance(field_wl_idx, int):
-            idx = min(field_wl_idx, n_wl - 1)
+        elif isinstance(field_wl_idx, (int, np.integer)):
+            idx = min(int(field_wl_idx), n_wl - 1)
             return [idx]
 
         elif isinstance(field_wl_idx, list):
@@ -853,23 +1023,23 @@ class BEMSolver(object):
         n_pol = ext.shape[0]
 
         with open(filepath, 'w') as f:
-            # Header
+            # Header: Sca first, then Ext, then Abs (MATLAB order)
             header_parts = ['Wavelength(nm)']
             for j in range(n_pol):
-                header_parts.append('Ext_pol{}'.format(j + 1))
-            for j in range(n_pol):
                 header_parts.append('Sca_pol{}'.format(j + 1))
+            for j in range(n_pol):
+                header_parts.append('Ext_pol{}'.format(j + 1))
             for j in range(n_pol):
                 header_parts.append('Abs_pol{}'.format(j + 1))
             f.write('\t'.join(header_parts) + '\n')
 
-            # Data
+            # Data: Sca first, then Ext, then Abs
             for i in range(len(wavelength)):
                 parts = ['{:.2f}'.format(wavelength[i])]
                 for j in range(n_pol):
-                    parts.append('{:.6e}'.format(ext[j, i]))
-                for j in range(n_pol):
                     parts.append('{:.6e}'.format(sca[j, i]))
+                for j in range(n_pol):
+                    parts.append('{:.6e}'.format(ext[j, i]))
                 for j in range(n_pol):
                     parts.append('{:.6e}'.format(absorb[j, i]))
                 f.write('\t'.join(parts) + '\n')

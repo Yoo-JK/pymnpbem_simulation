@@ -197,13 +197,13 @@ class DataExporter(object):
             pol_idx = field.get('polarization_idx', 0)
             wavelength = field.get('wavelength', 0)
 
-            filename = 'field_pol{}_{:.0f}nm.txt'.format(pol_idx, wavelength)
+            filename = 'field_pol{}_{:.0f}nm.txt'.format(pol_idx + 1, wavelength)
             filepath = os.path.join(self.output_dir, filename)
 
             pol_label = self._format_polarization_label(polarizations, pol_idx)
 
             exported = self._export_single_field(
-                filepath, field, 'Polarization {}: {}'.format(pol_idx, pol_label)
+                filepath, field, 'Polarization {}: {}'.format(pol_idx + 1, pol_label)
             )
             if exported:
                 exported_files.append(filepath)
