@@ -6,7 +6,8 @@ from typing import List, Dict, Tuple, Optional, Union, Any
 from pathlib import Path
 
 from mnpbem.geometry.particle import Particle
-from mnpbem.geometry.mesh_generators import trisphere, tricube, trirod, tripolygon
+from mnpbem.geometry.mesh_generators import (
+    trisphere, tricube, trirod, tripolygon, trispheresegment)
 from mnpbem.geometry.polygon import Polygon
 from mnpbem.geometry.edgeprofile import EdgeProfile
 
@@ -854,6 +855,10 @@ class GeometryGenerator(object):
     def _generate_sphere(self) -> List[Particle]:
 
         diameter = self.config.get('diameter', 10)
+        use_mirror = self.config.get('use_mirror_symmetry', False)
+
+        if use_mirror:
+            return self._generate_sphere_segment(diameter, use_mirror)
 
         if self._is_legacy_mesh_mode():
             nphi = self.config.get('nphi', 4)
@@ -872,6 +877,56 @@ class GeometryGenerator(object):
             mesh = self._element_size_to_n_sphere(element_size, diameter)
 
         p = trisphere(mesh, diameter)
+        return [p]
+
+    def _generate_sphere_segment(self,
+            diameter: float,
+            sym: Any) -> List[Particle]:
+        """Generate partial sphere mesh for mirror symmetry.
+
+        For 'x' or 'y' mirror: hemisphere.
+        For 'xy' mirror: quarter sphere.
+        """
+        if isinstance(sym, str):
+            sym_key = sym
+        else:
+            sym_key = 'xy'
+
+        # Determine phi range based on symmetry
+        if sym_key == 'x':
+            # Hemisphere: x >= 0 -> phi in [-pi/2, pi/2]
+            phi_range = (-np.pi / 2, np.pi / 2)
+        elif sym_key == 'y':
+            # Hemisphere: y >= 0 -> phi in [0, pi]
+            phi_range = (0, np.pi)
+        elif sym_key == 'xy':
+            # Quarter sphere: x >= 0, y >= 0 -> phi in [0, pi/2]
+            phi_range = (0, np.pi / 2)
+        else:
+            phi_range = (0, 2 * np.pi)
+
+        # Determine mesh resolution
+        if self._is_legacy_mesh_mode():
+            nphi = self.config.get('nphi', 4)
+            n_phi = max(8, int(np.ceil(
+                (diameter + 1) * np.pi / nphi * (phi_range[1] - phi_range[0]) / (2 * np.pi))))
+            n_theta = max(8, int(np.ceil((diameter + 1) * np.pi / nphi)))
+        else:
+            element_size = self.config.get('mesh_density', 2.0)
+            arc_phi = diameter / 2 * (phi_range[1] - phi_range[0])
+            arc_theta = diameter / 2 * np.pi
+            n_phi = max(8, int(np.ceil(arc_phi / element_size)))
+            n_theta = max(8, int(np.ceil(arc_theta / element_size)))
+
+        phi = np.linspace(phi_range[0], phi_range[1], n_phi + 1)
+        theta = np.linspace(0.01, np.pi - 0.01, n_theta + 1)
+
+        p = trispheresegment(phi, theta, diameter)
+
+        if self.verbose:
+            print('[info] Sphere segment (sym={}): n_phi={}, n_theta={}, {} faces'.format(
+                sym_key, n_phi, n_theta, p.nfaces))
+
         return [p]
 
     def _generate_cube(self) -> List[Particle]:

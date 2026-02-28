@@ -7,6 +7,7 @@ import numpy as np
 
 from mnpbem.geometry import (
     ComParticle, ComParticleMirror, ComPoint, Particle,
+    LayerStructure,
 )
 from mnpbem.bem import (
     BEMStat, BEMRet,
@@ -74,12 +75,15 @@ class BEMSolver(object):
             print('[info] ComParticle created: {} boundary elements'.format(
                 comparticle.nfaces))
 
-        # 2. Build BEM solver
+        # 2. Build layer structure (substrate)
+        self.layer = self._create_layer_structure(materials)
+
+        # 3. Build BEM solver
         bem = self._create_bem_solver(comparticle)
         if self.verbose:
             print('[info] BEM solver created: {}'.format(type(bem).__name__))
 
-        # 3. Build excitations
+        # 4. Build excitations
         excitations = self._create_excitations(comparticle)
         if self.verbose:
             print('[info] Excitations created: {} object(s)'.format(len(excitations)))
@@ -163,6 +167,34 @@ class BEMSolver(object):
         return results
 
     # ------------------------------------------------------------------
+    # Layer structure creation (substrate)
+    # ------------------------------------------------------------------
+
+    def _create_layer_structure(self,
+            materials: Dict[str, Any]) -> Optional[Any]:
+
+        if not self.config.get('use_substrate', False):
+            return None
+
+        substrate_info = materials.get('substrate', {})
+        epstab = materials['epstab']
+
+        # medium: first in epstab (index 0 -> MATLAB 1-indexed = 1)
+        # substrate: last in epstab (index N-1 -> MATLAB 1-indexed = N)
+        medium_ind = substrate_info.get('medium_idx', 0) + 1
+        substrate_ind = substrate_info.get('substrate_idx', len(epstab) - 1) + 1
+        z_interface = substrate_info.get('z_interface', 0.0)
+
+        layer = LayerStructure(epstab, [medium_ind, substrate_ind], [z_interface])
+
+        if self.verbose:
+            print('[info] LayerStructure created: z_interface = {}, '
+                  'medium_ind = {}, substrate_ind = {}'.format(
+                      z_interface, medium_ind, substrate_ind))
+
+        return layer
+
+    # ------------------------------------------------------------------
     # ComParticle creation
     # ------------------------------------------------------------------
 
@@ -183,7 +215,9 @@ class BEMSolver(object):
                 sym = 'xy'
 
             if closed_args:
-                cp = ComParticleMirror(epstab, particles, inout, *closed_args, sym = sym)
+                cp = ComParticleMirror(
+                    epstab, particles, inout,
+                    sym = sym, closed_args = tuple(closed_args))
             else:
                 cp = ComParticleMirror(epstab, particles, inout, sym = sym)
 
@@ -208,16 +242,12 @@ class BEMSolver(object):
         use_mirror = self.config.get('use_mirror_symmetry', False)
         use_substrate = self.config.get('use_substrate', False)
         use_iterative = self.config.get('use_iterative_solver', False)
-
-        if use_substrate and sim_type != 'ret':
-            raise ValueError(
-                '[error] Substrate simulations require "ret" simulation type. '
-                'Current: {!r}'.format(sim_type))
+        layer = self.layer
 
         # Dispatch to the correct BEM solver class
         if use_iterative:
             if use_substrate:
-                bem = BEMRetLayerIter(comparticle)
+                bem = BEMRetLayerIter(comparticle, layer = layer)
             elif sim_type == 'stat':
                 bem = BEMStatIter(comparticle)
             else:
@@ -225,9 +255,9 @@ class BEMSolver(object):
 
         elif use_substrate:
             if sim_type == 'stat':
-                bem = BEMStatLayer(comparticle)
+                bem = BEMStatLayer(comparticle, layer)
             else:
-                bem = BEMRetLayer(comparticle)
+                bem = BEMRetLayer(comparticle, layer)
 
         elif use_mirror:
             if sim_type == 'stat':
@@ -289,10 +319,11 @@ class BEMSolver(object):
         # Create single excitation with all polarizations
         # MNPBEM handles multiple polarizations internally
         if use_substrate:
+            layer = self.layer
             if sim_type == 'stat':
-                exc = PlaneWaveStatLayer(pol_array)
+                exc = PlaneWaveStatLayer(pol_array, layer)
             else:
-                exc = PlaneWaveRetLayer(pol_array, dir_array)
+                exc = PlaneWaveRetLayer(pol_array, dir_array, layer)
         elif use_mirror:
             if sim_type == 'stat':
                 exc = PlaneWaveStatMirror(pol_array)
@@ -319,10 +350,11 @@ class BEMSolver(object):
         pt = ComPoint(comparticle, position.reshape(1, -1))
 
         if use_substrate:
+            layer = self.layer
             if sim_type == 'stat':
-                exc = DipoleStatLayer(pt, moment)
+                exc = DipoleStatLayer(pt, layer, dip = moment)
             else:
-                exc = DipoleRetLayer(pt, moment)
+                exc = DipoleRetLayer(pt, layer, dip = moment)
         elif use_mirror:
             if sim_type == 'stat':
                 exc = DipoleStatMirror(pt, moment)
