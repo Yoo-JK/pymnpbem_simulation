@@ -243,6 +243,15 @@ args['use_mirror_symmetry'] = False
 # Enable if you encounter out-of-memory errors
 args['use_iterative_solver'] = False
 
+# Iterative solver options (only used when use_iterative_solver=True)
+# Uncomment and modify to override defaults
+# args['iterative_solver_type'] = 'gmres'    # 'gmres', 'cgs', 'bicgstab'
+# args['iterative_tol'] = 1e-4               # 수렴 tolerance
+# args['iterative_maxit'] = 200              # 최대 반복 횟수
+# args['iterative_restart'] = None           # GMRES restart (None=auto)
+# args['iterative_precond'] = 'hmat'         # 'hmat' 또는 'full'
+# args['iterative_output'] = 0              # 0=silent, 1=수렴 정보 출력
+
 # Nonlocal effects (advanced, for very small particles <5nm)
 # Includes quantum effects at metal surfaces
 # Requires additional setup

@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -90,6 +91,37 @@ def validate_config(args: Dict[str, Any]) -> None:
 
     assert args['excitation_type'] in ['planewave', 'dipole', 'eels'], \
         '[error] Invalid <excitation_type>: {}'.format(args['excitation_type'])
+
+    # Compatibility checks
+    use_mirror = args.get('use_mirror_symmetry', False)
+    use_substrate = args.get('use_substrate', False)
+    use_iterative = args.get('use_iterative_solver', False)
+    excitation_type = args['excitation_type']
+    structure = args.get('structure', '')
+
+    if use_mirror and use_substrate:
+        raise ValueError(
+            '[error] Mirror symmetry + substrate is not supported. '
+            'BEMStatMirrorLayer / BEMRetMirrorLayer classes do not exist in mnpbem.')
+
+    if use_mirror and use_iterative:
+        raise ValueError(
+            '[error] Mirror symmetry + iterative solver is not supported. '
+            'BEMStatMirrorIter / BEMRetMirrorIter classes do not exist in mnpbem.')
+
+    if excitation_type == 'eels' and use_substrate:
+        raise ValueError(
+            '[error] EELS excitation + substrate is not supported. '
+            'EELSStatLayer / EELSRetLayer classes do not exist in mnpbem.')
+
+    if excitation_type == 'eels' and use_mirror:
+        raise ValueError(
+            '[error] EELS excitation is NOT compatible with mirror symmetry.')
+
+    if use_mirror and structure not in ('sphere', 'dimer_sphere', 'dimer', ''):
+        warnings.warn(
+            '[info] Mirror symmetry with structure <{}> may not be valid. '
+            'Ensure your mesh has the required symmetry.'.format(structure))
 
     print('[info] Configuration validated successfully')
 

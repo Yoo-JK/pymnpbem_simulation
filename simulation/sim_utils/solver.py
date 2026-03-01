@@ -1,7 +1,8 @@
 import os
 import time
-from typing import Dict, List, Tuple, Optional, Any, Union
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Dict, List, Tuple, Optional, Any, Union
 
 import numpy as np
 
@@ -44,6 +45,7 @@ class BEMSolver(object):
         self.verbose = verbose
 
         self._validate_field_options()
+        self._validate_config_compatibility()
 
     def _validate_field_options(self) -> None:
         calculate_cross_sections = self.config.get('calculate_cross_sections', True)
@@ -58,6 +60,33 @@ class BEMSolver(object):
                     'Peak-based wavelength selection requires spectrum calculation. '
                     'Use "middle", integer index, or wavelength list instead.'.format(
                         field_wl_idx))
+
+    def _validate_config_compatibility(self) -> None:
+        use_mirror = self.config.get('use_mirror_symmetry', False)
+        use_substrate = self.config.get('use_substrate', False)
+        use_iterative = self.config.get('use_iterative_solver', False)
+        excitation_type = self.config.get('excitation_type', 'planewave')
+        structure = self.config.get('structure', '')
+
+        if use_mirror and use_substrate:
+            raise ValueError(
+                '[error] Mirror symmetry + substrate is not supported. '
+                'BEMStatMirrorLayer / BEMRetMirrorLayer classes do not exist in mnpbem.')
+
+        if use_mirror and use_iterative:
+            raise ValueError(
+                '[error] Mirror symmetry + iterative solver is not supported. '
+                'BEMStatMirrorIter / BEMRetMirrorIter classes do not exist in mnpbem.')
+
+        if excitation_type == 'eels' and use_substrate:
+            raise ValueError(
+                '[error] EELS excitation + substrate is not supported. '
+                'EELSStatLayer / EELSRetLayer classes do not exist in mnpbem.')
+
+        if use_mirror and structure not in ('sphere', 'dimer_sphere', 'dimer', ''):
+            warnings.warn(
+                '[info] Mirror symmetry with structure <{}> may not be valid. '
+                'Ensure your mesh has the required symmetry.'.format(structure))
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -232,6 +261,28 @@ class BEMSolver(object):
         return cp
 
     # ------------------------------------------------------------------
+    # Iterative solver options
+    # ------------------------------------------------------------------
+
+    def _get_iterative_options(self) -> Dict[str, Any]:
+        # Config key -> BEMIter constructor parameter name
+        key_map = {
+            'iterative_solver_type': 'solver',
+            'iterative_tol': 'tol',
+            'iterative_maxit': 'maxit',
+            'iterative_restart': 'restart',
+            'iterative_precond': 'precond',
+            'iterative_output': 'output',
+        }
+
+        opts = {}
+        for config_key, param_name in key_map.items():
+            if config_key in self.config:
+                opts[param_name] = self.config[config_key]
+
+        return opts
+
+    # ------------------------------------------------------------------
     # BEM solver creation
     # ------------------------------------------------------------------
 
@@ -246,12 +297,17 @@ class BEMSolver(object):
 
         # Dispatch to the correct BEM solver class
         if use_iterative:
+            iter_opts = self._get_iterative_options()
+
+            if self.verbose and iter_opts:
+                print('[info] Iterative solver options: {}'.format(iter_opts))
+
             if use_substrate:
-                bem = BEMRetLayerIter(comparticle, layer = layer)
+                bem = BEMRetLayerIter(comparticle, layer = layer, **iter_opts)
             elif sim_type == 'stat':
-                bem = BEMStatIter(comparticle)
+                bem = BEMStatIter(comparticle, **iter_opts)
             else:
-                bem = BEMRetIter(comparticle)
+                bem = BEMRetIter(comparticle, **iter_opts)
 
         elif use_substrate:
             if sim_type == 'stat':
@@ -407,6 +463,7 @@ class BEMSolver(object):
         absorb = np.zeros((n_pol, n_wl))
 
         exc = excitations[0]  # single excitation object with all pols
+        n_failed = 0
 
         for i, enei in enumerate(wavelengths):
             if self.verbose and i % max(1, n_wl // 20) == 0:
@@ -434,6 +491,14 @@ class BEMSolver(object):
             except Exception as e:
                 print('[error] Error at wavelength {} ({:.1f} nm): {}'.format(
                     i, enei, e))
+                ext[:, i] = np.nan
+                sca[:, i] = np.nan
+                absorb[:, i] = np.nan
+                n_failed += 1
+
+        if n_failed > 0:
+            print('[info] {} / {} wavelengths failed and were set to NaN'.format(
+                n_failed, n_wl))
 
         return {
             'extinction': ext,
@@ -535,6 +600,7 @@ class BEMSolver(object):
         sim_type = self.config['simulation_type']
 
         n_chunks = (n_wl + chunk_size - 1) // chunk_size
+        n_failed = 0
 
         for chunk_idx in range(n_chunks):
             i_start = chunk_idx * chunk_size
@@ -563,6 +629,14 @@ class BEMSolver(object):
                 except Exception as e:
                     print('[error] Error at wavelength {} ({:.1f} nm): {}'.format(
                         global_i, enei, e))
+                    ext[:, global_i] = np.nan
+                    sca[:, global_i] = np.nan
+                    absorb[:, global_i] = np.nan
+                    n_failed += 1
+
+        if n_failed > 0:
+            print('[info] {} / {} wavelengths failed and were set to NaN'.format(
+                n_failed, n_wl))
 
         return {
             'extinction': ext,
@@ -683,7 +757,15 @@ class BEMSolver(object):
         # Compute field quantities
         e0_sq = np.sum(np.abs(e_incident) ** 2, axis = 1)
         e_sq = np.sum(np.abs(e_total) ** 2, axis = 1)
-        e0_sq_safe = np.maximum(e0_sq, 1e-30)
+
+        if excitation_type in ('dipole', 'eels'):
+            # Dipole/EELS: incident field is zero, use |E| as enhancement
+            e0_sq_safe = np.ones_like(e0_sq)
+            if self.verbose:
+                print('[info] Dipole/EELS excitation: enhancement = |E| (absolute field magnitude)')
+        else:
+            e0_sq_safe = np.maximum(e0_sq, 1e-30)
+
         enhancement = np.sqrt(e_sq / e0_sq_safe)
         intensity = e_sq / e0_sq_safe
 
@@ -904,7 +986,7 @@ class BEMSolver(object):
             # Find peak extinction for each polarization -> unique indices
             indices = set()
             for j in range(n_pol):
-                idx = int(np.argmax(extinction[j, :]))
+                idx = int(np.nanargmax(extinction[j, :]))
                 indices.add(idx)
                 if self.verbose:
                     print('[info] Peak extinction for pol {}: lambda = {:.1f} nm (index {})'.format(
@@ -915,7 +997,7 @@ class BEMSolver(object):
             # Need scattering data - find from absorption = ext - sca
             indices = set()
             for j in range(n_pol):
-                idx = int(np.argmax(extinction[j, :]))
+                idx = int(np.nanargmax(extinction[j, :]))
                 indices.add(idx)
             return sorted(indices)
 

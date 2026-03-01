@@ -343,7 +343,7 @@ class FieldAnalyzer(object):
 
         if self.verbose:
             enh_finite = enhancement[np.isfinite(enhancement)]
-            print('    [DEBUG] Enhancement array:')
+            print('    [info] Enhancement array:')
             print('      Shape: {}'.format(enhancement.shape))
             print('      Total points: {}'.format(enhancement.size))
             print('      Finite points: {}'.format(len(enh_finite)))
@@ -363,7 +363,7 @@ class FieldAnalyzer(object):
         n_spheres = len(spheres)
 
         if self.verbose:
-            print('    [DEBUG] Spheres ({} total):'.format(n_spheres))
+            print('    [info] Spheres ({} total):'.format(n_spheres))
             for i, (cx, cy, cz, r) in enumerate(spheres):
                 print('      Sphere {}: center=({:.1f}, {:.1f}, {:.1f}), radius={:.1f} nm'.format(
                     i + 1, cx, cy, cz, r))
@@ -373,7 +373,7 @@ class FieldAnalyzer(object):
         for depth in self.near_field_distances:
 
             if self.verbose:
-                print('    [DEBUG] Processing depth = {:.1f} nm (interior)'.format(depth))
+                print('    [info] Processing depth = {:.1f} nm (interior)'.format(depth))
 
             distance_mask = self._create_distance_mask(x_grid, y_grid, z_grid, spheres, depth)
 
@@ -429,7 +429,7 @@ class FieldAnalyzer(object):
         final_mask = distance_mask.copy()
 
         if self.verbose:
-            print('      [DEBUG] {} filtering:'.format(method.upper()))
+            print('      [info] {} filtering:'.format(method.upper()))
             print('        Distance mask: {} points'.format(np.sum(distance_mask)))
 
         if method == 'strict':
