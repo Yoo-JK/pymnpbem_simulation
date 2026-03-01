@@ -83,6 +83,10 @@ class BEMSolver(object):
                 '[error] EELS excitation + substrate is not supported. '
                 'EELSStatLayer / EELSRetLayer classes do not exist in mnpbem.')
 
+        if excitation_type == 'eels' and use_mirror:
+            raise ValueError(
+                '[error] EELS excitation is NOT compatible with mirror symmetry.')
+
         if use_mirror and structure not in ('sphere', 'dimer_sphere', 'dimer', ''):
             warnings.warn(
                 '[info] Mirror symmetry with structure <{}> may not be valid. '
