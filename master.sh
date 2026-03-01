@@ -231,9 +231,9 @@ else
 
     TEMP_OUTPUT=$(mktemp)
     if [ "$VERBOSE" = true ]; then
-        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG --verbose 2>&1 | tee "$TEMP_OUTPUT"
+        python -u run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG --verbose 2>&1 | tee "$TEMP_OUTPUT"
     else
-        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG 2>&1 | tee "$TEMP_OUTPUT"
+        python -u run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG 2>&1 | tee "$TEMP_OUTPUT"
     fi
 
     PYTHON_EXIT_CODE=$?
@@ -276,7 +276,7 @@ else
     mkdir -p "$RUN_FOLDER/logs"
 
     if [ "$VERBOSE" = true ]; then
-        python run_postprocess.py --str-conf "$STRUCTURE_FILE" --sim-conf "$TEMP_SIM_CONFIG" --verbose 2>&1 | tee -a "$RUN_FOLDER/logs/pipeline.log"
+        python -u run_postprocess.py --str-conf "$STRUCTURE_FILE" --sim-conf "$TEMP_SIM_CONFIG" --verbose 2>&1 | tee -a "$RUN_FOLDER/logs/pipeline.log"
     else
         python run_postprocess.py --str-conf "$STRUCTURE_FILE" --sim-conf "$TEMP_SIM_CONFIG" >> "$RUN_FOLDER/logs/pipeline.log" 2>&1
     fi
