@@ -93,6 +93,78 @@ class BEMSolver(object):
                 'Ensure your mesh has the required symmetry.'.format(structure))
 
     # ------------------------------------------------------------------
+    # Simulation summary
+    # ------------------------------------------------------------------
+
+    def _print_summary(self,
+            comparticle: Any,
+            bem: Any,
+            excitations: List[Any],
+            wavelengths: np.ndarray,
+            calculate_cross_sections: bool,
+            calculate_fields: bool) -> None:
+
+        structure = self.config.get('structure', '')
+        n_faces = comparticle.nfaces
+        solver_name = type(bem).__name__
+        excitation_type = self.config['excitation_type']
+        n_exc = len(excitations)
+
+        # Excitation description
+        if excitation_type == 'planewave':
+            polarizations = self.config.get('polarizations', [[1, 0, 0]])
+            exc_desc = 'planewave ({} polarization{})'.format(
+                len(polarizations), 's' if len(polarizations) > 1 else '')
+        elif excitation_type == 'dipole':
+            exc_desc = 'dipole ({} object{})'.format(n_exc, 's' if n_exc > 1 else '')
+        else:
+            exc_desc = '{} ({} object{})'.format(excitation_type, n_exc, 's' if n_exc > 1 else '')
+
+        # Wavelength range
+        wl_min, wl_max, n_wl = wavelengths[0], wavelengths[-1], len(wavelengths)
+
+        # Substrate info
+        use_substrate = self.config.get('use_substrate', False)
+        if use_substrate:
+            materials_info = self.config.get('substrate', {})
+            z_interface = materials_info.get('z_interface', 0.0) if isinstance(materials_info, dict) else 0.0
+            substrate_desc = 'enabled (z = {})'.format(z_interface)
+        else:
+            substrate_desc = 'none'
+
+        # Field info
+        if calculate_fields:
+            field_region = self.config.get('field_region', {})
+            x_range = field_region.get('x_range', [-50, 50, 101])
+            y_range = field_region.get('y_range', [0, 0, 1])
+            z_range = field_region.get('z_range', [-50, 50, 101])
+
+            dims = []
+            for r in [x_range, y_range, z_range]:
+                if int(r[2]) > 1:
+                    dims.append(int(r[2]))
+            if len(dims) >= 2:
+                n_grid_pts = 1
+                for d in dims:
+                    n_grid_pts *= d
+                grid_desc = 'x'.join(str(d) for d in dims)
+                fields_desc = 'enabled ({}={} points)'.format(grid_desc, n_grid_pts)
+            else:
+                fields_desc = 'enabled'
+        else:
+            fields_desc = 'disabled'
+
+        print('=' * 60)
+        print('[info] Simulation Summary')
+        print('[info]   Structure:      {} ({} faces)'.format(structure if structure else 'custom', n_faces))
+        print('[info]   Solver:         {}'.format(solver_name))
+        print('[info]   Excitation:     {}'.format(exc_desc))
+        print('[info]   Wavelengths:    {:.0f}-{:.0f} nm ({} points)'.format(wl_min, wl_max, n_wl))
+        print('[info]   Substrate:      {}'.format(substrate_desc))
+        print('[info]   Fields:         {}'.format(fields_desc))
+        print('=' * 60)
+
+    # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
 
@@ -131,7 +203,20 @@ class BEMSolver(object):
         use_parallel = self.config.get('use_parallel', False)
         num_workers = self.config.get('num_workers', 1)
 
+        # Print simulation summary
+        if self.verbose:
+            self._print_summary(comparticle, bem, excitations, wavelengths,
+                                calculate_cross_sections, calculate_fields)
+
+        n_phases = (1 if calculate_cross_sections else 0) + (1 if calculate_fields else 0) + 1
+        phase_idx = 0
+
         if calculate_cross_sections:
+            phase_idx += 1
+            if self.verbose:
+                print('[info] --- Phase {}/{}: Cross Section Calculation ---'.format(
+                    phase_idx, n_phases))
+
             if use_parallel and num_workers != 1:
                 spectrum = self._run_parallel(
                     bem, excitations, comparticle, wavelengths, num_workers)
@@ -151,6 +236,11 @@ class BEMSolver(object):
         surface_charges_data = []
 
         if calculate_fields:
+            phase_idx += 1
+            if self.verbose:
+                print('[info] --- Phase {}/{}: Field Calculation ---'.format(
+                    phase_idx, n_phases))
+
             field_wl_indices = self._determine_field_wavelengths(
                 wavelengths, spectrum['extinction'])
 
@@ -176,6 +266,11 @@ class BEMSolver(object):
                     surface_charges_data.append(sc_result)
 
         t_elapsed = time.time() - t_start
+
+        phase_idx += 1
+        if self.verbose:
+            print('[info] --- Phase {}/{}: Saving Results ---'.format(
+                phase_idx, n_phases))
 
         # 7. Assemble results
         polarizations = self.config.get('polarizations', [[1, 0, 0]])
@@ -468,11 +563,10 @@ class BEMSolver(object):
 
         exc = excitations[0]  # single excitation object with all pols
         n_failed = 0
+        t_loop_start = time.time()
 
         for i, enei in enumerate(wavelengths):
-            if self.verbose and i % max(1, n_wl // 20) == 0:
-                print('[info] Progress: {}/{} (lambda = {:.1f} nm, {:.1f}%)'.format(
-                    i + 1, n_wl, enei, 100.0 * (i + 1) / n_wl))
+            t_wl_start = time.time()
 
             try:
                 # Initialize BEM at this wavelength
@@ -499,6 +593,14 @@ class BEMSolver(object):
                 sca[:, i] = np.nan
                 absorb[:, i] = np.nan
                 n_failed += 1
+
+            if self.verbose:
+                t_wl = time.time() - t_wl_start
+                t_elapsed = time.time() - t_loop_start
+                t_avg = t_elapsed / (i + 1)
+                t_remaining = t_avg * (n_wl - i - 1)
+                print('[info] [{}/{}] lambda = {:.1f} nm | {:.1f}s | ETA {:.0f}s ({:.1f} min)'.format(
+                    i + 1, n_wl, enei, t_wl, t_remaining, t_remaining / 60))
 
         if n_failed > 0:
             print('[info] {} / {} wavelengths failed and were set to NaN'.format(
@@ -605,6 +707,7 @@ class BEMSolver(object):
 
         n_chunks = (n_wl + chunk_size - 1) // chunk_size
         n_failed = 0
+        t_loop_start = time.time()
 
         for chunk_idx in range(n_chunks):
             i_start = chunk_idx * chunk_size
@@ -618,6 +721,8 @@ class BEMSolver(object):
 
             for local_i, enei in enumerate(wl_chunk):
                 global_i = i_start + local_i
+                t_wl_start = time.time()
+
                 try:
                     bem(enei)
                     pot = exc(comparticle, enei)
@@ -637,6 +742,14 @@ class BEMSolver(object):
                     sca[:, global_i] = np.nan
                     absorb[:, global_i] = np.nan
                     n_failed += 1
+
+                if self.verbose:
+                    t_wl = time.time() - t_wl_start
+                    t_elapsed = time.time() - t_loop_start
+                    t_avg = t_elapsed / (global_i + 1)
+                    t_remaining = t_avg * (n_wl - global_i - 1)
+                    print('[info] [{}/{}] lambda = {:.1f} nm | {:.1f}s | ETA {:.0f}s ({:.1f} min)'.format(
+                        global_i + 1, n_wl, enei, t_wl, t_remaining, t_remaining / 60))
 
         if n_failed > 0:
             print('[info] {} / {} wavelengths failed and were set to NaN'.format(
@@ -689,6 +802,12 @@ class BEMSolver(object):
         positions = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
         n_pts = positions.shape[0]
 
+        if self.verbose:
+            print('[info]   Grid: {}x{} = {} points'.format(
+                grid_shape[0], grid_shape[1], n_pts))
+
+        t_field_start = time.time()
+
         # Solve BEM at this wavelength
         bem(enei)
         pot = exc(comparticle, enei)
@@ -708,6 +827,9 @@ class BEMSolver(object):
         e_induced = np.zeros((n_pts, 3), dtype = complex)
 
         # Create ComPoint for ALL positions (not just exterior)
+        if self.verbose:
+            print('[info]   Computing Green function + field...', end = '', flush = True)
+
         pt = ComPoint(comparticle, positions)
 
         if sim_type == 'stat':
@@ -728,6 +850,10 @@ class BEMSolver(object):
             except Exception as e:
                 print('[error] Ret field calculation failed: {}'.format(e))
                 e_raw = np.zeros((pt.n, 3), dtype = complex)
+
+        if self.verbose:
+            t_field = time.time() - t_field_start
+            print(' done ({:.1f}s)'.format(t_field))
 
         # Handle multi-polarization: e_raw may be (n_active, 3, n_pol)
         if e_raw.ndim == 3:
