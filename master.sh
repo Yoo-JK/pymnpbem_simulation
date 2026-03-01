@@ -33,6 +33,7 @@ print_msg() {
 
 STRUCTURE_FILE=""
 SIMULATION_FILE=""
+MNPBEM_PATH=""
 VERBOSE=false
 REANALYZE_MODE=false
 
@@ -45,6 +46,7 @@ Required:
     --sim-conf PATH      Path to simulation configuration file
 
 Options:
+    --mnpbem-path PATH     Path to mnpbem source directory (e.g. ~/workspace/MNPBEM)
     --reanalyze            Skip simulation, only reanalyze existing results
     --verbose              Enable verbose output
     -h, --help             Show this help message
@@ -53,6 +55,7 @@ Examples:
   # Run full simulation + postprocessing
   ./master.sh --str-conf ./config/structure/config_structure.py \\
               --sim-conf ./config/simulation/config_simulation.py \\
+              --mnpbem-path ~/workspace/MNPBEM \\
               --verbose
 
   # Reanalyze existing results (skip simulation)
@@ -77,6 +80,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --sim-conf)
             SIMULATION_FILE="$2"
+            shift 2
+            ;;
+        --mnpbem-path)
+            MNPBEM_PATH="$2"
             shift 2
             ;;
         --reanalyze)
@@ -150,6 +157,9 @@ if [ "$REANALYZE_MODE" = true ]; then
     echo ""
     print_msg "  Structure config:  $STRUCTURE_FILE" "$BLUE"
     print_msg "  Simulation config: $SIMULATION_FILE" "$BLUE"
+    if [ -n "$MNPBEM_PATH" ]; then
+        print_msg "  mnpbem path:       $MNPBEM_PATH" "$BLUE"
+    fi
     print_msg "  Output directory:  $OUTPUT_DIR" "$BLUE"
     echo ""
 
@@ -204,17 +214,26 @@ else
     echo ""
     print_msg "  Structure config:  $STRUCTURE_FILE" "$BLUE"
     print_msg "  Simulation config: $SIMULATION_FILE" "$BLUE"
+    if [ -n "$MNPBEM_PATH" ]; then
+        print_msg "  mnpbem path:       $MNPBEM_PATH" "$BLUE"
+    fi
     print_msg "  Output directory:  $OUTPUT_DIR" "$BLUE"
     echo ""
+
+    # Build mnpbem-path argument
+    MNPBEM_ARG=""
+    if [ -n "$MNPBEM_PATH" ]; then
+        MNPBEM_ARG="--mnpbem-path $MNPBEM_PATH"
+    fi
 
     # Step 1: Run simulation (Python directly, no MATLAB)
     print_msg "  Step 1/2: Running BEM simulation..." "$YELLOW"
 
     TEMP_OUTPUT=$(mktemp)
     if [ "$VERBOSE" = true ]; then
-        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" --verbose 2>&1 | tee "$TEMP_OUTPUT"
+        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG --verbose 2>&1 | tee "$TEMP_OUTPUT"
     else
-        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" 2>&1 | tee "$TEMP_OUTPUT"
+        python run_simulation.py --str-conf "$STRUCTURE_FILE" --sim-conf "$SIMULATION_FILE" $MNPBEM_ARG 2>&1 | tee "$TEMP_OUTPUT"
     fi
 
     PYTHON_EXIT_CODE=$?

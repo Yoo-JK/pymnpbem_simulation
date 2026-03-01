@@ -3,6 +3,7 @@ from pathlib import Path
 
 args = {}
 
+args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/MNPBEM')
 
 # ============================================================================
 # PARALLEL COMPUTING OPTIONS

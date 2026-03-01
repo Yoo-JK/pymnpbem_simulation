@@ -3,6 +3,8 @@ from pathlib import Path
 
 args = {}
 
+args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/MNPBEM')
+
 # ============================================================================
 # Stat (Quasistatic) Simulation - 30nm Au Sphere
 # ============================================================================
@@ -39,7 +41,7 @@ args['export_field_arrays'] = False
 args['field_hotspot_count'] = 10
 args['field_hotspot_min_distance'] = 3
 
-args['output_dir'] = os.path.join(Path.home(), 'scratch/mat2py/sphere/stat/sphere_30nm')
+args['output_dir'] = os.path.join(Path.home(), 'research/mat2py/sphere/stat/sphere_30nm')
 args['save_format'] = 'npz'
 args['output_formats'] = ['txt', 'csv', 'json']
 args['save_plots'] = True

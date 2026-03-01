@@ -6,8 +6,6 @@ from typing import Dict, Any, List
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from simulation.calculate import SimulationManager
-
 
 def parse_arguments():
     import argparse
@@ -27,6 +25,12 @@ def parse_arguments():
         type = str,
         required = True,
         help = 'Path to simulation configuration file'
+    )
+    parser.add_argument(
+        '--mnpbem-path',
+        type = str,
+        default = None,
+        help = 'Path to mnpbem source directory (e.g. ~/workspace/MNPBEM)'
     )
     parser.add_argument(
         '--verbose',
@@ -134,12 +138,21 @@ def main() -> None:
     print('=' * 60)
     print()
 
-    # Load and merge configurations
+    # Load and merge configurations (before importing mnpbem)
     try:
         config = merge_configs(args_cli.str_conf, args_cli.sim_conf)
     except Exception as e:
         print('[error] Error loading configuration: {}'.format(e))
         sys.exit(1)
+
+    # Resolve mnpbem path: CLI arg > config > already installed
+    mnpbem_path = args_cli.mnpbem_path or config.get('mnpbem_path', None)
+    if mnpbem_path is not None:
+        mnpbem_path = str(Path(mnpbem_path).expanduser().resolve())
+        sys.path.insert(0, mnpbem_path)
+        print('[info] mnpbem path: {}'.format(mnpbem_path))
+
+    from simulation.calculate import SimulationManager
 
     # Validate configuration
     print('\nValidating configuration...')

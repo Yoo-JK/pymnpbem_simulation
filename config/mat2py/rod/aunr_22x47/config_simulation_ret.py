@@ -3,6 +3,8 @@ from pathlib import Path
 
 args = {}
 
+args['mnpbem_path'] = os.path.join(Path.home(), 'workspace/MNPBEM')
+
 # ============================================================================
 # Ret (Retarded) Simulation - 22x47 Au Nanorod
 # ============================================================================
@@ -39,7 +41,7 @@ args['export_field_arrays'] = False
 args['field_hotspot_count'] = 10
 args['field_hotspot_min_distance'] = 3
 
-args['output_dir'] = os.path.join(Path.home(), 'scratch/mat2py/rod/ret/aunr_22x47')
+args['output_dir'] = os.path.join(Path.home(), 'research/mat2py/rod/ret/aunr_22x47')
 args['save_format'] = 'npz'
 args['output_formats'] = ['txt']
 args['save_plots'] = True
