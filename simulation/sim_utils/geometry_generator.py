@@ -958,7 +958,11 @@ class GeometryGenerator(object):
             element_size = self.config.get('mesh_density', 2.0)
             n = self._element_size_to_n_rod(element_size, diameter, height)
 
-        p = trirod(diameter, height, n = n)
+        interp = self.config.get('interp', 'flat')
+        p = trirod(diameter, height, n = n, triangles = True)
+        if interp == 'curv':
+            p.interp = 'curv'
+            p._norm()
         # Rotate 90 degrees to lie along x-axis
         p.rot(90, [0, 1, 0])
         return [p]
@@ -1098,8 +1102,14 @@ class GeometryGenerator(object):
             n_shell = self._element_size_to_n_rod(
                 element_size, shell_diameter, shell_height)
 
-        p_core = trirod(core_diameter, core_height, n = n_core)
-        p_shell = trirod(shell_diameter, shell_height, n = n_shell)
+        interp = self.config.get('interp', 'flat')
+        p_core = trirod(core_diameter, core_height, n = n_core, triangles = True)
+        p_shell = trirod(shell_diameter, shell_height, n = n_shell, triangles = True)
+        if interp == 'curv':
+            p_core.interp = 'curv'
+            p_core._norm()
+            p_shell.interp = 'curv'
+            p_shell._norm()
 
         # Rotate 90 degrees to lie along x-axis
         p_core.rot(90, [0, 1, 0])
