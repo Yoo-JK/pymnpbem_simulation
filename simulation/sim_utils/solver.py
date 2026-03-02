@@ -127,7 +127,7 @@ class BEMSolver(object):
         use_substrate = self.config.get('use_substrate', False)
         if use_substrate:
             materials_info = self.config.get('substrate', {})
-            z_interface = materials_info.get('z_interface', 0.0) if isinstance(materials_info, dict) else 0.0
+            z_interface = materials_info.get('position', 0.0) if isinstance(materials_info, dict) else 0.0
             substrate_desc = 'enabled (z = {})'.format(z_interface)
         else:
             substrate_desc = 'none'
