@@ -4,6 +4,12 @@ from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 from datetime import datetime
 
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
 from .sim_utils.solver import BEMSolver
 
 
@@ -100,6 +106,9 @@ class SimulationManager(object):
 
         particles = self._generate_particles()
 
+        # 3.5 Visualize geometry
+        self._visualize_geometry(particles)
+
         # 4. Generate materials via MaterialManager
         if self.verbose:
             print('[info] Generating materials...')
@@ -132,6 +141,177 @@ class SimulationManager(object):
             print('================================================================')
 
         return self.results
+
+    def _visualize_geometry(self, particles: List[Any]) -> Optional[str]:
+        output_dir = str(self.run_folder)
+        plot_format = self.config.get('plot_format', ['png'])
+        if isinstance(plot_format, str):
+            plot_format = [plot_format]
+        plot_dpi = self.config.get('plot_dpi', 300)
+
+        if self.verbose:
+            print('[info] Visualizing geometry...')
+
+        # Collect all vertices/faces from particles
+        all_verts_list = []
+        all_faces_list = []
+        particle_ids = []  # which particle each face belongs to
+        vert_offset = 0
+
+        for pid, p in enumerate(particles):
+            verts = p.verts
+            faces = p.faces
+            if len(faces) == 0:
+                continue
+
+            all_verts_list.append(verts)
+
+            # Offset face indices by accumulated vertex count
+            faces_shifted = faces.copy()
+            valid_mask = ~np.isnan(faces_shifted)
+            faces_shifted[valid_mask] = faces_shifted[valid_mask] + vert_offset
+
+            all_faces_list.append(faces_shifted)
+            particle_ids.extend([pid] * len(faces))
+            vert_offset += len(verts)
+
+        if len(all_verts_list) == 0:
+            if self.verbose:
+                print('[info] No geometry to visualize (empty particles)')
+            return None
+
+        all_verts = np.vstack(all_verts_list)
+        all_faces = np.vstack(all_faces_list)
+        particle_ids = np.array(particle_ids)
+
+        total_faces = len(all_faces)
+        total_verts = len(all_verts)
+
+        # Split quads into triangles (faces are 0-based)
+        tri_faces = []
+        tri_particle_ids = []
+        for i, face in enumerate(all_faces):
+            v0, v1, v2 = int(face[0]), int(face[1]), int(face[2])
+            tri_faces.append([v0, v1, v2])
+            tri_particle_ids.append(particle_ids[i])
+
+            if not np.isnan(face[3]):
+                v3 = int(face[3])
+                tri_faces.append([v0, v2, v3])
+                tri_particle_ids.append(particle_ids[i])
+
+        tri_faces = np.array(tri_faces)
+        tri_particle_ids = np.array(tri_particle_ids)
+
+        # Colors for different particles
+        particle_colors = [
+            '#DAA520',  # goldenrod
+            '#B8860B',  # dark goldenrod
+            '#FFD700',  # gold
+            '#CD853F',  # peru
+            '#D2691E',  # chocolate
+        ]
+
+        face_colors = []
+        for pid in tri_particle_ids:
+            face_colors.append(particle_colors[pid % len(particle_colors)])
+
+        # 4 viewpoints: perspective, top, front, side
+        views = [
+            ('Perspective', 30, -60),
+            ('Top (z+)', 90, -90),
+            ('Front (y-)', 0, -90),
+            ('Side (x+)', 0, 0),
+        ]
+
+        fig = plt.figure(figsize = (14, 12))
+        fig.patch.set_facecolor('white')
+
+        structure_name = self.config.get('structure', 'unknown')
+        fig.suptitle('{} | {} faces, {} vertices'.format(
+            structure_name, total_faces, total_verts),
+            fontsize = 14, fontweight = 'bold', y = 0.98)
+
+        verts_tri = all_verts[tri_faces]
+
+        # Axis limits (equal aspect)
+        x_min, x_max = all_verts[:, 0].min(), all_verts[:, 0].max()
+        y_min, y_max = all_verts[:, 1].min(), all_verts[:, 1].max()
+        z_min, z_max = all_verts[:, 2].min(), all_verts[:, 2].max()
+
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        z_range = z_max - z_min
+        max_range = max(x_range, y_range, z_range)
+
+        # Add some padding
+        pad = max_range * 0.1
+        x_mid = (x_min + x_max) / 2
+        y_mid = (y_min + y_max) / 2
+        z_mid = (z_min + z_max) / 2
+        half = max_range / 2 + pad
+
+        # Substrate
+        use_substrate = self.config.get('use_substrate', False)
+        z_interface = self.config.get('z_interface', 0.0)
+
+        for idx, (title, elev, azim) in enumerate(views):
+            ax = fig.add_subplot(2, 2, idx + 1, projection = '3d')
+
+            poly = Poly3DCollection(
+                verts_tri, alpha = 0.85,
+                edgecolor = 'k', linewidth = 0.2)
+            poly.set_facecolor(face_colors)
+            ax.add_collection3d(poly)
+
+            # Substrate plane
+            if use_substrate:
+                substrate_half = half * 1.2
+                sx = [x_mid - substrate_half, x_mid + substrate_half,
+                      x_mid + substrate_half, x_mid - substrate_half]
+                sy = [y_mid - substrate_half, y_mid - substrate_half,
+                      y_mid + substrate_half, y_mid + substrate_half]
+                sz = [z_interface] * 4
+                substrate_verts = [list(zip(sx, sy, sz))]
+                substrate_poly = Poly3DCollection(
+                    substrate_verts, alpha = 0.2,
+                    facecolor = '#4682B4', edgecolor = '#4682B4',
+                    linewidth = 0.5, linestyle = '--')
+                ax.add_collection3d(substrate_poly)
+
+            ax.set_xlim(x_mid - half, x_mid + half)
+            ax.set_ylim(y_mid - half, y_mid + half)
+            ax.set_zlim(z_mid - half, z_mid + half)
+
+            ax.set_xlabel('x (nm)', fontsize = 9)
+            ax.set_ylabel('y (nm)', fontsize = 9)
+            ax.set_zlabel('z (nm)', fontsize = 9)
+            ax.set_title(title, fontsize = 11)
+
+            ax.view_init(elev = elev, azim = azim)
+
+            if max_range > 0:
+                ax.set_box_aspect([
+                    x_range / max_range if x_range > 0 else 0.1,
+                    y_range / max_range if y_range > 0 else 0.1,
+                    z_range / max_range if z_range > 0 else 0.1,
+                ])
+
+        plt.tight_layout(rect = [0, 0, 1, 0.95])
+
+        saved_files = []
+        for fmt in plot_format:
+            filepath = os.path.join(output_dir, 'geometry_preview.{}'.format(fmt))
+            fig.savefig(filepath, dpi = plot_dpi, bbox_inches = 'tight')
+            saved_files.append(filepath)
+
+        plt.close(fig)
+
+        if self.verbose:
+            for f in saved_files:
+                print('[info] Saved geometry preview: {}'.format(f))
+
+        return saved_files[0] if saved_files else None
 
     def _generate_particles(self) -> List[Any]:
         # Lazy import to avoid circular dependencies

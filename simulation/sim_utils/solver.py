@@ -1,7 +1,7 @@
+import gc
 import os
 import time
 import warnings
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Dict, List, Tuple, Optional, Any, Union
 
 import numpy as np
@@ -218,7 +218,7 @@ class BEMSolver(object):
                     phase_idx, n_phases))
 
             if use_parallel and num_workers != 1:
-                spectrum = self._run_parallel(
+                spectrum = self._run_chunked(
                     bem, excitations, comparticle, wavelengths, num_workers)
             else:
                 spectrum = self._run_wavelength_loop(
@@ -668,10 +668,10 @@ class BEMSolver(object):
             return 1
 
     # ------------------------------------------------------------------
-    # Wavelength loop (parallel with chunking)
+    # Wavelength loop (chunked serial execution)
     # ------------------------------------------------------------------
 
-    def _run_parallel(self,
+    def _run_chunked(self,
             bem: Any,
             excitations: List[Any],
             comparticle: Any,
@@ -692,7 +692,7 @@ class BEMSolver(object):
         actual_workers = max(1, actual_workers)
 
         if self.verbose:
-            print('[info] Parallel execution with {} workers'.format(actual_workers))
+            print('[info] Chunked serial execution (chunk workers={})'.format(actual_workers))
 
         # Set up Green function tabulation grid (substrate solvers only)
         if hasattr(bem, 'setup_tabulation'):
@@ -768,6 +768,9 @@ class BEMSolver(object):
                     t_remaining = t_avg * (n_wl - global_i - 1)
                     print('[info] [{}/{}] lambda = {:.1f} nm | {:.1f}s | ETA {:.0f}s ({:.1f} min)'.format(
                         global_i + 1, n_wl, enei, t_wl, t_remaining, t_remaining / 60))
+
+            # Clear memory between chunks
+            gc.collect()
 
         if n_failed > 0:
             print('[info] {} / {} wavelengths failed and were set to NaN'.format(
