@@ -550,6 +550,15 @@ class BEMSolver(object):
             comparticle: Any,
             wavelengths: np.ndarray) -> Dict[str, np.ndarray]:
 
+        # Set up Green function tabulation grid (substrate solvers only)
+        if hasattr(bem, 'setup_tabulation'):
+            if self.verbose:
+                print('[info] Setting up Green function tabulation grid...')
+            t_tab = time.time()
+            bem.setup_tabulation()
+            if self.verbose:
+                print('[info] Tabulation grid ready ({:.1f}s)'.format(time.time() - t_tab))
+
         n_wl = len(wavelengths)
         excitation_type = self.config['excitation_type']
         sim_type = self.config['simulation_type']
@@ -684,6 +693,15 @@ class BEMSolver(object):
 
         if self.verbose:
             print('[info] Parallel execution with {} workers'.format(actual_workers))
+
+        # Set up Green function tabulation grid (substrate solvers only)
+        if hasattr(bem, 'setup_tabulation'):
+            if self.verbose:
+                print('[info] Setting up Green function tabulation grid...')
+            t_tab = time.time()
+            bem.setup_tabulation()
+            if self.verbose:
+                print('[info] Tabulation grid ready ({:.1f}s)'.format(time.time() - t_tab))
 
         # Chunk wavelengths
         chunk_size = self.config.get('wavelength_chunk_size', None)
