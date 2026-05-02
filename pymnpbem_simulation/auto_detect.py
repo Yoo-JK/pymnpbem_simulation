@@ -102,6 +102,39 @@ def detect_multi_node() -> bool:
         except ValueError:
             pass
 
+    if 'PMIX_RANK' in os.environ:
+
+        if 'PMIX_NAMESPACE' in os.environ or 'PMIX_SERVER_URI' in os.environ \
+                or 'PMIX_HOSTNAME' in os.environ:
+            return True
+
+    if 'PBS_NODEFILE' in os.environ:
+        path = os.environ['PBS_NODEFILE']
+
+        if os.path.exists(path):
+
+            try:
+
+                with open(path) as f:
+                    unique_nodes = set(
+                            line.strip() for line in f if line.strip())
+
+                    if len(unique_nodes) > 1:
+                        return True
+
+            except OSError:
+                pass
+
+    if 'SLURM_PROCID' in os.environ and 'SLURM_NNODES' in os.environ:
+
+        try:
+
+            if int(os.environ['SLURM_NNODES']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
     return False
 
 
