@@ -1,0 +1,39 @@
+structure:
+  type: sphere
+  diameter: 30.0
+  mesh_density: 144
+  refine: 2
+  interp: curv
+
+simulation:
+  type: stat
+  excitation: eels
+  enei_min: 400
+  enei_max: 700
+  n_wavelengths: 5
+  electron:
+    impact: [[20.0, 0.0]]
+    energy_kev: 200.0
+    width: 0.5
+
+materials:
+  medium: vacuum
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 2
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: sphere_eels_stat
+  formats:
+    - npz
+    - json
+  save_plots: false
+
+postprocess:
+  run_eigenmode_analysis: false
