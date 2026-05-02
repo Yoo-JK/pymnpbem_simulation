@@ -1,0 +1,55 @@
+structure:
+  type: dimer_cube
+  edge: 47.0
+  gap: 0.6
+  n_per_edge: 12
+  e: 0.2
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 600
+  enei_max: 700
+  n_wavelengths: 3
+  polarizations:
+    - [1, 0, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+  interp: curv
+  grid:
+    type: rectangular
+    x_range: [-60, 60]
+    y_range: [0, 0]
+    z_range: [-60, 60]
+    n_points: [21, 1, 21]
+  mindist: 2.0
+  nmax: null
+  inout: 2
+  fmm: false
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: dimer_field
+  formats:
+    - npz
+    - json
+    - png
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  field_threshold_quantile: 0.95
+  run_eigenmode_analysis: false
