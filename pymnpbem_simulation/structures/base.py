@@ -20,7 +20,7 @@ class StructureBuilder(object):
 def build_structure(cfg_struct: Dict[str, Any],
         cfg_materials: Dict[str, Any]) -> Tuple[Any, Any, int]:
 
-    from . import sphere, dimer_cube
+    from . import sphere, dimer_cube, with_substrate
 
     stype = cfg_struct.get('type', '').lower()
 
@@ -33,6 +33,10 @@ def build_structure(cfg_struct: Dict[str, Any],
         case 'dimer_cube' | 'advanced_dimer_cube':
 
             builder = dimer_cube.DimerCubeBuilder(cfg_struct, cfg_materials)
+
+        case 'with_substrate':
+
+            builder = with_substrate.WithSubstrateBuilder(cfg_struct, cfg_materials)
 
         case _:
 
