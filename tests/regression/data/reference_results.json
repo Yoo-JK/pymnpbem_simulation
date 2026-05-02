@@ -1,0 +1,80 @@
+{
+  "_meta": {
+    "description": "pymnpbem_simulation Wave 3 M10 regression reference values",
+    "source": "Wave 2 merge smoke results + lane_results/baseline_cpu.json",
+    "generated": "2026-05-02",
+    "main_head": "9cac8ba"
+  },
+  "dimer_baseline_2wl": {
+    "yaml": "examples/dimer_baseline.yaml",
+    "n_wavelengths": 2,
+    "n_faces_expected": 6336,
+    "peak_ext_x": 8744.331,
+    "peak_wl_nm": 500.0,
+    "tolerance": 1e-3,
+    "marker": "slow",
+    "source": "Wave 2 smoke test 1"
+  },
+  "cube_2wl": {
+    "yaml_inline": true,
+    "n_wavelengths": 2,
+    "structure": "cube",
+    "peak_ext_x": 1678.476,
+    "peak_wl_nm": 500.0,
+    "tolerance": 1e-3,
+    "marker": "fast",
+    "source": "Wave 2 smoke test 2"
+  },
+  "sphere_dipole_2wl": {
+    "yaml": "examples/sphere_dipole.yaml",
+    "n_wavelengths": 2,
+    "peak_decay_total": 25.221,
+    "peak_wl_nm": 500.0,
+    "tolerance": 1e-3,
+    "marker": "fast",
+    "source": "Wave 2 smoke test 3"
+  },
+  "sphere_substrate_2wl": {
+    "yaml": "examples/sphere_substrate.yaml",
+    "n_wavelengths": 2,
+    "peak_ext_x": 74.922,
+    "peak_wl_nm": 450.0,
+    "tolerance": 1e-3,
+    "marker": "fast",
+    "source": "Wave 2 smoke test 4"
+  },
+  "dimer_field_1wl": {
+    "yaml": "examples/dimer_field.yaml",
+    "n_wavelengths": 1,
+    "peak_ext_x": 18934.484,
+    "tolerance": 1e-3,
+    "marker": "slow",
+    "source": "Wave 2 smoke test 5 (PARTIAL — fallback path)"
+  },
+  "dimer_baseline_cpu_pool_2wl": {
+    "yaml": "examples/dimer_baseline.yaml",
+    "n_wavelengths": 2,
+    "n_workers": 2,
+    "peak_ext_x": 8744.331,
+    "peak_wl_nm": 500.0,
+    "tolerance": 1e-3,
+    "marker": "slow",
+    "source": "Wave 2 smoke test 6"
+  },
+  "dimer_baseline_lane": {
+    "json_ref": "/home/yoojk20/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json",
+    "n_faces": 6336,
+    "peak_ext_x_at_636nm": 39344.20355464538,
+    "matlab_ext_x_at_636nm": 39344.11,
+    "ext_x_max_rel_vs_matlab": 1.6794e-4,
+    "tolerance": 1e-3,
+    "marker": "long",
+    "source": "lane_results/baseline_cpu.json (full 100 wl run)"
+  },
+  "grade_thresholds": {
+    "machine": 1e-12,
+    "OK": 1e-9,
+    "good": 1e-6,
+    "warn": 1e-3
+  }
+}
