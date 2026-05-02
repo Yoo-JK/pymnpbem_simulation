@@ -23,6 +23,26 @@ class SimulationRunner(object):
             enei: np.ndarray) -> Dict[str, Any]:
         raise NotImplementedError('[error] Subclass must implement run()')
 
+    def _bem_options(self) -> Dict[str, Any]:
+        """Optional BEM solver kwargs derived from particle metadata.
+
+        Currently forwards the cover-layer refinement callable
+        (``_mnpbem_refun`` set by WithNonlocalBuilder via
+        ``coverlayer.refine``) to the underlying CompGreenStat. Only
+        stat-path BEM solvers (BEMStat / BEMStatIter) consume ``refun``;
+        BEMRet does not yet expose this hook in mnpbem. Nonlocal
+        cover-layer simulations must therefore set
+        ``simulation.type = 'stat'`` to match MATLAB MNPBEM
+        demospecstat19.m.
+        """
+        opts: Dict[str, Any] = dict()
+        refun = getattr(self.p, '_mnpbem_refun', None)
+        if refun is None and hasattr(self.p, 'pfull'):
+            refun = getattr(self.p.pfull, '_mnpbem_refun', None)
+        if refun is not None:
+            opts['refun'] = refun
+        return opts
+
 
 def _get_registry() -> Dict[str, Any]:
     from . import planewave_ret, planewave_stat

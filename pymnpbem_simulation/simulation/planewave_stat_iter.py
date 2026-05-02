@@ -44,6 +44,7 @@ class PlaneWaveStatIterRunner(SimulationRunner):
         from mnpbem.bem import BEMStatIter
 
         opts = _iter_options(self.cfg)
+        opts.update(self._bem_options())
         return BEMStatIter(self.p, **opts)
 
     def run(self,
