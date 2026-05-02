@@ -19,6 +19,7 @@ from .sphere_cluster import SphereClusterBuilder
 from .from_shape import FromShapeBuilder
 from .with_substrate import WithSubstrateBuilder
 from .with_mirror import WithMirrorBuilder
+from .with_nonlocal import WithNonlocalBuilder
 
 
 REGISTRY = {
@@ -40,7 +41,8 @@ REGISTRY = {
         'sphere_cluster': SphereClusterBuilder,
         'from_shape': FromShapeBuilder,
         'with_substrate': WithSubstrateBuilder,
-        'with_mirror': WithMirrorBuilder}
+        'with_mirror': WithMirrorBuilder,
+        'with_nonlocal': WithNonlocalBuilder}
 
 
 def build_structure(cfg_struct: Dict[str, Any],
@@ -77,4 +79,5 @@ __all__ = [
         'SphereClusterBuilder',
         'FromShapeBuilder',
         'WithSubstrateBuilder',
-        'WithMirrorBuilder']
+        'WithMirrorBuilder',
+        'WithNonlocalBuilder']
