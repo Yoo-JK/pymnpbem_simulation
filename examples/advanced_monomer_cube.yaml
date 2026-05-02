@@ -1,0 +1,41 @@
+structure:
+  type: advanced_monomer_cube
+  core_size: 20.0
+  shell_layers: [3, 5]
+  materials: [gold, silver, gold]
+  roundings: [0.25, 0.25, 0.25]
+  n_per_edge: 12
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 500
+  enei_max: 1000
+  n_wavelengths: 30
+  polarizations:
+    - [1, 0, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+  interp: curv
+
+materials:
+  medium: water
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: advanced_monomer_cube
+  formats: [npz, json, png]
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false
