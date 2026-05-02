@@ -10,7 +10,7 @@ structure:
     sym: xy
 
 simulation:
-  type: ret
+  type: ret_mirror
   excitation: planewave
   enei_min: 500
   enei_max: 800
