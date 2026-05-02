@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N pymnpbem
+#PBS -l select=1:ncpus=16:ngpus=4
+#PBS -l walltime=24:00:00
+#PBS -o logs/single_node_gpu.out
+#PBS -e logs/single_node_gpu.err
+
+# Single-node 4-GPU PBS submission.
+# Submit:
+#   qsub -v CONFIG=examples/dimer_baseline.yaml pbs_scripts/single_node_gpu.pbs
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+mkdir -p logs
+
+source ~/.bashrc
+conda activate mnpbem
+
+CONFIG="${CONFIG:-examples/dimer_baseline.yaml}"
+
+echo "[pbs] job_id=${PBS_JOBID} nodes=${PBS_NUM_NODES:-1} ngpus=${PBS_NGPUS:-?}"
+echo "[pbs] config=${CONFIG}"
+
+python run_simulation.py --config "${CONFIG}" --auto

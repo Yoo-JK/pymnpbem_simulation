@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N pymnpbem_mn4
+#PBS -l select=4:ncpus=16:ngpus=4:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -o logs/multi_node_4.out
+#PBS -e logs/multi_node_4.err
+
+# Multi-node MPI on PBS (4 nodes x 4 GPUs = 16-way wavelength parallelism).
+# Submit:
+#   qsub -v CONFIG=examples/large_mesh_multinode.yaml pbs_scripts/multi_node_4.pbs
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+mkdir -p logs
+
+source ~/.bashrc
+conda activate mnpbem
+
+CONFIG="${CONFIG:-examples/large_mesh_multinode.yaml}"
+
+echo "[pbs] job_id=${PBS_JOBID} nodefile=${PBS_NODEFILE}"
+sort -u "${PBS_NODEFILE}" | sed 's/^/  /'
+echo "[pbs] config=${CONFIG}"
+
+mpirun -np "${PBS_NUM_NODES:-4}" python run_simulation.py \
+    --config "${CONFIG}" --multi-node --auto
