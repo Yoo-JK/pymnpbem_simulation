@@ -92,14 +92,42 @@ def _dispatch_vram_share(cfg: Dict[str, Any],
         p: Any,
         epstab: Any,
         enei: np.ndarray) -> Dict[str, Any]:
+    """v1.2.0: VRAM share — pool multi-GPU memory for one large LU factorisation.
 
+    Activated when ``compute.n_gpus_per_worker > 1``. Sets the
+    ``MNPBEM_VRAM_SHARE`` family of environment variables that the
+    mnpbem ``lu_factor_dispatch`` (Agent β) consults at runtime, then
+    falls through to the standard single-GPU dispatch path so that the
+    dense LU factor in BEMStat/BEMRet is partitioned across GPUs by the
+    chosen backend (cuSolverMg / Magma / NCCL).
+
+    If the installed mnpbem port has not yet adopted the VRAM-share env
+    vars (Agent β still in flight), the env vars are simply ignored and
+    the run degrades to a single-GPU LU on the default device.
+    """
     backend = cfg['compute'].get('vram_share_backend', 'cusolvermg')
     n_gpus_per_worker = int(cfg['compute']['n_gpus_per_worker'])
 
-    raise NotImplementedError(
-            '[error] VRAM share (n_gpus_per_worker={}) with backend <{}> '
-            'is planned for M5+ release. See project_mnpbem_gpu_vram_sharing memo.'.format(
+    print_info(
+            'VRAM share dispatch: n_gpus_per_worker={}, backend={}'.format(
                     n_gpus_per_worker, backend))
+
+    os.environ['MNPBEM_VRAM_SHARE'] = '1'
+    os.environ['MNPBEM_VRAM_SHARE_GPUS'] = str(n_gpus_per_worker)
+    os.environ['MNPBEM_VRAM_SHARE_BACKEND'] = str(backend)
+
+    # Single worker handles the full computation; the LU dispatch picks
+    # up the env vars internally and partitions across the requested GPUs.
+    from .single_node import _dispatch_single_gpu
+    try:
+        return _dispatch_single_gpu(cfg, p, epstab, enei)
+    finally:
+        # Best-effort cleanup so subsequent dispatches in the same process
+        # don't inherit stale VRAM-share state.
+        for key in ('MNPBEM_VRAM_SHARE',
+                'MNPBEM_VRAM_SHARE_GPUS',
+                'MNPBEM_VRAM_SHARE_BACKEND'):
+            os.environ.pop(key, None)
 
 
 def _make_particle_factory(cfg: Dict[str, Any]):
