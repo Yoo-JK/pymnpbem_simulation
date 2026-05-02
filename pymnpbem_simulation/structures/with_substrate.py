@@ -85,6 +85,22 @@ class WithSubstrateBuilder(StructureBuilder):
         # Build the LayerStructure: top layer = medium, bottom layer = substrate.
         layer = LayerStructure(epstab, [medium_idx, sub_idx], [z_position])
 
+        # ComParticle was built by the base builder with only [medium, particle]
+        # in its eps list. Spectrum/far-field code paths reference
+        # ``p.eps[layer.ind[-1] - 1]`` to look up the substrate refractive
+        # index, so the extended epstab (including substrate) must be visible
+        # on the particle. Splice the full table in-place.
+        try:
+            p.eps = list(epstab)
+        except Exception:
+            pass
+
+        if hasattr(p, 'pc') and p.pc is not None:
+            try:
+                p.pc.eps = list(epstab)
+            except Exception:
+                pass
+
         # Shift the base particle so its lowest face sits z_shift above the
         # substrate interface.
         try:
