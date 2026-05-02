@@ -17,7 +17,20 @@ def dispatch_mpi(cfg: Dict[str, Any],
         import mpi4py  # noqa: F401
     except ImportError:
         raise RuntimeError(
-                '[error] mpi4py not installed. pip install mpi4py and run with srun/mpirun.')
+                '[error] mpi4py not installed. install via:\n'
+                '  pip install pymnpbem_simulation[mpi]\n'
+                'or directly:\n'
+                '  pip install mpi4py>=4.0\n'
+                '(requires OpenMPI/MPICH at OS level - on conda env you can\n'
+                ' install with: conda install -c conda-forge openmpi mpi4py)')
+
+    try:
+        from mpi4py import MPI  # noqa: F401
+    except (ImportError, RuntimeError) as exc:
+        raise RuntimeError(
+                '[error] mpi4py import succeeded but MPI library load failed: {}\n'
+                'please install OS-level MPI (OpenMPI/MPICH) or use:\n'
+                '  conda install -c conda-forge openmpi'.format(exc))
 
     from mnpbem.utils.mpi_dispatch import solve_spectrum_mpi
 

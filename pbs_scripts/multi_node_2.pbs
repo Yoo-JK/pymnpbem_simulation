@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N pymnpbem_mn2
+#PBS -l select=2:ncpus=16:ngpus=4:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -o logs/multi_node_2.out
+#PBS -e logs/multi_node_2.err
+
+# Multi-node MPI on PBS (2 nodes x 4 GPUs).
+# Submit:
+#   qsub -v CONFIG=examples/dimer_multinode.yaml pbs_scripts/multi_node_2.pbs
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+mkdir -p logs
+
+source ~/.bashrc
+conda activate mnpbem
+
+CONFIG="${CONFIG:-examples/dimer_multinode.yaml}"
+
+echo "[pbs] job_id=${PBS_JOBID} nodefile=${PBS_NODEFILE}"
+echo "[pbs] unique nodes:"
+sort -u "${PBS_NODEFILE}" | sed 's/^/  /'
+echo "[pbs] config=${CONFIG}"
+
+# mpirun reads ${PBS_NODEFILE} by default for host list.
+mpirun -np "${PBS_NUM_NODES:-2}" python run_simulation.py \
+    --config "${CONFIG}" --multi-node --auto

@@ -1,14 +1,14 @@
-# Multi-node MPI dimer (2 nodes x 4 GPUs = 8-way wavelength split).
+# Large mesh + multi-node config.
 #
-# Submit with:
-#   sbatch --export=CONFIG=examples/dimer_multinode.yaml \
-#          slurm_scripts/multi_node_2.slurm
-# or:
-#   qsub -v CONFIG=examples/dimer_multinode.yaml \
-#        pbs_scripts/multi_node_2.pbs
+# Targets multi-node MPI deployment (4 nodes x 4 GPUs = 16-way wavelength
+# parallelism). Use with slurm_scripts/multi_node_4.slurm or
+# pbs_scripts/multi_node_4.pbs:
 #
-# Each MPI rank uses 1 GPU explicitly (n_gpus_per_worker=1). For VRAM-pool
-# pattern (rank uses all 4 GPUs of its host), see large_mesh_multinode.yaml.
+#   sbatch --export=CONFIG=examples/large_mesh_multinode.yaml \
+#          slurm_scripts/multi_node_4.slurm
+#
+# Mesh density: refine=3 + n_per_edge=24 -> ~6336 faces.
+# 100 wavelengths split as 25 per node -> 6-7 wl per GPU.
 
 structure:
   type: dimer_cube
@@ -40,13 +40,13 @@ materials:
 compute:
   n_workers: 1
   n_threads: 4
-  n_gpus_per_worker: 1
+  n_gpus_per_worker: 4
   multi_node: true
   hmode: dense
 
 output:
   dir: ./results
-  name: dimer_multinode
+  name: large_mesh_multinode
   formats:
     - npz
     - json
