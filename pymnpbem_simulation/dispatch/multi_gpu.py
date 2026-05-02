@@ -103,15 +103,18 @@ def _dispatch_vram_share(cfg: Dict[str, Any],
 
 
 def _make_particle_factory(cfg: Dict[str, Any]):
+    import functools
     cfg_struct = cfg['structure']
     cfg_materials = cfg.get('materials', dict())
 
-    def _factory():
-        from ..structures import build_structure
-        p, _, _ = build_structure(cfg_struct, cfg_materials)
-        return p
+    return functools.partial(_particle_factory_top, cfg_struct, cfg_materials)
 
-    return _factory
+
+def _particle_factory_top(cfg_struct: Dict[str, Any],
+        cfg_materials: Dict[str, Any]):
+    from pymnpbem_simulation.structures import build_structure
+    p, _, _ = build_structure(cfg_struct, cfg_materials)
+    return p
 
 
 def _build_bem_kwargs(cfg: Dict[str, Any]) -> Dict[str, Any]:
