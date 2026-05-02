@@ -18,6 +18,7 @@ from .connected_dimer_cube import ConnectedDimerCubeBuilder
 from .sphere_cluster import SphereClusterBuilder
 from .from_shape import FromShapeBuilder
 from .with_substrate import WithSubstrateBuilder
+from .with_mirror import WithMirrorBuilder
 
 
 REGISTRY = {
@@ -38,7 +39,8 @@ REGISTRY = {
         'sphere_cluster_aggregate': SphereClusterBuilder,
         'sphere_cluster': SphereClusterBuilder,
         'from_shape': FromShapeBuilder,
-        'with_substrate': WithSubstrateBuilder}
+        'with_substrate': WithSubstrateBuilder,
+        'with_mirror': WithMirrorBuilder}
 
 
 def build_structure(cfg_struct: Dict[str, Any],
@@ -74,4 +76,5 @@ __all__ = [
         'ConnectedDimerCubeBuilder',
         'SphereClusterBuilder',
         'FromShapeBuilder',
-        'WithSubstrateBuilder']
+        'WithSubstrateBuilder',
+        'WithMirrorBuilder']
