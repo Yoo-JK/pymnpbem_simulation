@@ -92,22 +92,39 @@ def dominant_l(multipole: Box) -> int:
     return int(np.argmax(power_l[1:]) + 1)
 
 
+try:
+    from scipy.special import sph_harm_y as _scipy_sph_harm_y
+
+    def _sph_harm(m: int,
+            l: int,
+            phi: np.ndarray,
+            theta: np.ndarray) -> np.ndarray:
+        # scipy >= 1.15: sph_harm_y(l, m, theta, phi).
+        return _scipy_sph_harm_y(l, m, theta, phi)
+
+except ImportError:
+    from scipy.special import sph_harm as _scipy_sph_harm_legacy
+
+    def _sph_harm(m: int,
+            l: int,
+            phi: np.ndarray,
+            theta: np.ndarray) -> np.ndarray:
+        # scipy < 1.15: sph_harm(m, l, phi, theta).
+        return _scipy_sph_harm_legacy(m, l, phi, theta)
+
+
 def _real_sph_harm(l: int,
         m: int,
         theta: np.ndarray,
         phi: np.ndarray) -> np.ndarray:
 
-    from scipy.special import sph_harm
-
-    # scipy.special.sph_harm expects (m, l, phi, theta) - returns complex Y_lm.
-    # Convert to real spherical harmonics for stable, real expansion coefficients.
+    # Returns real spherical harmonics for stable, real expansion coefficients.
     if m > 0:
-        ylm_p = sph_harm(m, l, phi, theta)
-        ylm_n = sph_harm(-m, l, phi, theta)
+        ylm_p = _sph_harm(m, l, phi, theta)
         return float(np.sqrt(2.0)) * ((-1) ** m) * np.real(ylm_p)
 
     if m < 0:
-        ylm_p = sph_harm(-m, l, phi, theta)
+        ylm_p = _sph_harm(-m, l, phi, theta)
         return float(np.sqrt(2.0)) * ((-1) ** m) * np.imag(ylm_p)
 
-    return np.real(sph_harm(0, l, phi, theta))
+    return np.real(_sph_harm(0, l, phi, theta))
