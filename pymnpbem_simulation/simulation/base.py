@@ -39,6 +39,21 @@ def run_simulation(cfg: Dict[str, Any],
             from . import planewave_ret
             runner = planewave_ret.PlaneWaveRetRunner(cfg, p, epstab)
 
+        case ('ret_layer', 'planewave'):
+
+            from . import planewave_ret_layer
+            runner = planewave_ret_layer.PlaneWaveRetLayerRunner(cfg, p, epstab)
+
+        case ('ret_layer', 'dipole'):
+
+            from . import dipole_ret_layer
+            runner = dipole_ret_layer.DipoleRetLayerRunner(cfg, p, epstab)
+
+        case ('ret_layer', 'eels'):
+
+            from . import eels_ret_layer
+            runner = eels_ret_layer.EelsRetLayerRunner(cfg, p, epstab)
+
         case _:
 
             raise ValueError(
