@@ -7,6 +7,21 @@ import numpy as np
 from ..util import print_info, print_error
 
 
+def is_field_calculation(cfg: Dict[str, Any]) -> bool:
+    sim_cfg = cfg.get('simulation', dict())
+    sim_type = sim_cfg.get('type', 'ret')
+
+    # Explicit type tags: 'field', 'field_ret', 'field_stat'.
+    if sim_type in ('field', 'field_ret', 'field_stat'):
+        return True
+
+    # Implicit: a 'grid' block in 'simulation' implies a field calculation.
+    if 'grid' in sim_cfg:
+        return True
+
+    return False
+
+
 def dispatch_single_node(cfg: Dict[str, Any],
         p: Any,
         epstab: Any,
@@ -18,6 +33,10 @@ def dispatch_single_node(cfg: Dict[str, Any],
 
     print_info('dispatch_single_node: n_workers={}, n_gpus_per_worker={}, multi_node={}, n_wl={}'.format(
             n_workers, n_gpus_per_worker, multi_node, len(enei)))
+
+    if is_field_calculation(cfg):
+        print_info('dispatch_single_node: field calculation detected (grid block) — routing to FieldCalculator')
+        return _dispatch_field(cfg, p, epstab, enei)
 
     if multi_node:
         from .mpi_node import dispatch_mpi
@@ -39,6 +58,36 @@ def dispatch_single_node(cfg: Dict[str, Any],
         return _dispatch_cpu_pool(cfg, p, epstab, enei)
 
     return _dispatch_cpu_serial(cfg, p, epstab, enei)
+
+
+def _dispatch_field(cfg: Dict[str, Any],
+        p: Any,
+        epstab: Any,
+        enei: np.ndarray) -> Dict[str, Any]:
+
+    import time
+
+    from ..simulation.field_calculator import FieldCalculator
+
+    n_gpus_per_worker = int(cfg['compute'].get('n_gpus_per_worker', 0))
+
+    if n_gpus_per_worker >= 1:
+        os.environ['MNPBEM_GPU'] = '1'
+        print_info('field dispatch: MNPBEM_GPU=1 (n_gpus_per_worker={})'.format(n_gpus_per_worker))
+
+    fc = FieldCalculator(cfg, p, epstab)
+
+    t0 = time.time()
+    result = fc.run(enei)
+    wall_s = time.time() - t0
+
+    result['wall_s'] = wall_s
+    result['warmup_s'] = 0.0
+    result['kind'] = 'field'
+
+    print_info('field dispatch: wall = {:.2f} min'.format(wall_s / 60.0))
+
+    return result
 
 
 def _dispatch_single_gpu(cfg: Dict[str, Any],

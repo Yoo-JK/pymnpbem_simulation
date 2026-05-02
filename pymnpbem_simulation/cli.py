@@ -72,7 +72,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from .structures import build_structure
     from .dispatch import dispatch_single_node
-    from .io import save_spectrum, save_run_metadata
+    from .io import save_spectrum, save_field, save_run_metadata
     from .postprocess import analyze_spectrum, plot_spectrum
 
     cfg_struct = cfg['structure']
@@ -96,6 +96,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     print_info('dispatch finished in {:.2f} min'.format(total_s / 60.0))
+
+    if result.get('kind', None) == 'field':
+        save_field(out_dir, result)
+        print_info('done (field calculation). results in <{}>'.format(out_dir))
+        return 0
 
     save_spectrum(out_dir, result)
 
