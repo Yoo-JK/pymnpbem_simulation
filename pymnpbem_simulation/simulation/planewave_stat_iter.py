@@ -5,7 +5,7 @@ from typing import Any, Dict
 import numpy as np
 
 from .base import SimulationRunner
-from .planewave_ret_iter import _iter_options
+from .planewave_ret_iter import _iter_options, _iter_hmatrix_options
 from ..util import print_info
 
 
@@ -26,10 +26,13 @@ class PlaneWaveStatIterRunner(SimulationRunner):
             tol: 1.0e-6
             maxit: 200
             precond: hmat
-            hmatrix: true
+            hmatrix: auto             # auto | true | false (v1.3.0)
             htol: 1.0e-6
             kmax: [4, 100]
             cleaf: 200
+
+    ``hmatrix: auto`` activates ACA H-matrix Green functions only when
+    the particle has more than 5000 faces.
     """
 
     def build_excitation(self) -> Any:
@@ -45,6 +48,7 @@ class PlaneWaveStatIterRunner(SimulationRunner):
 
         opts = _iter_options(self.cfg)
         opts.update(self._bem_options())
+        opts.update(_iter_hmatrix_options(self, self.p, self.cfg))
         return self._construct_bem(BEMStatIter, self.p, **opts)
 
     def run(self,

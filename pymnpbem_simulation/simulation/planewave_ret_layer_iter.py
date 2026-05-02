@@ -5,7 +5,7 @@ from typing import Any, Dict
 import numpy as np
 
 from .base import SimulationRunner
-from .planewave_ret_iter import _iter_options
+from .planewave_ret_iter import _iter_options, _iter_hmatrix_options
 from ..util import print_info
 
 
@@ -33,7 +33,7 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
             tol: 1.0e-6
             maxit: 200
             precond: hmat
-            hmatrix: true
+            hmatrix: auto             # auto | true | false (v1.3.0)
             htol: 1.0e-6
             kmax: [4, 100]
 
@@ -91,7 +91,9 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
         from mnpbem.bem import BEMRetLayerIter
 
         opts = _iter_options(self.cfg)
-        return BEMRetLayerIter(self.p, layer = layer, greentab = greentab, **opts)
+        opts.update(_iter_hmatrix_options(self, self.p, self.cfg))
+        return self._construct_bem(BEMRetLayerIter, self.p,
+                layer = layer, greentab = greentab, **opts)
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:
