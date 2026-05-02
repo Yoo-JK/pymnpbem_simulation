@@ -1,0 +1,55 @@
+output:
+  name: excitonic_cube_5nm
+  dir: ./results
+  formats: [npz, json, png]
+  save_plots: true
+  plot_format: [png]
+  plot_dpi: 300
+structure:
+  type: with_substrate
+  base:
+    type: advanced_monomer_cube
+    core_size: 40
+    shell_layers: []
+    rounding: 0.1
+    mesh_density: 2
+    refine: 3
+    n_per_edge: 20
+  substrate: {eps: gold.dat, z_position: -25.0, z_shift: 1.0}
+materials:
+  particle_list: [gold]
+  medium: air
+  refractive_index_paths: {}
+  particle: gold
+compute: {use_parallel: true, n_workers: 4, n_threads: 1, wavelength_chunk_size: 10,
+  mirror: false, iterative: false, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
+  hmode: dense}
+simulation:
+  type: ret_layer
+  interp: curv
+  waitbar: 1
+  excitation: planewave
+  polarizations:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  propagation_dirs:
+  - [0, 0, 1]
+  - [0, 0, 1]
+  wavelength_range: [400, 1200, 200]
+  relcutoff: 3
+  calculate_cross_sections: true
+  calculate_fields: false
+  field_region:
+    x_range: [-80, 80, 161]
+    y_range: [0, 0, 1]
+    z_range: [-80, 80, 161]
+  field_mindist: 0.5
+  field_nmax: 2000
+  field_wavelength_idx: peak
+  export_field_arrays: false
+  field_hotspot_count: 10
+  field_hotspot_min_distance: 3
+  enei_min: 400
+  enei_max: 1200
+  n_wavelengths: 200
+postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: false}
