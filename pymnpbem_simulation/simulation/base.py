@@ -89,10 +89,12 @@ class SimulationRunner(object):
             **opts: Any) -> Any:
         """Instantiate a BEM solver class, gracefully dropping unknown kwargs.
 
-        v1.2.0 introduces ``schur=...`` on BEMStat / BEMRet. When the
-        installed mnpbem port (Agent α merge) does not yet recognise the
-        flag, we retry without it so the wrapper still functions during
-        the rollout window.
+        v1.2.0 introduces ``schur=...`` on BEMStat / BEMRet. v1.3.0
+        introduces ``hmatrix=`` (and the companion ``htol`` / ``kmax`` /
+        ``cleaf``) on BEMRetIter / BEMStatIter. When the installed
+        mnpbem port (Agent α merge) does not yet recognise these flags
+        we retry without them so the wrapper still functions during the
+        rollout window.
         """
         try:
             return cls(*args, **opts)
@@ -100,13 +102,77 @@ class SimulationRunner(object):
             msg = str(exc).lower()
             stripped = dict(opts)
             removed: list = []
-            for v120_key in ('schur',):
-                if v120_key in stripped and v120_key in msg:
-                    stripped.pop(v120_key, None)
-                    removed.append(v120_key)
+
+            if 'schur' in stripped and 'schur' in msg:
+                stripped.pop('schur', None)
+                removed.append('schur')
+
+            if 'hmatrix' in stripped and 'hmatrix' in msg:
+                for v130_key in ('hmatrix', 'htol', 'kmax', 'cleaf'):
+                    stripped.pop(v130_key, None)
+                removed.append('hmatrix')
+
             if not removed:
                 raise
             return cls(*args, **stripped)
+
+    def _resolve_hmatrix(self,
+            particle: Any,
+            iter_cfg: Dict[str, Any],
+            face_threshold: int = 5000) -> bool:
+        """Resolve the v1.3.0 ``hmatrix`` flag from the iter block.
+
+        * ``'auto'`` (default) -> ``True`` if particle has more than
+          ``face_threshold`` faces, else ``False``.
+        * explicit ``True`` / ``'true'`` / ``'True'`` -> ``True``.
+        * explicit ``False`` / ``'false'`` / ``'False'`` -> ``False``.
+        * missing key -> behaves like ``'auto'``.
+        """
+        if not isinstance(iter_cfg, dict):
+            iter_cfg = dict()
+
+        raw = iter_cfg.get('hmatrix', 'auto')
+
+        if raw is None:
+            raw = 'auto'
+
+        if isinstance(raw, str):
+            tag = raw.strip().lower()
+        else:
+            tag = raw
+
+        if tag == 'auto':
+            n = self._particle_face_count(particle)
+            return n > face_threshold
+
+        if tag is True or tag == 'true':
+            return True
+
+        if tag is False or tag == 'false':
+            return False
+
+        # Unknown value -> auto.
+        n = self._particle_face_count(particle)
+        return n > face_threshold
+
+    @staticmethod
+    def _particle_face_count(particle: Any) -> int:
+        if particle is None:
+            return 0
+
+        for attr in ('n', 'nfaces'):
+            v = getattr(particle, attr, None)
+            if isinstance(v, (int, np.integer)) and v > 0:
+                return int(v)
+
+        pfull = getattr(particle, 'pfull', None)
+        if pfull is not None:
+            for attr in ('n', 'nfaces'):
+                v = getattr(pfull, attr, None)
+                if isinstance(v, (int, np.integer)) and v > 0:
+                    return int(v)
+
+        return 0
 
     def _resolve_schur(self,
             has_cover_layer: bool) -> Any:
