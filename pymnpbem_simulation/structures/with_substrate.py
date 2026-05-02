@@ -52,7 +52,7 @@ class WithSubstrateBuilder(StructureBuilder):
         from mnpbem.materials import EpsConst, EpsTable
         from mnpbem.geometry import LayerStructure
 
-        from .base import build_structure
+        from . import build_structure
 
         cfg_base = self.cfg_struct.get('base', None)
 
