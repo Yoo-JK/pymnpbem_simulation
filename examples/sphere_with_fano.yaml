@@ -1,0 +1,43 @@
+structure:
+  type: sphere
+  diameter: 80.0
+  mesh_density: 256
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 400
+  enei_max: 800
+  n_wavelengths: 100
+  polarizations:
+    - [1, 0, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+  interp: curv
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: sphere_with_fano
+  formats:
+    - npz
+    - json
+    - png
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_fano_fit: true
+  fano_n_peaks: 1
