@@ -45,7 +45,7 @@ class PlaneWaveStatIterRunner(SimulationRunner):
 
         opts = _iter_options(self.cfg)
         opts.update(self._bem_options())
-        return BEMStatIter(self.p, **opts)
+        return self._construct_bem(BEMStatIter, self.p, **opts)
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:

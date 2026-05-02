@@ -1,6 +1,34 @@
+import inspect
+
 from typing import Any, Dict, Tuple
 
 import numpy as np
+
+
+def _filter_kwargs_for(cls: Any,
+        kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop kwargs that ``cls.__init__`` does not accept.
+
+    Used so that v1.2.0 options (``schur``, future flags) degrade
+    gracefully when running against an older mnpbem port that does not
+    yet recognise them. Inspects ``cls.__init__``; if it accepts
+    ``**kwargs`` we pass everything through unchanged.
+    """
+    if not kwargs:
+        return kwargs
+    try:
+        sig = inspect.signature(cls.__init__)
+    except (TypeError, ValueError):
+        return kwargs
+
+    params = sig.parameters
+    accepts_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    if accepts_var_kw:
+        return kwargs
+
+    accepted = {name for name in params if name != 'self'}
+    return {k: v for k, v in kwargs.items() if k in accepted}
 
 
 class SimulationRunner(object):
@@ -26,12 +54,20 @@ class SimulationRunner(object):
     def _bem_options(self) -> Dict[str, Any]:
         """Optional BEM solver kwargs derived from particle metadata.
 
-        Currently forwards the cover-layer refinement callable
-        (``_mnpbem_refun`` set by WithNonlocalBuilder via
-        ``coverlayer.refine``) to the underlying CompGreenStat. Only
-        stat-path BEM solvers (BEMStat / BEMStatIter) consume ``refun``;
-        BEMRet does not yet expose this hook in mnpbem. Nonlocal
-        cover-layer simulations must therefore set
+        Currently forwards:
+
+        * the cover-layer refinement callable (``_mnpbem_refun`` set by
+          WithNonlocalBuilder via ``coverlayer.refine``) to the
+          underlying CompGreenStat. Only stat-path BEM solvers
+          (BEMStat / BEMStatIter) consume ``refun``;
+        * the v1.2.0 ``schur`` option for cover-layer Schur-complement
+          elimination — auto-enabled when the particle exposes
+          ``_mnpbem_refun`` (i.e. nonlocal cover-layer present), unless
+          the user explicitly overrides via
+          ``cfg['compute']['schur_complement']``.
+
+        BEMRet does not yet expose ``refun`` in mnpbem. Nonlocal
+        cover-layer simulations should therefore set
         ``simulation.type = 'stat'`` to match MATLAB MNPBEM
         demospecstat19.m.
         """
@@ -41,7 +77,68 @@ class SimulationRunner(object):
             refun = getattr(self.p.pfull, '_mnpbem_refun', None)
         if refun is not None:
             opts['refun'] = refun
+
+        schur_setting = self._resolve_schur(refun is not None)
+        if schur_setting is not None:
+            opts['schur'] = schur_setting
         return opts
+
+    def _construct_bem(self,
+            cls: Any,
+            *args: Any,
+            **opts: Any) -> Any:
+        """Instantiate a BEM solver class, gracefully dropping unknown kwargs.
+
+        v1.2.0 introduces ``schur=...`` on BEMStat / BEMRet. When the
+        installed mnpbem port (Agent α merge) does not yet recognise the
+        flag, we retry without it so the wrapper still functions during
+        the rollout window.
+        """
+        try:
+            return cls(*args, **opts)
+        except TypeError as exc:
+            msg = str(exc).lower()
+            stripped = dict(opts)
+            removed: list = []
+            for v120_key in ('schur',):
+                if v120_key in stripped and v120_key in msg:
+                    stripped.pop(v120_key, None)
+                    removed.append(v120_key)
+            if not removed:
+                raise
+            return cls(*args, **stripped)
+
+    def _resolve_schur(self,
+            has_cover_layer: bool) -> Any:
+        """Resolve the v1.2.0 Schur-complement option.
+
+        Reads ``cfg['compute']['schur_complement']`` (default ``'auto'``).
+
+        * ``'auto'`` (default) -> ``True`` if cover layer detected else ``None``
+          (skip kwarg to keep backward compat with pre-v1.2.0 mnpbem).
+        * explicit ``True`` / ``'true'`` -> ``True``
+        * explicit ``False`` / ``'false'`` -> ``False``
+        * ``None`` / missing key -> behaves like ``'auto'``
+        """
+        compute = self.cfg.get('compute', dict()) if isinstance(self.cfg, dict) else dict()
+        raw = compute.get('schur_complement', 'auto')
+
+        if raw is None:
+            raw = 'auto'
+
+        if isinstance(raw, str):
+            tag = raw.strip().lower()
+        else:
+            tag = raw
+
+        if tag == 'auto':
+            return True if has_cover_layer else None
+        if tag is True or tag == 'true':
+            return True
+        if tag is False or tag == 'false':
+            return False
+        # Unknown value -> treat as auto.
+        return True if has_cover_layer else None
 
 
 def _get_registry() -> Dict[str, Any]:

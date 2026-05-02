@@ -51,7 +51,10 @@ class PlaneWaveRetIterRunner(SimulationRunner):
         from mnpbem.bem import BEMRetIter
 
         opts = _iter_options(self.cfg)
-        return BEMRetIter(self.p, **opts)
+        bem_opts = self._bem_options()
+        bem_opts.pop('refun', None)  # BEMRetIter does not yet consume refun
+        opts.update(bem_opts)
+        return self._construct_bem(BEMRetIter, self.p, **opts)
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:
