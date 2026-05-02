@@ -5,6 +5,8 @@ from .dipole_ret import DipoleRetRunner
 from .dipole_stat import DipoleStatRunner
 from .eels_ret import EELSRetRunner
 from .eels_stat import EELSStatRunner
+from .field_calculator import FieldCalculator
+from . import grid_builder
 
 __all__ = [
         'SimulationRunner',
@@ -16,4 +18,6 @@ __all__ = [
         'DipoleRetRunner',
         'DipoleStatRunner',
         'EELSRetRunner',
-        'EELSStatRunner']
+        'EELSStatRunner',
+        'FieldCalculator',
+        'grid_builder']

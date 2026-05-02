@@ -28,6 +28,7 @@ def _get_registry() -> Dict[str, Any]:
     from . import planewave_ret, planewave_stat
     from . import dipole_ret, dipole_stat
     from . import eels_ret, eels_stat
+    from . import field_calculator
 
     return {
             ('ret', 'planewave'): planewave_ret.PlaneWaveRetRunner,
@@ -41,7 +42,8 @@ def _get_registry() -> Dict[str, Any]:
             'dipole_ret': dipole_ret.DipoleRetRunner,
             'dipole_stat': dipole_stat.DipoleStatRunner,
             'eels_ret': eels_ret.EELSRetRunner,
-            'eels_stat': eels_stat.EELSStatRunner}
+            'eels_stat': eels_stat.EELSStatRunner,
+            'field': field_calculator.FieldCalculator}
 
 
 class _LazyRegistry(object):
