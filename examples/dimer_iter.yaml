@@ -1,3 +1,9 @@
+# Small (~600 face) dimer iter smoke. With `hmatrix: auto` (the v1.3.0
+# default) this stays on dense Green functions because face count is
+# below the 5000 threshold. See `dimer_iter_hmatrix.yaml` for an
+# explicit-ON variant and `large_mesh_hmatrix.yaml` for a 25k face
+# auto-ON case.
+
 structure:
   type: dimer_sphere
   diameter: 30.0
@@ -24,7 +30,7 @@ simulation:
     maxit: 200
     precond: hmat
     output: 0
-    hmatrix: false
+    hmatrix: auto       # v1.3.0: auto stays dense below 5000 faces
 
 materials:
   medium: water
