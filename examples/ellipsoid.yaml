@@ -1,0 +1,43 @@
+structure:
+  type: ellipsoid
+  axes: [10, 15, 20]
+  n_verts: 256
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 500
+  enei_max: 800
+  n_wavelengths: 30
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+    - [0, 0, 1]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+    - [1, 0, 0]
+  interp: curv
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: ellipsoid
+  formats: [npz, json, png]
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

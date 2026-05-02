@@ -1,0 +1,45 @@
+structure:
+  type: dimer_core_shell_cube
+  core_size: 30.0
+  shell_thickness: 5.0
+  gap: 5.0
+  n_per_edge: 12
+  e: 0.25
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 500
+  enei_max: 1000
+  n_wavelengths: 50
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+  interp: curv
+
+materials:
+  medium: water
+  core: gold
+  shell: silver
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: dimer_core_shell_cube
+  formats: [npz, json, png]
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

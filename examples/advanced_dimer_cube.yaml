@@ -1,0 +1,48 @@
+structure:
+  type: advanced_dimer_cube
+  core_size: 30.0
+  shell_layers: [5]
+  materials: [gold, silver]
+  roundings: [0.25, 0.25]
+  gap: 3.0
+  offset: [0.0, 0.0, 0.0]
+  tilt_angle: 15.0
+  tilt_axis: [0, 1, 0]
+  rotation_angle: 10.0
+  n_per_edge: 12
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: planewave
+  enei_min: 500
+  enei_max: 1000
+  n_wavelengths: 30
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+  interp: curv
+
+materials:
+  medium: water
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: advanced_dimer_cube
+  formats: [npz, json, png]
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

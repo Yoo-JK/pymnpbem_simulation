@@ -17,29 +17,3 @@ class StructureBuilder(object):
         return self.cfg_struct.get('type', 'unknown')
 
 
-def build_structure(cfg_struct: Dict[str, Any],
-        cfg_materials: Dict[str, Any]) -> Tuple[Any, Any, int]:
-
-    from . import sphere, dimer_cube, with_substrate
-
-    stype = cfg_struct.get('type', '').lower()
-
-    match stype:
-
-        case 'sphere':
-
-            builder = sphere.SphereBuilder(cfg_struct, cfg_materials)
-
-        case 'dimer_cube' | 'advanced_dimer_cube':
-
-            builder = dimer_cube.DimerCubeBuilder(cfg_struct, cfg_materials)
-
-        case 'with_substrate':
-
-            builder = with_substrate.WithSubstrateBuilder(cfg_struct, cfg_materials)
-
-        case _:
-
-            raise ValueError('[error] Invalid <structure.type> = <{}>!'.format(stype))
-
-    return builder.build()

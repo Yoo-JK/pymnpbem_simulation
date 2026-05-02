@@ -1,0 +1,37 @@
+from typing import Any, Dict, Tuple
+
+import numpy as np
+
+from .base import StructureBuilder
+from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from ..util import print_info
+
+
+class CubeBuilder(StructureBuilder):
+
+    def build(self) -> Tuple[Any, Any, int]:
+        from mnpbem.geometry import tricube, ComParticle
+
+        size = float(self.cfg_struct.get('size', self.cfg_struct.get('edge', 20.0)))
+        n_per_edge = int(self.cfg_struct.get('n_per_edge', 16))
+        e = float(self.cfg_struct.get('e', self.cfg_struct.get('rounding', 0.25)))
+        refine = int(self.cfg_struct.get('refine', 2))
+        interp = self.cfg_struct.get('interp', 'curv')
+
+        medium_name = self.cfg_materials.get('medium', 'water')
+        particle_name = self.cfg_materials.get('particle', 'gold')
+
+        eps_medium = _build_eps_medium(medium_name)
+        eps_particle = _build_eps_particle(particle_name)
+        epstab = [eps_medium, eps_particle]
+
+        cube = tricube(n_per_edge, size, e = e)
+
+        p = ComParticle(epstab, [cube], [[2, 1]],
+                interp = interp, refine = refine)
+
+        nfaces = _count_faces(p)
+        print_info('CubeBuilder: size={}nm, n={}, e={}, refine={}, nfaces={}'.format(
+            size, n_per_edge, e, refine, nfaces))
+
+        return p, epstab, nfaces
