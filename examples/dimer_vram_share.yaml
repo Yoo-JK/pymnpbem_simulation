@@ -1,3 +1,13 @@
+# Au dimer-cube (water medium) with v1.2.0 VRAM-share LU dispatch.
+#
+# Activated by ``compute.n_gpus_per_worker > 1`` (was an explicit
+# NotImplementedError before v1.2.0; the M2 stub merely reserved the
+# config schema). The wrapper now sets MNPBEM_VRAM_SHARE=1 and routes
+# the BEM solve through the multi-GPU LU partitioning backend.
+#
+# This example is intentionally smaller than ``large_mesh_vram_share``
+# so it doubles as a smoke test for the dispatch-level wiring.
+
 structure:
   type: dimer_cube
   edge: 47.0
@@ -28,7 +38,7 @@ materials:
 compute:
   n_workers: 1
   n_threads: 4
-  n_gpus_per_worker: 4
+  n_gpus_per_worker: 4        # v1.2.0: >=2 routes to _dispatch_vram_share
   multi_node: false
   hmode: dense
   vram_share_backend: cusolvermg
