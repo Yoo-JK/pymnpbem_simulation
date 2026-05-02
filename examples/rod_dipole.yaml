@@ -1,0 +1,42 @@
+structure:
+  type: dimer_cube
+  edge: 30.0
+  gap: 5.0
+  n_per_edge: 12
+  e: 0.2
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: dipole
+  enei_min: 500
+  enei_max: 800
+  n_wavelengths: 10
+  dipole:
+    position: [0.0, 0.0, 30.0]
+    orientation: [0, 0, 1]
+    medium: 1
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: rod_dipole
+  formats:
+    - npz
+    - json
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_eigenmode_analysis: false
