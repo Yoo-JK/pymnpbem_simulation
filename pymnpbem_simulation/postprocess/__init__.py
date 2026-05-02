@@ -10,6 +10,10 @@ from .plot_field import (
         plot_field_2d_slice,
         plot_hotspots_3d,
         plot_near_field_decay)
+from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
+from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
+from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
+from .export import export_npz, export_h5, export_csv, export_json
 
 __all__ = [
         'analyze_spectrum',
@@ -21,4 +25,17 @@ __all__ = [
         'hotspot_summary',
         'plot_field_2d_slice',
         'plot_hotspots_3d',
-        'plot_near_field_decay']
+        'plot_near_field_decay',
+        'qs_eigenmodes',
+        'svd_decomposition',
+        'retarded_eigenmodes',
+        'fano_fit',
+        'multi_fano_fit',
+        'fano_lineshape',
+        'multipole_decomposition',
+        'dipole_quadrupole_ratio',
+        'dominant_l',
+        'export_npz',
+        'export_h5',
+        'export_csv',
+        'export_json']
