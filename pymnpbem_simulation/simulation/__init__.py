@@ -7,6 +7,9 @@ from .eels_ret import EELSRetRunner
 from .eels_stat import EELSStatRunner
 from .field_calculator import FieldCalculator
 from . import grid_builder
+from .planewave_ret_layer import PlaneWaveRetLayerRunner
+from .dipole_ret_layer import DipoleRetLayerRunner
+from .eels_ret_layer import EelsRetLayerRunner
 
 __all__ = [
         'SimulationRunner',
@@ -20,4 +23,7 @@ __all__ = [
         'EELSRetRunner',
         'EELSStatRunner',
         'FieldCalculator',
-        'grid_builder']
+        'grid_builder',
+        'PlaneWaveRetLayerRunner',
+        'DipoleRetLayerRunner',
+        'EelsRetLayerRunner']
