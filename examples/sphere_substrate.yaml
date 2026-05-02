@@ -1,0 +1,48 @@
+structure:
+  type: with_substrate
+  base:
+    type: sphere
+    diameter: 20.0
+    mesh_density: 144
+    refine: 2
+    interp: curv
+  substrate:
+    eps: 2.25         # n=1.5 glass
+    z_position: 0.0
+    z_shift: 1.0      # 1nm gap above substrate
+
+simulation:
+  type: ret_layer
+  excitation: planewave
+  enei_min: 450
+  enei_max: 750
+  n_wavelengths: 11
+  polarizations:
+    - [1, 0, 0]
+  propagation_dirs:
+    - [0, 0, -1]      # downward incidence (from above the substrate)
+  tab_n: 5            # GreenTabLayer pre-tabulation count
+
+materials:
+  medium: vacuum
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: sphere_substrate
+  formats:
+    - npz
+    - json
+    - png
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_eigenmode_analysis: false
