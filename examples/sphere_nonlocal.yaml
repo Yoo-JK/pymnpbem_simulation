@@ -1,29 +1,33 @@
+# Nonlocal hydrodynamic Drude (Yu Luo / Pendry et al., PRL 111, 093901, 2013)
+# 정식 EpsNonlocal 호출 (Wave 2 EpsNonlocal port). MATLAB demospecstat19.m 패턴.
+# 외부 표면 = base sphere + 2*delta_d, 내부 코어 = base sphere.
+
 structure:
   type: with_nonlocal
   base:
     type: sphere
-    diameter: 20.0
+    diameter: 10.0          # core diameter (nm) — outer surface = 10 + 2*0.05 nm
     mesh_density: 144
-    refine: 2
     interp: curv
   nonlocal:
-    metal: gold
-    beta: null
-    k_nm_inv: 0.0
+    metal: gold             # gold | silver | aluminum | from_table:<path>.dat
+    delta_d: 0.05           # artificial cover-layer thickness (nm)
+    beta: null              # eV*nm. null -> sqrt(3/5)*v_F*hbar (gold default 0.714)
+    eps_embed: 1.0          # outer medium epsilon (vacuum). matches MATLAB demo.
 
 simulation:
-  type: ret
+  # nonlocal cover-layer requires stat solver — coverlayer.refine 만 BEMStat 지원.
+  type: stat
   excitation: planewave
-  enei_min: 480
-  enei_max: 700
-  n_wavelengths: 11
+  enei_min: 400
+  enei_max: 800
+  n_wavelengths: 41
   polarizations:
     - [1, 0, 0]
-  propagation_dirs:
-    - [0, 0, 1]
+    - [0, 1, 0]
 
 materials:
-  medium: water
+  medium: vacuum
   particle: gold
 
 compute:
@@ -40,5 +44,5 @@ output:
   save_plots: false
 
 postprocess:
-  spectrum_xaxis: energy
+  spectrum_xaxis: wavelength
   run_eigenmode_analysis: false
