@@ -1,0 +1,42 @@
+structure:
+  type: dimer_cube
+  edge: 30.0
+  gap: 5.0
+  n_per_edge: 12
+  e: 0.2
+  refine: 2
+  interp: curv
+
+simulation:
+  type: ret
+  excitation: eels
+  enei_min: 400
+  enei_max: 800
+  n_wavelengths: 10
+  electron:
+    impact: [[0.0, 25.0]]
+    energy_kev: 200.0
+    width: 0.5
+
+materials:
+  medium: vacuum
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+
+output:
+  dir: ./results
+  name: rod_eels
+  formats:
+    - npz
+    - json
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_eigenmode_analysis: false
