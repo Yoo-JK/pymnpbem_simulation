@@ -41,6 +41,84 @@ def detect_n_cpus() -> int:
     return os.cpu_count() or 1
 
 
+def detect_multi_node() -> bool:
+    if 'SLURM_NNODES' in os.environ:
+
+        try:
+
+            if int(os.environ['SLURM_NNODES']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    if 'SLURM_JOB_NUM_NODES' in os.environ:
+
+        try:
+
+            if int(os.environ['SLURM_JOB_NUM_NODES']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    if 'PBS_NUM_NODES' in os.environ:
+
+        try:
+
+            if int(os.environ['PBS_NUM_NODES']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    if 'OMPI_COMM_WORLD_SIZE' in os.environ:
+
+        try:
+
+            if int(os.environ['OMPI_COMM_WORLD_SIZE']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    if 'PMI_SIZE' in os.environ:
+
+        try:
+
+            if int(os.environ['PMI_SIZE']) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    if 'MPI_LOCALNRANKS' in os.environ:
+
+        try:
+
+            if int(os.environ.get('MPI_NUMRANKS', '1')) > 1:
+                return True
+
+        except ValueError:
+            pass
+
+    return False
+
+
+def detect_mpi_rank() -> int:
+    for key in ['OMPI_COMM_WORLD_RANK', 'PMI_RANK', 'SLURM_PROCID', 'MPI_RANK']:
+
+        if key in os.environ:
+
+            try:
+                return int(os.environ[key])
+
+            except ValueError:
+                continue
+
+    return 0
+
+
 def auto_compute_plan(n_gpus: int = -1,
         n_cpus: int = -1) -> Tuple[int, int, int]:
     if n_gpus < 0:

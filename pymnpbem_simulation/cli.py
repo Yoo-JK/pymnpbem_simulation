@@ -14,7 +14,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from .util import print_info, print_error, ensure_dir, save_json, now_str
     from .config import load_yaml, merge_overrides, apply_defaults, validate_config, save_yaml
-    from .auto_detect import detect_n_gpus, detect_n_cpus, auto_compute_plan
+    from .auto_detect import detect_n_gpus, detect_n_cpus, auto_compute_plan, detect_multi_node, detect_mpi_rank
     from .env_setup import setup_env, assert_pre_import
 
     try:
@@ -28,13 +28,18 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.auto:
         n_w, n_t, n_g = auto_compute_plan()
-        print_info('auto: n_workers={}, n_threads={}, n_gpus_per_worker={}'.format(
-            n_w, n_t, n_g))
+        is_multi_node = detect_multi_node()
+        print_info('auto: n_workers={}, n_threads={}, n_gpus_per_worker={}, multi_node={}'.format(
+            n_w, n_t, n_g, is_multi_node))
         if cfg.get('compute', {}).get('n_workers', 1) == 1:
             cfg.setdefault('compute', {})
             cfg['compute']['n_workers'] = n_w
             cfg['compute']['n_threads'] = n_t
             cfg['compute']['n_gpus_per_worker'] = n_g
+
+        if is_multi_node and not cfg.get('compute', {}).get('multi_node', False):
+            cfg.setdefault('compute', {})
+            cfg['compute']['multi_node'] = True
 
     cfg = apply_defaults(cfg)
 
@@ -81,13 +86,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         print_info('--reanalyze: skipping simulation, postprocess only')
         return _reanalyze(out_dir)
 
-    if cfg['compute'].get('multi_node', False):
-        print_error('multi-node MPI dispatch is M9 work; not yet implemented')
-        return 3
-
     t0 = time.time()
     result = dispatch_single_node(cfg, p, epstab, enei)
     total_s = time.time() - t0
+
+    if result is None:
+        rank = detect_mpi_rank()
+        print_info('mpi rank {}: non-zero rank, exiting cleanly'.format(rank))
+        return 0
+
     print_info('dispatch finished in {:.2f} min'.format(total_s / 60.0))
 
     save_spectrum(out_dir, result)
@@ -118,7 +125,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--n-gpus-per-worker', type = int, default = None,
             help = 'GPUs per worker (0 = CPU, 1 = single GPU, 2+ = VRAM pool).')
     parser.add_argument('--multi-node', action = 'store_true',
-            help = 'Enable mpi4py multi-node dispatch (Wave 3).')
+            help = 'Enable mpi4py multi-node dispatch (requires mpi4py + srun/mpirun).')
+    parser.add_argument('--vram-share-backend',
+            choices = ['cusolvermg', 'magma', 'nccl'],
+            default = None,
+            help = 'Backend for VRAM share (n-gpus-per-worker > 1). Planned for M5+ release.')
     parser.add_argument('--auto', action = 'store_true',
             help = 'Auto-detect compute plan from SLURM/PBS environment.')
 
@@ -142,7 +153,8 @@ def _build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
             'n_workers': args.n_workers,
             'n_threads': args.n_threads,
             'n_gpus_per_worker': args.n_gpus_per_worker,
-            'multi_node': args.multi_node if args.multi_node else None},
+            'multi_node': args.multi_node if args.multi_node else None,
+            'vram_share_backend': args.vram_share_backend},
         'output': {
             'dir': args.output_dir,
             'name': args.simulation_name}}
