@@ -1,0 +1,31 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Output / data
+results/
+*.npz
+*.h5
+*.mat
+*.png
+*.pdf
+
+# Local env
+.env
+.venv/
+venv/
+.envrc
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
