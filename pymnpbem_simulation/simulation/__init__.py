@@ -10,6 +10,9 @@ from . import grid_builder
 from .planewave_ret_layer import PlaneWaveRetLayerRunner
 from .dipole_ret_layer import DipoleRetLayerRunner
 from .eels_ret_layer import EelsRetLayerRunner
+from .planewave_ret_iter import PlaneWaveRetIterRunner
+from .planewave_stat_iter import PlaneWaveStatIterRunner
+from .planewave_ret_layer_iter import PlaneWaveRetLayerIterRunner
 
 __all__ = [
         'SimulationRunner',
@@ -26,4 +29,7 @@ __all__ = [
         'grid_builder',
         'PlaneWaveRetLayerRunner',
         'DipoleRetLayerRunner',
-        'EelsRetLayerRunner']
+        'EelsRetLayerRunner',
+        'PlaneWaveRetIterRunner',
+        'PlaneWaveStatIterRunner',
+        'PlaneWaveRetLayerIterRunner']

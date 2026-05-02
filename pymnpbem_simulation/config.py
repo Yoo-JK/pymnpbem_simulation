@@ -99,7 +99,8 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 
     sim_type = cfg['simulation']['type']
 
-    if sim_type not in {'ret', 'stat', 'ret_layer', 'stat_layer'}:
+    if sim_type not in {'ret', 'stat', 'ret_layer', 'stat_layer',
+            'ret_iter', 'stat_iter', 'ret_layer_iter'}:
         raise ValueError('[error] Invalid simulation.type <{}>!'.format(sim_type))
 
     exc = cfg['simulation']['excitation']

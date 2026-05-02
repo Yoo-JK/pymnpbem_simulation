@@ -30,6 +30,7 @@ def _get_registry() -> Dict[str, Any]:
     from . import eels_ret, eels_stat
     from . import field_calculator
     from . import planewave_ret_layer, dipole_ret_layer, eels_ret_layer
+    from . import planewave_ret_iter, planewave_stat_iter, planewave_ret_layer_iter
 
     return {
             ('ret', 'planewave'): planewave_ret.PlaneWaveRetRunner,
@@ -41,6 +42,9 @@ def _get_registry() -> Dict[str, Any]:
             ('ret_layer', 'planewave'): planewave_ret_layer.PlaneWaveRetLayerRunner,
             ('ret_layer', 'dipole'): dipole_ret_layer.DipoleRetLayerRunner,
             ('ret_layer', 'eels'): eels_ret_layer.EelsRetLayerRunner,
+            ('ret_iter', 'planewave'): planewave_ret_iter.PlaneWaveRetIterRunner,
+            ('stat_iter', 'planewave'): planewave_stat_iter.PlaneWaveStatIterRunner,
+            ('ret_layer_iter', 'planewave'): planewave_ret_layer_iter.PlaneWaveRetLayerIterRunner,
             'planewave_ret': planewave_ret.PlaneWaveRetRunner,
             'planewave_stat': planewave_stat.PlaneWaveStatRunner,
             'dipole_ret': dipole_ret.DipoleRetRunner,
@@ -50,7 +54,10 @@ def _get_registry() -> Dict[str, Any]:
             'field': field_calculator.FieldCalculator,
             'planewave_ret_layer': planewave_ret_layer.PlaneWaveRetLayerRunner,
             'dipole_ret_layer': dipole_ret_layer.DipoleRetLayerRunner,
-            'eels_ret_layer': eels_ret_layer.EelsRetLayerRunner}
+            'eels_ret_layer': eels_ret_layer.EelsRetLayerRunner,
+            'planewave_ret_iter': planewave_ret_iter.PlaneWaveRetIterRunner,
+            'planewave_stat_iter': planewave_stat_iter.PlaneWaveStatIterRunner,
+            'planewave_ret_layer_iter': planewave_ret_layer_iter.PlaneWaveRetLayerIterRunner}
 
 
 class _LazyRegistry(object):
