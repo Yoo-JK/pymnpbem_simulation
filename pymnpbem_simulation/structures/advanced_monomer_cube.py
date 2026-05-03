@@ -65,22 +65,22 @@ def _resolve_n_per_edge(cfg: Dict[str, Any],
         else:
             sizes = _layer_sizes(cfg, n_layers)
 
-        outermost = sizes[-1]
-        n_outer = _n_per_edge_from_density(outermost, mesh_density)
+        core_size = sizes[0]
+        n_core = _n_per_edge_from_density(core_size, mesh_density)
 
         if explicit_n is not None:
             try:
                 explicit_int = int(explicit_n)
             except (TypeError, ValueError):
                 explicit_int = None
-            if explicit_int is not None and explicit_int != n_outer:
+            if explicit_int is not None and explicit_int != n_core:
                 warnings.warn(
                     'mesh_density={} (-> n_per_edge={}) overrides explicit '
                     'n_per_edge={}. mesh_density takes priority since v1.6.0.'.format(
-                        mesh_density, n_outer, explicit_int),
+                        mesh_density, n_core, explicit_int),
                     stacklevel = 2)
 
-        return [n_outer] * n_layers
+        return [n_core] * n_layers
 
     if explicit_n is None:
         return [_DEFAULT_N_PER_EDGE] * n_layers

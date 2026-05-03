@@ -2,7 +2,10 @@
 
 pymnpbem builder 의 mesh_density 가 n_per_edge 보다 우선 적용되는지 검증.
 의미체계는 mnpbem_simulation MATLAB wrapper 와 동일:
-    n_per_edge = round(edge / mesh_density)
+    n_per_edge = round(core_size / mesh_density)
+
+기준은 core size (shell 포함 X). multilayer 의 경우 모든 layer 가 동일한
+n_per_edge 를 공유한다.
 
 cube 류 builder 만 영향. sphere 류 (n_verts), rod 류 (D, H, n) 는 별개.
 """
@@ -97,13 +100,22 @@ def test_resolve_n_per_edge_n_per_edges_overrides():
     assert out == [8, 12]
 
 
-def test_resolve_n_per_edge_multilayer_outermost_size():
-    # core 30 + 2*5 + 2*5 = 50 nm outer.  50 / 2 = 25
+def test_resolve_n_per_edge_multilayer_core_size():
+    # core 30 nm 기준. 30 / 2 = 15. 모든 layer 동일 n_per_edge.
     cfg = {'core_size': 30.0,
             'shell_layers': [5.0, 5.0],
             'mesh_density': 2.0}
     out = _resolve_n_per_edge(cfg, 3)
-    assert out == [25, 25, 25]
+    assert out == [15, 15, 15]
+
+
+def test_resolve_n_per_edge_multilayer_47nm_core_4nm_shell():
+    # 사용자 case: 47 nm core + 4 nm shell -> mesh_density=2 -> n=24 (core 기준)
+    cfg = {'core_size': 47.0,
+            'shell_layers': [4.0],
+            'mesh_density': 2.0}
+    out = _resolve_n_per_edge(cfg, 2)
+    assert out == [24, 24]
 
 
 def test_layer_sizes_simple():
