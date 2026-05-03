@@ -7,6 +7,12 @@
 #
 # Compare against `dimer_iter.yaml` (dense, hmatrix: false) to verify
 # that iter results match within GMRES tolerance.
+#
+# v1.5.0 NOTE: this example deliberately leaves `iter.preconditioner`
+# unset so the runner does NOT forward the v1.5.0 H-matrix LU
+# preconditioner kwarg — preserving the v1.3.0 baseline. Use
+# `dimer_iter_precond.yaml` for the preconditioner-on variant, or
+# `nonlocal_iter_schur.yaml` for the all-in (precond + schur) variant.
 
 structure:
   type: dimer_sphere

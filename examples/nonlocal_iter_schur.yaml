@@ -1,0 +1,88 @@
+# Nano-gap gold dimer with hydrodynamic-Drude nonlocal cover layer +
+# v1.5.0 ALL-IN: iterative BEM (BEMRetIter) + ACA H-matrix Green +
+# H-matrix LU preconditioner + iter-path Schur reduction of the cover
+# layer.
+#
+# v1.2.0 (γ) introduced dense-path Schur (cfg.compute.schur_complement)
+# but it required a dense G_ss inverse, which is impossible when G is
+# stored as an HMatrix. v1.5.0 (β) ships SchurIterOperator: a matvec-
+# friendly Schur reduction that combines with H-matrix Green functions.
+#
+# When all three flags are on:
+#     - hmatrix: true    -> ACA-compressed Green function
+#     - preconditioner   -> H-matrix LU preconditioner
+#     - schur: true      -> Schur eliminate cover-layer DOFs implicitly
+# the GMRES Krylov vectors live on the *core* face count (no shell DOFs)
+# and each matvec uses the compressed H-matrix. Memory is dominated by
+# the (small) shell-block dense LU.
+#
+# Compare with `dimer_nonlocal_schur.yaml` (dense BEMStat path, no iter).
+
+structure:
+  type: with_nonlocal
+  base:
+    type: dimer_sphere
+    diameter: 10.0
+    gap: 1.0
+    n_verts: 144
+    interp: curv
+  nonlocal:
+    metal: gold
+    delta_d: 0.05
+    beta: null
+    eps_embed: 1.0
+
+simulation:
+  type: ret_iter
+  excitation: planewave
+  enei_min: 400
+  enei_max: 800
+  n_wavelengths: 41
+  polarizations:
+    - [1, 0, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+  iter:
+    solver: gmres
+    tol: 1.0e-6
+    maxit: 300
+    precond: hmat
+    output: 0
+    hmatrix: auto              # auto-ON for >5000-face cover-layer meshes
+    htol: 1.0e-6
+    kmax: [4, 100]
+    cleaf: 200
+    # v1.5.0 (Agent α): H-matrix LU preconditioner.
+    preconditioner: auto
+    htol_precond: 1.0e-4
+    # v1.5.0 (Agent β): iterative-path Schur reduction.
+    # `auto` (default) -> ON when cover-layer detected (true here).
+    schur: auto
+    schur_g_ss_solver: auto    # auto picks lu_dense for small shells, gmres otherwise
+    schur_inner_tol: 1.0e-8
+    # schur_inner_maxit: 200   # only relevant when g_ss_solver is gmres
+
+materials:
+  medium: vacuum
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: hmat
+  # Note: this overrides the v1.2.0 dense-path schur option, which is a
+  # no-op when simulation.type=ret_iter. Iter-path Schur lives under
+  # iter.schur (see above).
+  schur_complement: false
+
+output:
+  dir: ./results
+  name: nonlocal_iter_schur
+  formats: [npz, json]
+  save_plots: false
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_eigenmode_analysis: false
