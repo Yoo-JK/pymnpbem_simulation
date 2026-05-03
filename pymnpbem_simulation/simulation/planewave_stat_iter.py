@@ -5,7 +5,8 @@ from typing import Any, Dict
 import numpy as np
 
 from .base import SimulationRunner
-from .planewave_ret_iter import _iter_options, _iter_hmatrix_options
+from .planewave_ret_iter import (_iter_options, _iter_hmatrix_options,
+        _iter_preconditioner_options, _iter_schur_options)
 from ..util import print_info
 
 
@@ -30,9 +31,19 @@ class PlaneWaveStatIterRunner(SimulationRunner):
             htol: 1.0e-6
             kmax: [4, 100]
             cleaf: 200
+            # v1.5.0 신규
+            preconditioner: auto      # auto | none | hlu_dense | hlu_tree
+            htol_precond: 1.0e-4
+            schur: auto               # auto | true | false (cover-layer 자동)
+            schur_g_ss_solver: auto   # auto | lu_dense | gmres
+            schur_inner_tol: 1.0e-8
 
     ``hmatrix: auto`` activates ACA H-matrix Green functions only when
     the particle has more than 5000 faces.
+
+    ``preconditioner: auto`` (v1.5.0) -> H-matrix LU preconditioner 자동
+    선택. ``schur: auto`` (v1.5.0) -> nonlocal cover-layer 감지 시 iter
+    Schur reduction 자동 활성화 (BEMStatIter components=1).
     """
 
     def build_excitation(self) -> Any:
@@ -48,7 +59,16 @@ class PlaneWaveStatIterRunner(SimulationRunner):
 
         opts = _iter_options(self.cfg)
         opts.update(self._bem_options())
-        opts.update(_iter_hmatrix_options(self, self.p, self.cfg))
+
+        hmatrix_opts = _iter_hmatrix_options(self, self.p, self.cfg)
+        opts.update(hmatrix_opts)
+
+        opts.update(_iter_preconditioner_options(self, self.cfg))
+
+        schur_iter_opts = _iter_schur_options(self, self.cfg)
+        if schur_iter_opts:
+            opts.update(schur_iter_opts)
+
         return self._construct_bem(BEMStatIter, self.p, **opts)
 
     def run(self,

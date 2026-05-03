@@ -5,7 +5,8 @@ from typing import Any, Dict
 import numpy as np
 
 from .base import SimulationRunner
-from .planewave_ret_iter import _iter_options, _iter_hmatrix_options
+from .planewave_ret_iter import (_iter_options, _iter_hmatrix_options,
+        _iter_preconditioner_options, _iter_schur_options)
 from ..util import print_info
 
 
@@ -92,6 +93,16 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
 
         opts = _iter_options(self.cfg)
         opts.update(_iter_hmatrix_options(self, self.p, self.cfg))
+
+        # v1.5.0: forward preconditioner / schur options. BEMRetLayerIter
+        # may not yet accept them — _construct_bem fallback drops kwargs
+        # that the installed mnpbem build does not recognise.
+        opts.update(_iter_preconditioner_options(self, self.cfg))
+
+        schur_iter_opts = _iter_schur_options(self, self.cfg)
+        if schur_iter_opts:
+            opts.update(schur_iter_opts)
+
         return self._construct_bem(BEMRetLayerIter, self.p,
                 layer = layer, greentab = greentab, **opts)
 
