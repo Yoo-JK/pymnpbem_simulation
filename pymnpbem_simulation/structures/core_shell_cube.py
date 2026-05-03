@@ -2,6 +2,7 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from .core_shell_sphere import _normalize_shells, _build_inout_table
@@ -36,7 +37,17 @@ class CoreShellCubeBuilder(StructureBuilder):
         from mnpbem.geometry import tricube, ComParticle
 
         core_size = float(self.cfg_struct.get('core_size', 30.0))
-        n_per_edge = int(self.cfg_struct.get('n_per_edge', 16))
+
+        cum_size_outer = core_size
+        shells_raw = self.cfg_struct.get('shells', None)
+        if shells_raw:
+            for sh in shells_raw:
+                cum_size_outer = cum_size_outer + 2.0 * float(sh['thickness'])
+        elif 'shell_thickness' in self.cfg_struct:
+            cum_size_outer = cum_size_outer + 2.0 * float(self.cfg_struct['shell_thickness'])
+
+        n_per_edge = _resolve_n_per_edge(self.cfg_struct, 1,
+                edge_override = cum_size_outer)[0]
         e = float(self.cfg_struct.get('e', self.cfg_struct.get('rounding', 0.25)))
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')

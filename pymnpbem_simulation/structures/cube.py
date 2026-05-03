@@ -2,6 +2,7 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from ..util import print_info
@@ -13,7 +14,7 @@ class CubeBuilder(StructureBuilder):
         from mnpbem.geometry import tricube, ComParticle
 
         size = float(self.cfg_struct.get('size', self.cfg_struct.get('edge', 20.0)))
-        n_per_edge = int(self.cfg_struct.get('n_per_edge', 16))
+        n_per_edge = _resolve_n_per_edge(self.cfg_struct, 1, edge_override = size)[0]
         e = float(self.cfg_struct.get('e', self.cfg_struct.get('rounding', 0.25)))
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')

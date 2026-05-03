@@ -2,6 +2,7 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from ..util import print_info
@@ -15,12 +16,13 @@ class DimerCoreShellCubeBuilder(StructureBuilder):
         core_size = float(self.cfg_struct.get('core_size', 30.0))
         shell_thickness = float(self.cfg_struct.get('shell_thickness', 5.0))
         gap = float(self.cfg_struct.get('gap', 5.0))
-        n_per_edge = int(self.cfg_struct.get('n_per_edge', 16))
+        shell_size = core_size + 2.0 * shell_thickness
+        n_per_edge = _resolve_n_per_edge(self.cfg_struct, 1,
+                edge_override = shell_size)[0]
         e = float(self.cfg_struct.get('e', self.cfg_struct.get('rounding', 0.25)))
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')
 
-        shell_size = core_size + 2.0 * shell_thickness
         shift = (shell_size + gap) / 2.0
 
         medium_name = self.cfg_materials.get('medium', 'water')
