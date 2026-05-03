@@ -1,10 +1,15 @@
-from typing import Any, Dict, List, Tuple
+import warnings
+
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from ..util import print_info
+
+
+_DEFAULT_N_PER_EDGE = 16
 
 
 def _resolve_roundings(cfg: Dict[str, Any], n_layers: int) -> List[float]:
@@ -18,15 +23,69 @@ def _resolve_roundings(cfg: Dict[str, Any], n_layers: int) -> List[float]:
     return [e] * n_layers
 
 
-def _resolve_n_per_edge(cfg: Dict[str, Any], n_layers: int) -> List[int]:
+def _layer_sizes(cfg: Dict[str, Any], n_layers: int) -> List[float]:
+    core_size = float(cfg.get('core_size',
+            cfg.get('size', cfg.get('edge', 30.0))))
+    shell_layers = list(cfg.get('shell_layers', []))
+
+    sizes = [core_size]
+    for shell in shell_layers:
+        if isinstance(shell, dict):
+            t = float(shell.get('thickness', 0.0))
+        else:
+            t = float(shell)
+        sizes.append(sizes[-1] + 2.0 * t)
+
+    if len(sizes) < n_layers:
+        sizes = sizes + [sizes[-1]] * (n_layers - len(sizes))
+
+    return sizes[:n_layers]
+
+
+def _n_per_edge_from_density(edge: float, mesh_density: float) -> int:
+    n = int(round(float(edge) / float(mesh_density)))
+    return max(2, n)
+
+
+def _resolve_n_per_edge(cfg: Dict[str, Any],
+        n_layers: int,
+        edge_override: Optional[float] = None) -> List[int]:
     if 'n_per_edges' in cfg:
         nps = list(cfg['n_per_edges'])
         assert len(nps) == n_layers, \
             '[error] <n_per_edges> length must match number of layers'
         return [int(n) for n in nps]
 
-    n = int(cfg.get('n_per_edge', 16))
-    return [n] * n_layers
+    mesh_density = cfg.get('mesh_density', None)
+    explicit_n = cfg.get('n_per_edge', None)
+
+    if mesh_density is not None:
+        if edge_override is not None:
+            sizes = [float(edge_override)] * n_layers
+        else:
+            sizes = _layer_sizes(cfg, n_layers)
+
+        outermost = sizes[-1]
+        n_outer = _n_per_edge_from_density(outermost, mesh_density)
+
+        if explicit_n is not None:
+            try:
+                explicit_int = int(explicit_n)
+            except (TypeError, ValueError):
+                explicit_int = None
+            if explicit_int is not None and explicit_int != n_outer:
+                warnings.warn(
+                    'mesh_density={} (-> n_per_edge={}) overrides explicit '
+                    'n_per_edge={}. mesh_density takes priority since v1.6.0.'.format(
+                        mesh_density, n_outer, explicit_int),
+                    stacklevel = 2)
+
+        return [n_outer] * n_layers
+
+    if explicit_n is None:
+        return [_DEFAULT_N_PER_EDGE] * n_layers
+
+    return [int(explicit_n)] * n_layers
 
 
 class AdvancedMonomerCubeBuilder(StructureBuilder):
