@@ -1,6 +1,7 @@
 import os
 import sys
 import copy
+import codecs
 
 from typing import Any, Dict, List, Tuple, Optional
 
@@ -115,3 +116,87 @@ def save_yaml(path: str,
     os.makedirs(os.path.dirname(path), exist_ok = True)
     with open(path, 'w') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
+
+
+def load_py_config(path: str) -> Dict[str, Any]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            '[error] Python config file not found: <{}>!'.format(path))
+
+    with codecs.open(path, 'r', encoding = 'utf-8') as f:
+        src = f.read()
+
+    namespace = dict()
+    exec(src, namespace)
+
+    if 'args' not in namespace:
+        raise ValueError(
+            "[error] Config file <{}> must define 'args' dict!".format(path))
+
+    if not isinstance(namespace['args'], dict):
+        raise ValueError(
+            "[error] 'args' in <{}> is not a dict!".format(path))
+
+    return namespace['args']
+
+
+def merge_str_sim_args(str_args: Dict[str, Any],
+        sim_args: Dict[str, Any]) -> Dict[str, Any]:
+    from .migration.py_to_yaml import convert_args_to_yaml, merge_args
+
+    merged_flat = merge_args(str_args, sim_args)
+    cfg = convert_args_to_yaml(merged_flat)
+
+    cfg = _ensure_compute_block(cfg, sim_args)
+    cfg = _ensure_output_block(cfg, sim_args)
+
+    return cfg
+
+
+def _ensure_compute_block(cfg: Dict[str, Any],
+        sim_args: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(cfg)
+
+    nested_compute = sim_args.get('compute', None)
+
+    if isinstance(nested_compute, dict):
+
+        if 'compute' not in out:
+            out['compute'] = dict()
+
+        for k, v in nested_compute.items():
+            out['compute'][k] = v
+
+    nested_iter = sim_args.get('iter', None)
+
+    if isinstance(nested_iter, dict):
+
+        if 'compute' not in out:
+            out['compute'] = dict()
+
+        out['compute']['iterative'] = True
+
+        if 'iter_options' not in out['compute']:
+            out['compute']['iter_options'] = dict()
+
+        for k, v in nested_iter.items():
+            out['compute']['iter_options'][k] = v
+
+    return out
+
+
+def _ensure_output_block(cfg: Dict[str, Any],
+        sim_args: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(cfg)
+
+    nested_output = sim_args.get('output', None)
+
+    if isinstance(nested_output, dict):
+
+        if 'output' not in out:
+            out['output'] = dict()
+
+        for k, v in nested_output.items():
+            out['output'][k] = v
+
+    return out
