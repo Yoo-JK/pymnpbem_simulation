@@ -188,7 +188,54 @@ def _post_process(cfg: Dict[str, Any]) -> Dict[str, Any]:
             out['simulation']['n_wavelengths'] = wr[2]
 
     out = _redirect_field_only_simulation(out)
+    out = _redirect_iterative_to_iter_type(out)
 
+    return out
+
+
+# Issue A (v1.5.1) — translate compute.iterative=true into the matching
+# _iter simulation.type so legacy py configs convert to a YAML that
+# routes to BEMRetIter / BEMStatIter without further user intervention.
+_ITER_TYPE_MAP = {
+        'ret': 'ret_iter',
+        'stat': 'stat_iter',
+        'ret_layer': 'ret_layer_iter'}
+
+
+def _redirect_iterative_to_iter_type(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Mirror of dispatch.single_node._redirect_iterative_to_iter_type
+    applied at YAML migration time. Keeps the on-disk YAML self-consistent
+    (simulation.type=ret_iter) so users see what will actually run."""
+    if not isinstance(cfg, dict):
+        return cfg
+
+    compute = cfg.get('compute', dict())
+    iterative = bool(compute.get('iterative', False))
+
+    if not iterative:
+        return cfg
+
+    sim = cfg.get('simulation', dict())
+    sim_type = sim.get('type', 'ret')
+
+    if not isinstance(sim_type, str):
+        return cfg
+
+    if sim_type.endswith('_iter'):
+        return cfg
+
+    new_type = _ITER_TYPE_MAP.get(sim_type, None)
+    if new_type is None:
+        return cfg
+
+    print_info(
+            'migration iterative redirect (Issue A): simulation.type <{}> -> <{}>'.format(
+                    sim_type, new_type))
+
+    sim = dict(sim)
+    sim['type'] = new_type
+    out = dict(cfg)
+    out['simulation'] = sim
     return out
 
 
