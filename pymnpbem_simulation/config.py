@@ -140,15 +140,25 @@ def load_py_config(path: str) -> Dict[str, Any]:
     return namespace['args']
 
 
+_NESTED_PASSTHROUGH_KEYS = ('compute', 'output', 'iter', 'postprocess')
+
+
 def merge_str_sim_args(str_args: Dict[str, Any],
         sim_args: Dict[str, Any]) -> Dict[str, Any]:
     from .migration.py_to_yaml import convert_args_to_yaml, merge_args
 
-    merged_flat = merge_args(str_args, sim_args)
+    str_flat = {k: v for k, v in str_args.items()
+            if k not in _NESTED_PASSTHROUGH_KEYS}
+    sim_flat = {k: v for k, v in sim_args.items()
+            if k not in _NESTED_PASSTHROUGH_KEYS}
+
+    merged_flat = merge_args(str_flat, sim_flat)
     cfg = convert_args_to_yaml(merged_flat)
 
     cfg = _ensure_compute_block(cfg, sim_args)
     cfg = _ensure_output_block(cfg, sim_args)
+    cfg = _ensure_postprocess_block(cfg, sim_args)
+    cfg = _drop_empty_extras(cfg)
 
     return cfg
 
@@ -198,5 +208,33 @@ def _ensure_output_block(cfg: Dict[str, Any],
 
         for k, v in nested_output.items():
             out['output'][k] = v
+
+    return out
+
+
+def _ensure_postprocess_block(cfg: Dict[str, Any],
+        sim_args: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(cfg)
+
+    nested_pp = sim_args.get('postprocess', None)
+
+    if isinstance(nested_pp, dict):
+
+        if 'postprocess' not in out:
+            out['postprocess'] = dict()
+
+        for k, v in nested_pp.items():
+            out['postprocess'][k] = v
+
+    return out
+
+
+def _drop_empty_extras(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(cfg)
+
+    extras = out.get('extras', None)
+
+    if isinstance(extras, dict) and len(extras) == 0:
+        del out['extras']
 
     return out

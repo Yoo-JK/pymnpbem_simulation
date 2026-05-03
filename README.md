@@ -44,19 +44,50 @@ pip install scikit-learn==1.7.2 lmfit==1.3.2 plotly==6.5.0
 
 ## Quick Start
 
+### 권장 패턴: `--str-conf` / `--sim-conf` (mnpbem_simulation 호환)
+
+```bash
+# 새 패턴: structure 와 simulation 정의를 .py 두 개로 분리
+python run_simulation.py \
+    --str-conf examples/auag_dimer_str.py \
+    --sim-conf examples/auag_dimer_sim.py \
+    --verbose
+
+# 빠른 검증 (3 wavelengths)
+python run_simulation.py \
+    --str-conf examples/sphere_str.py \
+    --sim-conf examples/sphere_sim.py \
+    --n-wavelengths 3
+```
+
+`sim_conf.py` 안에 `compute = {n_workers, n_threads, n_gpus_per_worker, ...}`,
+`output = {dir, name, ...}` 같은 nested dict 로 모든 compute 파라미터를
+함께 지정한다. 자세한 사용법은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md) 참조.
+
+### Legacy 패턴: `--config <yaml>` (backward-compat)
+
 ```bash
 # Single-node CPU
 python run_simulation.py --config examples/dimer_baseline.yaml --n-workers 4 --n-threads 1
 
 # Auto-detect (SLURM/PBS GPU 환경)
 python run_simulation.py --config examples/dimer_baseline.yaml --auto
-
-# Migrate old .py config to YAML
-python -m pymnpbem_simulation.migration.py_to_yaml \
-    /path/to/config_str.py /path/to/config_sim.py output.yaml
 ```
 
-자세한 CLI 옵션은 [HELP.md](./HELP.md) 또는 `python run_simulation.py --help` 참조.
+### 변환 도구
+
+```bash
+# Legacy mnpbem_simulation .py → YAML
+python -m pymnpbem_simulation.migration.py_to_yaml \
+    /path/to/config_str.py /path/to/config_sim.py output.yaml
+
+# YAML → --str-conf/--sim-conf .py 쌍
+python -m pymnpbem_simulation.migration.yaml_to_str_sim \
+    input.yaml out_str.py out_sim.py
+```
+
+자세한 CLI 옵션은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md)
+또는 `python run_simulation.py --help` 참조.
 
 ## Project layout
 
