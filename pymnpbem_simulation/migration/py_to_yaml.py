@@ -187,7 +187,86 @@ def _post_process(cfg: Dict[str, Any]) -> Dict[str, Any]:
             out['simulation']['enei_max'] = wr[1]
             out['simulation']['n_wavelengths'] = wr[2]
 
+    out = _redirect_field_only_simulation(out)
+
     return out
+
+
+def _redirect_field_only_simulation(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """If the source config is field-only (no spectrum, fields requested),
+    redirect ``simulation.type`` to ``field`` and synthesise the ``grid``
+    block expected by FieldCalculator from the legacy ``field_region``.
+
+    Triggered when:
+      - ``simulation.calculate_cross_sections`` is False, AND
+      - ``simulation.calculate_fields`` is True OR ``field_region`` is set.
+
+    Without this redirect the YAML keeps ``simulation.type == 'ret'`` (or
+    similar) so the spectrum runner is invoked and never produces field
+    output (Issue 4 — jk-config dimer_au_r0.2/au_r0.2_g*.yaml family).
+    """
+    if 'simulation' not in cfg:
+        return cfg
+
+    sim = dict(cfg['simulation'])
+
+    cross = sim.get('calculate_cross_sections', True)
+    fields = sim.get('calculate_fields', False)
+    has_region = 'field_region' in sim
+
+    if cross is True or cross is None:
+        return cfg
+    if not (fields is True or has_region):
+        return cfg
+
+    # Stash the spectrum sim type (informational; postprocess may still
+    # want to know the original variant). Switch active type to 'field'.
+    original_type = sim.get('type', 'ret')
+    sim['original_type'] = original_type
+    sim['type'] = 'field'
+
+    # Build grid block from field_region (legacy schema:
+    # x_range = [xmin, xmax, npts], same for y_range, z_range).
+    region = sim.pop('field_region', None)
+    grid = sim.get('grid', None)
+    if grid is None and region is not None:
+        grid = _grid_from_field_region(region)
+    if grid is not None:
+        sim['grid'] = grid
+
+    # Map legacy field_* keys onto FieldCalculator inputs.
+    if 'field_mindist' in sim and 'mindist' not in sim:
+        sim['mindist'] = sim['field_mindist']
+    if 'field_nmax' in sim and 'nmax' not in sim:
+        sim['nmax'] = sim['field_nmax']
+
+    out = dict(cfg)
+    out['simulation'] = sim
+    return out
+
+
+def _grid_from_field_region(region: Dict[str, Any]) -> Dict[str, Any]:
+    grid = {'type': 'rectangular'}
+
+    x_range = region.get('x_range', None)
+    y_range = region.get('y_range', None)
+    z_range = region.get('z_range', None)
+
+    n_points = []
+    if isinstance(x_range, (list, tuple)) and len(x_range) >= 2:
+        grid['x_range'] = [float(x_range[0]), float(x_range[1])]
+        n_points.append(int(x_range[2]) if len(x_range) >= 3 else 1)
+    if isinstance(y_range, (list, tuple)) and len(y_range) >= 2:
+        grid['y_range'] = [float(y_range[0]), float(y_range[1])]
+        n_points.append(int(y_range[2]) if len(y_range) >= 3 else 1)
+    if isinstance(z_range, (list, tuple)) and len(z_range) >= 2:
+        grid['z_range'] = [float(z_range[0]), float(z_range[1])]
+        n_points.append(int(z_range[2]) if len(z_range) >= 3 else 1)
+
+    if len(n_points) == 3:
+        grid['n_points'] = n_points
+
+    return grid
 
 
 def convert_py_to_yaml(path_str: Optional[str],
@@ -212,6 +291,31 @@ def convert_py_to_yaml(path_str: Optional[str],
     return cfg
 
 
+def upgrade_yaml(path_in: str, path_out: Optional[str] = None) -> Dict[str, Any]:
+    """Re-run the migration post-processors on an already-converted YAML.
+
+    Useful for upgrading v1.4 YAMLs (e.g. jk-config branch) so the new
+    field-only redirect (Issue 4) takes effect without re-running py->yaml.
+    """
+    with codecs.open(path_in, 'r', encoding = 'utf-8') as f:
+        cfg = yaml.safe_load(f)
+
+    if not isinstance(cfg, dict):
+        raise ValueError("[error] <{}> is not a YAML mapping!".format(path_in))
+
+    cfg = _post_process(cfg)
+
+    if path_out is None:
+        path_out = path_in
+
+    ensure_dir(os.path.dirname(os.path.abspath(path_out)))
+    with open(path_out, 'w') as f:
+        yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
+
+    print_info('upgraded YAML <{}> -> <{}>'.format(path_in, path_out))
+    return cfg
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description = 'Convert legacy mnpbem_simulation .py config to YAML.')
@@ -221,10 +325,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             help = 'Path to config_sim_*.py (simulation config).')
     parser.add_argument('output_yaml', type = str,
             help = 'Output YAML path.')
+    parser.add_argument('--upgrade-yaml', action = 'store_true',
+            help = 'Treat <input_sim> as an existing YAML and re-run post-'
+                    'processors only (in-place if no <output_yaml>).')
 
     args = parser.parse_args(argv)
 
     try:
+        if args.upgrade_yaml:
+            out_path = args.output_yaml if args.output_yaml else args.input_sim
+            upgrade_yaml(args.input_sim, out_path)
+            return 0
         path_str = args.input_str if args.input_str != '' else None
         convert_py_to_yaml(path_str, args.input_sim, args.output_yaml)
         return 0
