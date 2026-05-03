@@ -91,30 +91,70 @@ class SimulationRunner(object):
 
         v1.2.0 introduces ``schur=...`` on BEMStat / BEMRet. v1.3.0
         introduces ``hmatrix=`` (and the companion ``htol`` / ``kmax`` /
-        ``cleaf``) on BEMRetIter / BEMStatIter. When the installed
-        mnpbem port (Agent α merge) does not yet recognise these flags
-        we retry without them so the wrapper still functions during the
-        rollout window.
+        ``cleaf``) on BEMRetIter / BEMStatIter. v1.5.0 introduces the
+        H-matrix LU preconditioner (``preconditioner``, ``htol_precond``)
+        and the iterative Schur reduction (``schur_g_ss_solver``,
+        ``schur_inner_tol``, ``schur_inner_maxit``) on BEMRetIter /
+        BEMStatIter. When the installed mnpbem port does not yet
+        recognise these flags we retry without them so the wrapper still
+        functions during the rollout window.
         """
-        try:
-            return cls(*args, **opts)
-        except TypeError as exc:
-            msg = str(exc).lower()
-            stripped = dict(opts)
-            removed: list = []
+        # Retry up to 6 times: each TypeError reveals one offending kwarg
+        # group; we strip it and retry. The number 6 is the maximum
+        # distinct offender groups (schur / hmatrix / preconditioner /
+        # schur_g_ss_solver / schur_inner_tol / schur_inner_maxit).
+        max_attempts = 6
+        attempts = 0
+        current_opts = dict(opts)
 
-            if 'schur' in stripped and 'schur' in msg:
-                stripped.pop('schur', None)
-                removed.append('schur')
+        while True:
+            attempts += 1
+            try:
+                return cls(*args, **current_opts)
+            except TypeError as exc:
+                msg = str(exc).lower()
+                stripped = dict(current_opts)
+                removed: list = []
 
-            if 'hmatrix' in stripped and 'hmatrix' in msg:
-                for v130_key in ('hmatrix', 'htol', 'kmax', 'cleaf'):
-                    stripped.pop(v130_key, None)
-                removed.append('hmatrix')
+                if 'schur_g_ss_solver' in stripped and 'schur_g_ss_solver' in msg:
+                    stripped.pop('schur_g_ss_solver', None)
+                    removed.append('schur_g_ss_solver')
 
-            if not removed:
-                raise
-            return cls(*args, **stripped)
+                if 'schur_inner_tol' in stripped and 'schur_inner_tol' in msg:
+                    stripped.pop('schur_inner_tol', None)
+                    removed.append('schur_inner_tol')
+
+                if 'schur_inner_maxit' in stripped and 'schur_inner_maxit' in msg:
+                    stripped.pop('schur_inner_maxit', None)
+                    removed.append('schur_inner_maxit')
+
+                if 'htol_precond' in stripped and 'htol_precond' in msg:
+                    stripped.pop('htol_precond', None)
+                    removed.append('htol_precond')
+
+                if 'preconditioner' in stripped and 'preconditioner' in msg:
+                    for v150_key in ('preconditioner', 'htol_precond'):
+                        stripped.pop(v150_key, None)
+                    removed.append('preconditioner')
+
+                if 'schur' in stripped and "'schur'" in msg:
+                    # When the bare ``schur`` flag is rejected, the entire
+                    # Schur-iter feature group must come down with it
+                    # because the inner solver knobs no longer make sense.
+                    for v150_key in ('schur', 'schur_g_ss_solver',
+                            'schur_inner_tol', 'schur_inner_maxit'):
+                        stripped.pop(v150_key, None)
+                    removed.append('schur')
+
+                if 'hmatrix' in stripped and 'hmatrix' in msg:
+                    for v130_key in ('hmatrix', 'htol', 'kmax', 'cleaf'):
+                        stripped.pop(v130_key, None)
+                    removed.append('hmatrix')
+
+                if not removed or attempts >= max_attempts:
+                    raise
+
+                current_opts = stripped
 
     def _resolve_hmatrix(self,
             particle: Any,
@@ -173,6 +213,125 @@ class SimulationRunner(object):
                     return int(v)
 
         return 0
+
+    def _resolve_preconditioner(self,
+            iter_cfg: Dict[str, Any],
+            hmatrix_active: bool) -> Dict[str, Any]:
+        """Resolve the v1.5.0 ``preconditioner`` flag from the iter block.
+
+        Returns a kwargs dict ready to feed BEMRetIter / BEMStatIter:
+
+        * ``'auto'`` (default) ->
+            - ``hlu_dense`` when hmatrix is OFF (legacy fast path)
+            - ``hlu_dense`` when hmatrix is ON and particle is small
+            - ``hlu_tree`` when hmatrix is ON and particle is large
+            We forward ``preconditioner='auto'`` and let the BEM solver
+            do the final dispatch (which uses the H-matrix tree size).
+        * ``'none'`` -> ``preconditioner='none'`` (disable entirely)
+        * ``'hlu_dense'`` / ``'hlu_tree'`` -> forward as-is
+        * missing key -> behaves like ``'auto'``
+
+        ``htol_precond`` is forwarded only when the user explicitly sets
+        it; otherwise the BEM solver default (1e-4) wins.
+        """
+        if not isinstance(iter_cfg, dict):
+            iter_cfg = dict()
+
+        raw = iter_cfg.get('preconditioner', 'auto')
+
+        if raw is None:
+            raw = 'auto'
+
+        if isinstance(raw, str):
+            tag = raw.strip().lower()
+        else:
+            tag = raw
+
+        out: Dict[str, Any] = dict()
+
+        if tag == 'auto':
+            # 'auto' makes most sense when paired with H-matrix; without
+            # H-matrix the dense LU built inside BEMIter already works as
+            # the legacy preconditioner. We pass through 'auto' so the
+            # BEM solver itself can choose dense vs tree based on tree.n.
+            out['preconditioner'] = 'auto'
+        elif tag == 'none':
+            out['preconditioner'] = 'none'
+        elif tag in ('hlu_dense', 'hlu_tree'):
+            out['preconditioner'] = tag
+        elif tag is True or tag == 'true':
+            out['preconditioner'] = 'auto'
+        elif tag is False or tag == 'false':
+            out['preconditioner'] = 'none'
+        else:
+            out['preconditioner'] = 'auto'
+
+        if 'htol_precond' in iter_cfg and iter_cfg['htol_precond'] is not None:
+            out['htol_precond'] = float(iter_cfg['htol_precond'])
+
+        return out
+
+    def _resolve_schur_iter(self,
+            iter_cfg: Dict[str, Any],
+            has_cover_layer: bool) -> Dict[str, Any]:
+        """Resolve the v1.5.0 ``schur`` (iter-path) and the inner-solver
+        knobs (``schur_g_ss_solver``, ``schur_inner_tol``,
+        ``schur_inner_maxit``).
+
+        The iter-path Schur option lives on the iter block (parallel to
+        ``hmatrix``), unlike the v1.2.0 dense-path option which lives in
+        ``compute.schur_complement``. Both default to ``'auto'`` and
+        auto-enable when a cover layer is detected.
+
+        Returns kwargs dict (possibly empty when schur is OFF).
+        """
+        if not isinstance(iter_cfg, dict):
+            iter_cfg = dict()
+
+        raw = iter_cfg.get('schur', 'auto')
+
+        if raw is None:
+            raw = 'auto'
+
+        if isinstance(raw, str):
+            tag = raw.strip().lower()
+        else:
+            tag = raw
+
+        if tag == 'auto':
+            active = bool(has_cover_layer)
+        elif tag is True or tag == 'true':
+            active = True
+        elif tag is False or tag == 'false':
+            active = False
+        else:
+            active = bool(has_cover_layer)
+
+        if not active:
+            return dict()
+
+        out: Dict[str, Any] = {'schur': True}
+
+        g_ss_solver = iter_cfg.get('schur_g_ss_solver', 'auto')
+        if isinstance(g_ss_solver, str):
+            g_ss_solver = g_ss_solver.strip().lower()
+        out['schur_g_ss_solver'] = g_ss_solver
+
+        if 'schur_inner_tol' in iter_cfg and iter_cfg['schur_inner_tol'] is not None:
+            out['schur_inner_tol'] = float(iter_cfg['schur_inner_tol'])
+
+        if 'schur_inner_maxit' in iter_cfg and iter_cfg['schur_inner_maxit'] is not None:
+            out['schur_inner_maxit'] = int(iter_cfg['schur_inner_maxit'])
+
+        return out
+
+    def _has_cover_layer(self) -> bool:
+        """Detect whether the current particle exposes a nonlocal cover
+        layer (used to auto-enable Schur-iter)."""
+        refun = getattr(self.p, '_mnpbem_refun', None)
+        if refun is None and hasattr(self.p, 'pfull'):
+            refun = getattr(self.p.pfull, '_mnpbem_refun', None)
+        return refun is not None
 
     def _resolve_schur(self,
             has_cover_layer: bool) -> Any:
