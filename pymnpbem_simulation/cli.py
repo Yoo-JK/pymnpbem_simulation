@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 import time
 
@@ -13,15 +14,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     from .util import print_info, print_error, ensure_dir, save_json, now_str
-    from .config import load_yaml, merge_overrides, apply_defaults, validate_config, save_yaml
-    from .auto_detect import detect_n_gpus, detect_n_cpus, auto_compute_plan, detect_multi_node, detect_mpi_rank
+    from .config import (
+            load_yaml, merge_overrides, apply_defaults, validate_config,
+            save_yaml, load_py_config, merge_str_sim_args)
+    from .auto_detect import (
+            detect_n_gpus, detect_n_cpus, auto_compute_plan,
+            detect_multi_node, detect_mpi_rank)
     from .env_setup import setup_env, assert_pre_import
 
-    try:
-        cfg = load_yaml(args.config)
-    except Exception as e:
-        print_error('failed to load config <{}>: {}'.format(args.config, e))
+    if not _has_required_inputs(args):
+        print_error('either (--str-conf + --sim-conf) or --config is required')
+        parser.print_usage()
         return 1
+
+    try:
+        cfg = _load_initial_config(args)
+    except Exception as e:
+        print_error('failed to load config: {}'.format(e))
+        return 1
+
+    if args.verbose:
+        _print_verbose_inputs(args, cfg)
 
     overrides = _build_overrides(args)
     cfg = merge_overrides(cfg, overrides)
@@ -65,6 +78,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     snapshot_path = os.path.join(out_dir, 'config.yaml')
     save_yaml(snapshot_path, cfg)
     print_info('saved config snapshot <{}>'.format(snapshot_path))
+
+    if args.verbose:
+        print_info('=== merged cfg ===')
+        print(json.dumps(cfg, indent = 2, default = str), flush = True)
 
     enei = _build_enei(cfg, args.n_wavelengths)
     print_info('wavelengths: {} points from {:.1f} to {:.1f} nm'.format(
@@ -115,18 +132,78 @@ def main(argv: Optional[List[str]] = None) -> int:
     return 0
 
 
+def _has_required_inputs(args: argparse.Namespace) -> bool:
+    has_str_sim = bool(args.str_conf) and bool(args.sim_conf)
+    has_yaml = bool(args.config)
+    return has_str_sim or has_yaml
+
+
+def _load_initial_config(args: argparse.Namespace) -> Dict[str, Any]:
+    from .config import load_yaml, load_py_config, merge_str_sim_args
+    from .util import print_info
+
+    if args.str_conf and args.sim_conf:
+        print_info('loading str-conf <{}>'.format(args.str_conf))
+        str_args = load_py_config(args.str_conf)
+        print_info('loading sim-conf <{}>'.format(args.sim_conf))
+        sim_args = load_py_config(args.sim_conf)
+        cfg = merge_str_sim_args(str_args, sim_args)
+        return cfg
+
+    if args.str_conf or args.sim_conf:
+        raise ValueError(
+                '[error] both --str-conf and --sim-conf must be given together '
+                '(use --config for legacy single-YAML mode)')
+
+    print_info('loading legacy YAML config <{}>'.format(args.config))
+    return load_yaml(args.config)
+
+
+def _print_verbose_inputs(args: argparse.Namespace,
+        cfg: Dict[str, Any]) -> None:
+    from .util import print_info
+    from .config import load_py_config
+
+    if args.str_conf and args.sim_conf:
+        print_info('=== str_conf ===')
+        try:
+            str_args = load_py_config(args.str_conf)
+            print(json.dumps(str_args, indent = 2, default = str), flush = True)
+        except Exception as e:
+            print('[warn] could not re-print str_conf: {}'.format(e))
+
+        print_info('=== sim_conf ===')
+        try:
+            sim_args = load_py_config(args.sim_conf)
+            print(json.dumps(sim_args, indent = 2, default = str), flush = True)
+        except Exception as e:
+            print('[warn] could not re-print sim_conf: {}'.format(e))
+
+    print_info('=== loaded cfg (pre-overrides) ===')
+    print(json.dumps(cfg, indent = 2, default = str), flush = True)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog = 'pymnpbem_simulation',
-        description = 'Run MNPBEM (Python port) electromagnetic simulation from YAML config.')
+        description = (
+                'Run MNPBEM (Python port) electromagnetic simulation. '
+                'Use --str-conf + --sim-conf for the new mnpbem_simulation-'
+                'compatible CLI, or --config for legacy single-YAML mode.'))
 
-    parser.add_argument('--config', type = str, required = True,
-            help = 'Path to YAML config file.')
+    parser.add_argument('--str-conf', type = str, default = None,
+            help = 'Path to structure config .py (defines `args` dict).')
+    parser.add_argument('--sim-conf', type = str, default = None,
+            help = 'Path to simulation config .py (defines `args` dict). '
+                    'Includes simulation, compute, output blocks.')
+
+    parser.add_argument('--config', type = str, default = None,
+            help = 'Legacy: path to YAML config file.')
 
     parser.add_argument('--n-workers', type = int, default = None,
-            help = 'Number of worker processes (overrides YAML).')
+            help = 'Number of worker processes (overrides sim_conf).')
     parser.add_argument('--n-threads', type = int, default = None,
-            help = 'BLAS/OMP threads per worker.')
+            help = 'BLAS/OMP threads per worker (overrides sim_conf).')
     parser.add_argument('--n-gpus-per-worker', type = int, default = None,
             help = 'GPUs per worker (0 = CPU, 1 = single GPU, 2+ = VRAM pool).')
     parser.add_argument('--multi-node', action = 'store_true',
@@ -139,7 +216,7 @@ def _build_parser() -> argparse.ArgumentParser:
             help = 'Auto-detect compute plan from SLURM/PBS environment.')
 
     parser.add_argument('--output-dir', type = str, default = None,
-            help = 'Override output directory (YAML override).')
+            help = 'Override output directory (sim_conf override).')
     parser.add_argument('--simulation-name', type = str, default = None,
             help = 'Override simulation name (folder).')
     parser.add_argument('--n-wavelengths', type = int, default = None,
@@ -147,7 +224,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--reanalyze', action = 'store_true',
             help = 'Skip simulation, only run postprocess on existing results.')
     parser.add_argument('--verbose', action = 'store_true',
-            help = 'Verbose logging.')
+            help = 'Verbose logging (prints loaded str_conf/sim_conf/cfg).')
 
     return parser
 
