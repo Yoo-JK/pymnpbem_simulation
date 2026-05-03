@@ -561,5 +561,56 @@ def test_planewave_ret_iter_preconditioner_smoke() -> None:
             '[error] preconditioner ON vs OFF rel diff {:.3e} > 1e-4'.format(rel)
 
 
+@pytest.mark.slow
+def test_planewave_stat_iter_schur_on_off_matches() -> None:
+    """Cover-layer nonlocal sphere: schur ON vs OFF must give identical
+    spectra (Schur is an exact reduction, not an approximation)."""
+    import inspect
+
+    try:
+        from mnpbem.bem import BEMStatIter
+    except ImportError:
+        pytest.skip('mnpbem.bem.BEMStatIter unavailable')
+
+    sig = inspect.signature(BEMStatIter.__init__)
+    has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values())
+    if 'schur' not in sig.parameters and not has_var_kw:
+        pytest.skip(
+                'BEMStatIter does not accept schur= kwarg yet (Agent β not merged)')
+
+    from pymnpbem_simulation.structures import build_structure
+    from pymnpbem_simulation.simulation import build_simulation
+
+    cfg_struct = {
+            'type': 'with_nonlocal',
+            'base': {'type': 'sphere', 'diameter': 10, 'mesh_density': 60},
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05,
+                    'beta': None, 'eps_embed': 1.0}}
+    cfg_m = {'medium': 'vacuum', 'particle': 'gold'}
+    enei = np.array([550.0])
+
+    p1, eps1, _ = build_structure(cfg_struct, cfg_m)
+    res_off = build_simulation(p1, eps1,
+            {'structure': cfg_struct,
+                    'simulation': {'type': 'stat_iter', 'excitation': 'planewave',
+                            'polarizations': [[1, 0, 0]],
+                            'iter': {'tol': 1.0e-8, 'maxit': 500, 'precond': 'hmat',
+                                    'hmatrix': False, 'schur': False}}}).run(enei)
+
+    p2, eps2, _ = build_structure(cfg_struct, cfg_m)
+    res_on = build_simulation(p2, eps2,
+            {'structure': cfg_struct,
+                    'simulation': {'type': 'stat_iter', 'excitation': 'planewave',
+                            'polarizations': [[1, 0, 0]],
+                            'iter': {'tol': 1.0e-8, 'maxit': 500, 'precond': 'hmat',
+                                    'hmatrix': False, 'schur': True}}}).run(enei)
+
+    rel = np.max(np.abs(res_on['ext'] - res_off['ext'])
+            / np.maximum(np.abs(res_off['ext']), 1e-30))
+    assert rel < 1e-6, \
+            '[error] schur ON vs OFF rel diff {:.3e} > 1e-6'.format(rel)
+
+
 if __name__ == '__main__':
     sys.exit(pytest.main([__file__, '-v']))
