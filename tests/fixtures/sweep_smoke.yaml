@@ -1,0 +1,21 @@
+# Smoke test sweep config — 2 sphere structures, CPU-only.
+#
+# Manual verification:
+#   cd <repo>
+#   python run_simulation.py --sweep-conf tests/fixtures/sweep_smoke.yaml --verbose
+#
+# Expected: two output sub-dirs '00_sphere_d30' and '01_sphere_d35'
+# under ./_sweep_results/, each with spectrum.npz/spectrum.json.
+
+sim_conf: sweep_smoke_sim.py
+
+str_confs:
+  - sweep_smoke_str_d30.py
+  - sweep_smoke_str_d35.py
+
+n_workers: 2
+gpus_per_worker: 0
+threads_per_worker: 1
+
+output_dir: ./_sweep_results
+output_subdir_pattern: '{idx:02d}_{name}'

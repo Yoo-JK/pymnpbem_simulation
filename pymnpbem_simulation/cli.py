@@ -23,9 +23,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     from .env_setup import setup_env, assert_pre_import
 
     if not _has_required_inputs(args):
-        print_error('either (--str-conf + --sim-conf) or --config is required')
+        print_error(
+                'either --sweep-conf, (--str-conf + --sim-conf), or --config is required')
         parser.print_usage()
         return 1
+
+    if not _has_consistent_inputs(args):
+        print_error(
+                '--sweep-conf is mutually exclusive with --str-conf/--sim-conf and --config')
+        return 1
+
+    if args.sweep_conf:
+        from .dispatch.sweep import dispatch_sweep
+        try:
+            return dispatch_sweep(
+                    sweep_conf_path = args.sweep_conf,
+                    extra_overrides = _build_overrides(args),
+                    verbose = args.verbose,
+                    n_wavelengths_override = args.n_wavelengths)
+        except Exception as exc:
+            print_error('sweep dispatch failed: {}'.format(exc))
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+            return 3
 
     try:
         cfg = _load_initial_config(args)
@@ -135,7 +156,20 @@ def main(argv: Optional[List[str]] = None) -> int:
 def _has_required_inputs(args: argparse.Namespace) -> bool:
     has_str_sim = bool(args.str_conf) and bool(args.sim_conf)
     has_yaml = bool(args.config)
-    return has_str_sim or has_yaml
+    has_sweep = bool(getattr(args, 'sweep_conf', None))
+    return has_str_sim or has_yaml or has_sweep
+
+
+def _has_consistent_inputs(args: argparse.Namespace) -> bool:
+    """--sweep-conf must not be combined with single-run inputs."""
+    has_str_sim = bool(args.str_conf) or bool(args.sim_conf)
+    has_yaml = bool(args.config)
+    has_sweep = bool(getattr(args, 'sweep_conf', None))
+
+    if has_sweep and (has_str_sim or has_yaml):
+        return False
+
+    return True
 
 
 def _load_initial_config(args: argparse.Namespace) -> Dict[str, Any]:
@@ -199,6 +233,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument('--config', type = str, default = None,
             help = 'Legacy: path to YAML config file.')
+
+    parser.add_argument('--sweep-conf', type = str, default = None,
+            help = 'Path to sweep YAML defining multiple (str_conf, sim_conf) '
+                    'pairs to run in parallel across N workers. Mutually '
+                    'exclusive with --str-conf/--sim-conf and --config.')
 
     parser.add_argument('--n-workers', type = int, default = None,
             help = 'Number of worker processes (overrides sim_conf).')

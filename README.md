@@ -64,6 +64,16 @@ python run_simulation.py \
 `output = {dir, name, ...}` 같은 nested dict 로 모든 compute 파라미터를
 함께 지정한다. 자세한 사용법은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md) 참조.
 
+### Sweep 패턴: `--sweep-conf <yaml>` (병렬 다중 케이스)
+
+여러 (str_conf, sim_conf) 페어를 동시에 돌려 각 worker 가 자기 GPU 에 pin 된다 (`CUDA_VISIBLE_DEVICES` 격리). 4-GPU 노드에서 4 케이스 비교 = 4x throughput.
+
+```bash
+python run_simulation.py --sweep-conf my_sweep.yaml
+```
+
+자세한 sweep YAML 포맷은 [HELP.md](./HELP.md#sweep-mode---sweep-conf) 참조.
+
 ### Legacy 패턴: `--config <yaml>` (backward-compat)
 
 ```bash
