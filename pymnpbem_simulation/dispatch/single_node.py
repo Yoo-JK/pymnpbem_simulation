@@ -158,6 +158,8 @@ def _dispatch_cpu_pool(cfg: Dict[str, Any],
     abs_ = np.zeros((n_wl, n_pol))
     warm_s = 0.0
     errors = []
+    sc_records = []
+    sc_mesh = None
 
     for _ in procs:
         r = results_q.get()
@@ -173,6 +175,25 @@ def _dispatch_cpu_pool(cfg: Dict[str, Any],
 
         if r.get('warmup_s', 0.0) > warm_s:
             warm_s = r['warmup_s']
+
+        if r.get('sc_local', None) is not None:
+            sc_local = r['sc_local']
+
+            for k in range(len(sc_local['wavelengths'])):
+                sc_records.append({
+                        'wavelength': float(sc_local['wavelengths'][k]),
+                        'wl_idx': int(sc_local['wl_indices'][k]),
+                        'sig2': sc_local['sig2'][k],
+                        'sig1': sc_local['sig1'][k]})
+
+            if sc_mesh is None:
+                sc_mesh = {
+                        'verts': sc_local['verts'],
+                        'faces': sc_local['faces'],
+                        'centroids': sc_local['centroids'],
+                        'normals': sc_local['normals'],
+                        'areas': sc_local['areas'],
+                        'polarizations': sc_local['polarizations']}
 
     for proc in procs:
         proc.join(timeout = 30)
@@ -199,7 +220,7 @@ def _dispatch_cpu_pool(cfg: Dict[str, Any],
             peak_ext_x, peak_wl))
     print_info('cpu_pool: total wall = {:.2f} min'.format(wall_s / 60.0))
 
-    return {
+    out = {
             'wavelength': enei,
             'ext': ext,
             'sca': sca,
@@ -210,6 +231,30 @@ def _dispatch_cpu_pool(cfg: Dict[str, Any],
             'peak_wl_nm': peak_wl,
             'peak_ext_x': peak_ext_x,
             'n_pol': n_pol}
+
+    if sc_records and sc_mesh is not None:
+        sc_records.sort(key = lambda r: r['wl_idx'])
+        nfaces = sc_records[0]['sig2'].shape[0]
+        sig2_all = np.zeros((len(sc_records), nfaces, n_pol), dtype = complex)
+        sig1_all = np.zeros((len(sc_records), nfaces, n_pol), dtype = complex)
+
+        for k, rec in enumerate(sc_records):
+            n_pol_rec = min(n_pol, rec['sig2'].shape[1])
+            sig2_all[k, :, :n_pol_rec] = rec['sig2'][:, :n_pol_rec]
+            sig1_all[k, :, :n_pol_rec] = rec['sig1'][:, :n_pol_rec]
+
+        sc_dict = {
+                'wavelengths': np.asarray([r['wavelength'] for r in sc_records]),
+                'wl_indices': np.asarray([r['wl_idx'] for r in sc_records],
+                        dtype = int),
+                'sig2': sig2_all,
+                'sig1': sig1_all}
+        sc_dict.update(sc_mesh)
+        out['surface_charge'] = sc_dict
+        print_info('cpu_pool: aggregated surface_charge across {} wavelengths'.format(
+                len(sc_records)))
+
+    return out
 
 
 def _cpu_pool_worker(worker_idx: int,
@@ -245,6 +290,23 @@ def _cpu_pool_worker(worker_idx: int,
         local = run_simulation(cfg, p, epstab, enei_arr)
         wall = time.time() - t0
 
+        sc_local = local.get('surface_charge', None)
+
+        if sc_local is not None:
+            global_indices = np.asarray(wl_indices, dtype = int)
+            local_idx = np.asarray(sc_local['wl_indices'], dtype = int)
+            sc_local = {
+                    'wavelengths': np.asarray(sc_local['wavelengths']),
+                    'wl_indices': global_indices[local_idx],
+                    'sig2': np.asarray(sc_local['sig2']),
+                    'sig1': np.asarray(sc_local['sig1']),
+                    'verts': np.asarray(sc_local['verts']),
+                    'faces': np.asarray(sc_local['faces']),
+                    'centroids': np.asarray(sc_local['centroids']),
+                    'normals': np.asarray(sc_local['normals']),
+                    'areas': np.asarray(sc_local['areas']),
+                    'polarizations': np.asarray(sc_local['polarizations'])}
+
         queue.put({
                 'ok': True,
                 'worker_idx': worker_idx,
@@ -253,7 +315,8 @@ def _cpu_pool_worker(worker_idx: int,
                 'sca': np.asarray(local['sca']),
                 'abs': np.asarray(local['abs']),
                 'wall_s': wall,
-                'warmup_s': float(local.get('warmup_s', 0.0))})
+                'warmup_s': float(local.get('warmup_s', 0.0)),
+                'sc_local': sc_local})
 
     except Exception as exc:
         queue.put({

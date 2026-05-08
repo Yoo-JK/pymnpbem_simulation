@@ -10,6 +10,12 @@ from .plot_field import (
         plot_field_2d_slice,
         plot_hotspots_3d,
         plot_near_field_decay)
+from .plot_surface_charge import (
+        plot_all_surface_charge,
+        plot_surface_charge_3d,
+        plot_surface_charge_2d_8views,
+        plot_surface_charge_phase,
+        load_surface_charge_from_npz)
 from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
 from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
 from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
@@ -26,6 +32,11 @@ __all__ = [
         'plot_field_2d_slice',
         'plot_hotspots_3d',
         'plot_near_field_decay',
+        'plot_all_surface_charge',
+        'plot_surface_charge_3d',
+        'plot_surface_charge_2d_8views',
+        'plot_surface_charge_phase',
+        'load_surface_charge_from_npz',
         'qs_eigenmodes',
         'svd_decomposition',
         'retarded_eigenmodes',

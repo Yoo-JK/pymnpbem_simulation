@@ -110,6 +110,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     if cfg['output'].get('save_plots', True):
         plot_spectrum(out_dir, result, title = out_name)
 
+    sc = result.get('surface_charge', None)
+    if sc is not None and cfg['output'].get('save_plots', True):
+        from .postprocess import plot_all_surface_charge
+
+        plot_format = cfg['output'].get('plot_format', ['png'])
+        dpi = int(cfg['output'].get('plot_dpi', 200))
+        pol_labels = _make_polarization_labels(cfg)
+
+        files = plot_all_surface_charge(out_dir, sc,
+                plot_format = plot_format, dpi = dpi,
+                polarization_labels = pol_labels, verbose = args.verbose)
+        print_info('surface_charge: saved {} plot file(s)'.format(len(files)))
+
     print_info('done. results in <{}>'.format(out_dir))
 
     return 0
@@ -186,7 +199,8 @@ def _build_enei(cfg: Dict[str, Any],
 
 def _reanalyze(out_dir: str) -> int:
     from .util import print_info, print_error, save_json
-    from .postprocess import analyze_spectrum, plot_spectrum
+    from .postprocess import (analyze_spectrum, plot_spectrum,
+            plot_all_surface_charge, load_surface_charge_from_npz)
 
     npz_path = os.path.join(out_dir, 'spectrum.npz')
 
@@ -211,7 +225,33 @@ def _reanalyze(out_dir: str) -> int:
     save_json(os.path.join(out_dir, 'spectrum_analysis.json'), analysis)
     plot_spectrum(out_dir, result, title = os.path.basename(out_dir))
 
+    sc = load_surface_charge_from_npz(npz)
+
+    if sc is not None:
+        files = plot_all_surface_charge(out_dir, sc, plot_format = ['png'],
+                dpi = 200, verbose = True)
+        print_info('reanalyze surface_charge: saved {} plot file(s)'.format(len(files)))
+
     return 0
+
+
+def _make_polarization_labels(cfg: Dict[str, Any]) -> List[str]:
+
+    pols = cfg.get('simulation', dict()).get('polarizations',
+            [[1, 0, 0], [0, 1, 0]])
+
+    labels = []
+
+    for pol in pols:
+        arr = np.asarray(pol).flatten()
+
+        if arr.size >= 3:
+            labels.append('[{:.0f} {:.0f} {:.0f}]'.format(
+                    float(arr[0]), float(arr[1]), float(arr[2])))
+        else:
+            labels.append(str(arr.tolist()))
+
+    return labels
 
 
 if __name__ == '__main__':
