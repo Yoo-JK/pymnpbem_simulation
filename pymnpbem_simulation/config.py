@@ -84,7 +84,114 @@ def apply_defaults(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out['simulation']['enei_max'] = wr[1]
         out['simulation']['n_wavelengths'] = wr[2]
 
+    out = _auto_wrap_substrate(out)
+
     return out
+
+
+_SIM_LAYER_PROMOTE = {
+    'ret': 'ret_layer',
+    'stat': 'stat_layer',
+    'ret_iter': 'ret_layer_iter'}
+
+
+def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Auto-wrap MATLAB-style <materials.use_substrate=True> into the canonical
+    <structure.type=with_substrate> form.
+
+    Triggered when the YAML uses <materials.use_substrate>=True but
+    <structure.type> is a plain particle type (not already with_substrate). The
+    base structure config is preserved in <structure.base>, the substrate spec
+    is normalized into <structure.substrate>, and <simulation.type> is promoted
+    from <ret>/<stat>/<ret_iter> to the corresponding _layer variant.
+
+    Substrate eps is resolved via:
+      1. <materials.refractive_index_paths[<material>]> with type='constant'
+         (epsilon -> EpsConst).
+      2. <materials.refractive_index_paths[<material>]> with type='table'
+         (file -> EpsTable spec, passed through as a string).
+      3. Built-in substrate name (handled by WithSubstrateBuilder presets).
+    """
+
+    out = cfg
+    materials = out.get('materials', None)
+
+    if not isinstance(materials, dict):
+        return out
+
+    if not bool(materials.get('use_substrate', False)):
+        return out
+
+    cfg_struct = out.get('structure', None)
+
+    if not isinstance(cfg_struct, dict):
+        return out
+
+    base_type = str(cfg_struct.get('type', '')).lower()
+
+    if base_type == 'with_substrate':
+        return out
+
+    sub_spec = materials.get('substrate', dict())
+    ri_paths = materials.get('refractive_index_paths', dict())
+    material_name = sub_spec.get('material', 'glass') if isinstance(sub_spec, dict) else 'glass'
+    z_position = float(sub_spec.get('position', 0.0)) if isinstance(sub_spec, dict) else 0.0
+    z_shift = float(sub_spec.get('z_shift', 1.0)) if isinstance(sub_spec, dict) else 1.0
+
+    eps_resolved = _resolve_substrate_eps(material_name, ri_paths)
+
+    out = copy.deepcopy(out)
+
+    base_cfg = dict(out['structure'])
+    out['structure'] = {
+            'type': 'with_substrate',
+            'base': base_cfg,
+            'substrate': {
+                    'eps': eps_resolved,
+                    'z_position': z_position,
+                    'z_shift': z_shift}}
+
+    sim_cfg = out.get('simulation', None)
+
+    if isinstance(sim_cfg, dict):
+        sim_type = str(sim_cfg.get('type', 'ret')).lower()
+
+        if sim_type in _SIM_LAYER_PROMOTE:
+            sim_cfg['type'] = _SIM_LAYER_PROMOTE[sim_type]
+
+    print('[info] auto-wrapped <structure.type={}> with substrate '
+            '(material={}, eps={}, z_position={}, sim.type -> {})'.format(
+                    base_type, material_name, eps_resolved, z_position,
+                    out.get('simulation', dict()).get('type', '?')))
+
+    return out
+
+
+def _resolve_substrate_eps(name: Any, ri_paths: Any) -> Any:
+    """Resolve substrate eps from MATLAB-style refractive_index_paths or fall
+    back to a built-in preset name.
+
+    Returns a value compatible with WithSubstrateBuilder._build_eps_substrate:
+      - float: treated as eps directly via EpsConst.
+      - str: preset name (glass/silicon/etc.) or *.dat path.
+    """
+
+    if not isinstance(name, str):
+        return name
+
+    if isinstance(ri_paths, dict):
+        spec = ri_paths.get(name, None)
+
+        if isinstance(spec, dict):
+            stype = str(spec.get('type', '')).lower()
+
+            if stype == 'constant':
+                return float(spec['epsilon'])
+
+            if stype == 'table':
+                return str(spec.get('file', name))
+
+    return name
 
 
 def validate_config(cfg: Dict[str, Any]) -> None:
