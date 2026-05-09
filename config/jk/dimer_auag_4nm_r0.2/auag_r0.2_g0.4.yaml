@@ -57,4 +57,13 @@ simulation:
   enei_min: 300
   enei_max: 1000
   n_wavelengths: 140
+  iter:
+    solver: gmres
+    tol: 1.0e-6
+    maxit: 200
+    precond: hmat
+    hmatrix: true
+    htol: 1.0e-6
+    cleaf: 200
+    kmax: [4, 100]
 postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: true}
