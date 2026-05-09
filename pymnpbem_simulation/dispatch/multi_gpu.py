@@ -46,9 +46,19 @@ def _dispatch_wavelength_split(cfg: Dict[str, Any],
     factory = _make_particle_factory(cfg_pickle)
 
     bem_kwargs = _build_bem_kwargs(cfg)
+    bem_class_name = _resolve_bem_class_name(cfg)
 
-    print_info('multi_gpu wavelength-split: n_gpus={}, n_wl={}, n_pol={}'.format(
-            n_workers, n_wl, len(pol)))
+    # Forward iter options (hmatrix, tol, maxit, etc.) to the worker BEM
+    # constructor when using an iterative solver.
+    if bem_class_name in ('BEMRetIter', 'BEMRetLayerIter'):
+        iter_cfg = cfg['simulation'].get('iter', dict()) or dict()
+        for key in ('solver', 'tol', 'maxit', 'restart', 'precond',
+                    'output', 'hmatrix', 'htol', 'cleaf', 'kmax'):
+            if key in iter_cfg:
+                bem_kwargs[key] = iter_cfg[key]
+
+    print_info('multi_gpu wavelength-split: n_gpus={}, n_wl={}, n_pol={}, bem_class={}'.format(
+            n_workers, n_wl, len(pol), bem_class_name or 'BEMRet'))
 
     t0 = time.time()
     raw = solve_spectrum_multi_gpu(
@@ -57,7 +67,8 @@ def _dispatch_wavelength_split(cfg: Dict[str, Any],
             pol_dirs = pol,
             prop_dirs = prop,
             n_gpus = n_workers,
-            bem_kwargs = bem_kwargs)
+            bem_kwargs = bem_kwargs,
+            bem_class = bem_class_name)
     wall_s = time.time() - t0
 
     ext = np.asarray(raw['ext'])
@@ -126,6 +137,26 @@ def _build_bem_kwargs(cfg: Dict[str, Any]) -> Dict[str, Any]:
         bem_kwargs['hmode'] = hmode
 
     return bem_kwargs
+
+
+def _resolve_bem_class_name(cfg: Dict[str, Any]) -> str:
+    """Map simulation.type → BEM solver class name for multi_gpu dispatch.
+
+    Bug 4 follow-up: solve_spectrum_multi_gpu defaults to BEMRet when
+    bem_class is unset, silently ignoring simulation.type=ret_iter etc.
+    Dispatch must inspect cfg and pass the correct class name.
+    """
+    sim_type = cfg.get('simulation', {}).get('type', 'ret')
+    mapping = {
+            'ret':              'BEMRet',
+            'ret_iter':         'BEMRetIter',
+            'ret_layer':        'BEMRetLayer',
+            'ret_layer_iter':   'BEMRetLayerIter',
+            'planewave_ret':       'BEMRet',
+            'planewave_ret_iter':  'BEMRetIter',
+            'planewave_ret_layer': 'BEMRetLayer',
+            'planewave_ret_layer_iter': 'BEMRetLayerIter'}
+    return mapping.get(sim_type, 'BEMRet')
 
 
 def _strip_unpicklable(cfg: Dict[str, Any]) -> Dict[str, Any]:
