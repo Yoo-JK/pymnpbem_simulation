@@ -9,7 +9,9 @@ from .plot import (
         plot_spectrum,
         plot_polarization_comparison,
         plot_unpolarized_spectrum,
-        plot_polarization_vs_unpolarized)
+        plot_polarization_vs_unpolarized,
+        plot_multipole_bar,
+        plot_fano_fit)
 from .field_analyzer import (
         hotspot_location,
         field_enhancement,
@@ -20,6 +22,8 @@ from .field_analyzer import (
         high_field_regions)
 from .plot_field import (
         plot_field_2d_slice,
+        plot_field_intensity_2d,
+        plot_field_vectors_2d,
         plot_hotspots_3d,
         plot_near_field_decay)
 from .plot_surface_charge import (
@@ -50,6 +54,8 @@ __all__ = [
         'plot_polarization_comparison',
         'plot_unpolarized_spectrum',
         'plot_polarization_vs_unpolarized',
+        'plot_multipole_bar',
+        'plot_fano_fit',
         'hotspot_location',
         'field_enhancement',
         'near_field_decay',
@@ -58,6 +64,8 @@ __all__ = [
         'field_statistics',
         'high_field_regions',
         'plot_field_2d_slice',
+        'plot_field_intensity_2d',
+        'plot_field_vectors_2d',
         'plot_hotspots_3d',
         'plot_near_field_decay',
         'plot_all_surface_charge',

@@ -341,3 +341,118 @@ def plot_polarization_vs_unpolarized(out_dir: str,
     plt.close(fig)
 
     return saved_files
+
+
+def plot_multipole_bar(out_dir: str,
+        multipole: Dict[str, Any],
+        title: str = '',
+        plot_format: Optional[List[str]] = None,
+        dpi: int = 150) -> List[str]:
+    """Bar chart of power per l-shell from multipole_decomposition output.
+
+    `multipole` must have keys 'power_l' (1D array) and 'max_l' (int).
+    Saves multipole_power_l.{fmt}.
+    """
+    ensure_dir(out_dir)
+
+    power_l = np.asarray(multipole['power_l'])
+    max_l = int(multipole.get('max_l', len(power_l) - 1))
+
+    if plot_format is None:
+        plot_format = ['png']
+
+    l_axis = np.arange(0, max_l + 1)
+
+    fig, ax = plt.subplots(figsize = (8, 5))
+
+    ax.bar(l_axis, power_l, color = plt.cm.viridis(np.linspace(0.2, 0.9, len(l_axis))),
+            edgecolor = 'k')
+
+    ax.set_xlabel('Multipole order $\\ell$', fontsize = 12)
+    ax.set_ylabel('Power $\\sum_m |a_{\\ell m}|^2$', fontsize = 12)
+    ax.set_title(title if title else 'Multipole decomposition power per l',
+            fontsize = 13, fontweight = 'bold')
+    ax.set_xticks(l_axis)
+
+    if power_l.max() > 0 and power_l.min() >= 0:
+        ax.set_yscale('log')
+
+    ax.grid(True, alpha = 0.3, axis = 'y', which = 'both')
+
+    fig.tight_layout()
+
+    saved_files = []
+    for fmt in plot_format:
+        path = os.path.join(out_dir, 'multipole_power_l.{}'.format(fmt))
+        fig.savefig(path, dpi = dpi)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+
+    plt.close(fig)
+    return saved_files
+
+
+def plot_fano_fit(out_dir: str,
+        x: np.ndarray,
+        spectrum: np.ndarray,
+        fano_result: Dict[str, Any],
+        title: str = '',
+        x_label: str = 'Wavelength (nm)',
+        y_label: str = 'Cross section (nm$^2$)',
+        plot_format: Optional[List[str]] = None,
+        dpi: int = 150,
+        fname: str = 'fano_fit') -> List[str]:
+    """Plot data + best-fit Fano curve with parameter annotation.
+
+    `fano_result` must contain 'fit_curve' and 'best_fit' (dict of
+    amp/x0/gamma/q/c). Compatible with fano_fit single-peak output.
+    """
+    ensure_dir(out_dir)
+
+    if plot_format is None:
+        plot_format = ['png']
+
+    x = np.asarray(x)
+    spectrum = np.asarray(spectrum)
+    fit_curve = np.asarray(fano_result.get('fit_curve', np.zeros_like(spectrum)))
+
+    fig, ax = plt.subplots(figsize = (10, 6))
+
+    ax.plot(x, spectrum, 'o', markersize = 4, color = 'steelblue', alpha = 0.6,
+            label = 'data')
+    ax.plot(x, fit_curve, '-', linewidth = 2, color = 'crimson', label = 'fit')
+    ax.plot(x, spectrum - fit_curve, ':', linewidth = 1, color = 'gray',
+            label = 'residual')
+
+    ax.set_xlabel(x_label, fontsize = 12)
+    ax.set_ylabel(y_label, fontsize = 12)
+    ax.set_title(title if title else 'Fano resonance fit', fontsize = 13, fontweight = 'bold')
+    ax.legend(fontsize = 10)
+    ax.grid(True, alpha = 0.3)
+
+    bf = fano_result.get('best_fit', dict())
+    redchi = float(fano_result.get('redchi', float('nan')))
+
+    annotation_lines = []
+    for key in ('x0', 'gamma', 'q', 'amp', 'c'):
+        if key in bf:
+            annotation_lines.append('{} = {:.3g}'.format(key, bf[key]))
+
+    if annotation_lines:
+        annotation_lines.append('redchi = {:.3e}'.format(redchi))
+        ax.text(0.02, 0.98, '\n'.join(annotation_lines),
+                transform = ax.transAxes, fontsize = 9,
+                verticalalignment = 'top',
+                bbox = dict(boxstyle = 'round', facecolor = 'white', alpha = 0.85))
+
+    fig.tight_layout()
+
+    saved_files = []
+    for fmt in plot_format:
+        path = os.path.join(out_dir, '{}.{}'.format(fname, fmt))
+        fig.savefig(path, dpi = dpi)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+
+    plt.close(fig)
+    return saved_files

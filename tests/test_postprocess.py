@@ -264,6 +264,69 @@ def test_unpolarized_eels_skip():
     assert not info['can_calculate'], '[error] EELS should not support unpolarized'
 
 
+def test_plot_multipole_bar():
+    from pymnpbem_simulation.postprocess import plot_multipole_bar
+
+    multipole = {
+            'power_l': np.array([0.0, 1.5, 0.3, 0.05, 0.005]),
+            'max_l': 4}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = plot_multipole_bar(tmp, multipole)
+        assert len(files) == 1
+        assert os.path.exists(files[0])
+
+    print('[test] plot_multipole_bar: OK')
+
+
+def test_plot_fano_fit_render():
+    from pymnpbem_simulation.postprocess import (
+            fano_fit, fano_lineshape, plot_fano_fit)
+
+    enei = np.linspace(500, 700, 200)
+    spectrum = fano_lineshape(enei, 2.0, 600.0, 30.0, 1.5, 0.1)
+    rng = np.random.default_rng(0)
+    spectrum = spectrum + 0.02 * np.std(spectrum) * rng.standard_normal(len(enei))
+
+    res = fano_fit(enei, spectrum)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = plot_fano_fit(tmp, enei, spectrum, dict(res))
+        assert len(files) == 1
+        assert os.path.exists(files[0])
+
+    print('[test] plot_fano_fit_render: OK')
+
+
+def test_plot_field_intensity_and_vectors():
+    from pymnpbem_simulation.postprocess import (
+            plot_field_intensity_2d, plot_field_vectors_2d)
+
+    n = 11
+    xs = np.linspace(-5, 5, n)
+    ys = np.linspace(-5, 5, n)
+    xx, yy = np.meshgrid(xs, ys, indexing = 'ij')
+    pos = np.column_stack([xx.ravel(), yy.ravel(), np.zeros(n * n)])
+
+    e = np.zeros((n * n, 3), dtype = complex)
+    e[:, 0] = (10.0 * np.exp(-(xx ** 2 + yy ** 2) / 4.0)).ravel()  # x-component
+    e[:, 1] = 0.5 * e[:, 0]
+
+    fr = {'pos': pos, 'e': e}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        intensity_path = os.path.join(tmp, 'intensity.png')
+        plot_field_intensity_2d(fr, axis = 'z', value = 0.0, save = intensity_path)
+        assert os.path.exists(intensity_path)
+
+        vec_path = os.path.join(tmp, 'vectors.png')
+        plot_field_vectors_2d(fr, axis = 'z', value = 0.0, save = vec_path,
+                density = 2)
+        assert os.path.exists(vec_path)
+
+    print('[test] plot_field_intensity_2d + plot_field_vectors_2d: OK')
+
+
 def test_field_statistics_and_high_field_regions():
     from pymnpbem_simulation.postprocess import field_statistics, high_field_regions
 
