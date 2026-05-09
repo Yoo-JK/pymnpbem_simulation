@@ -30,6 +30,7 @@ from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
 from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
 from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
 from .export import export_npz, export_h5, export_csv, export_json
+from .core_shell import CoreShellSeparator, make_separator_from_config
 
 __all__ = [
         'analyze_spectrum',
@@ -67,4 +68,6 @@ __all__ = [
         'export_npz',
         'export_h5',
         'export_csv',
-        'export_json']
+        'export_json',
+        'CoreShellSeparator',
+        'make_separator_from_config']

@@ -264,6 +264,92 @@ def test_unpolarized_eels_skip():
     assert not info['can_calculate'], '[error] EELS should not support unpolarized'
 
 
+def test_core_shell_monomer_cube():
+    from pymnpbem_simulation.postprocess import CoreShellSeparator
+
+    cfg = {
+            'type': 'core_shell_cube',
+            'core_size': 30.0,
+            'shell_layers': [5.0]}
+
+    sep = CoreShellSeparator(cfg)
+    assert sep.is_core_shell_structure()
+    assert sep.num_layers() == 2
+
+    # Generate centroids on a cube grid (mock).
+    grid = np.linspace(-25, 25, 20)
+    cx, cy, cz = np.meshgrid(grid, grid, grid, indexing = 'ij')
+    centroids = np.column_stack([cx.ravel(), cy.ravel(), cz.ravel()])
+
+    layers, particles = sep.classify_faces(centroids)
+    # Core (|max| <= 15) -> layer 0
+    assert (layers[(np.abs(centroids).max(axis = 1) < 14.0)] == 0).all()
+    assert (particles == 0).all(), '[error] monomer should have all particle_idx=0'
+
+    cm = sep.get_core_mask(centroids)
+    sm = sep.get_shell_mask(centroids)
+    assert cm.sum() > 0 and sm.sum() > 0
+    assert not (cm & sm).any(), '[error] core and shell masks must be disjoint'
+
+    print('[test] core_shell monomer cube: core={}, shell={}'.format(int(cm.sum()), int(sm.sum())))
+
+
+def test_core_shell_dimer_cube():
+    from pymnpbem_simulation.postprocess import CoreShellSeparator
+
+    cfg = {
+            'type': 'dimer_core_shell_cube',
+            'core_size': 30.0,
+            'shell_layers': [5.0],
+            'gap': 4.0,
+            'offset': [0.0, 0.0, 0.0]}
+
+    sep = CoreShellSeparator(cfg)
+    assert sep.is_core_shell_structure()
+
+    # Two clusters of centroids around the expected centers.
+    rng = np.random.default_rng(0)
+    n = 200
+    p1 = rng.normal(loc = [-22, 0, 0], scale = [10, 10, 10], size = (n, 3))
+    p2 = rng.normal(loc = [22, 0, 0], scale = [10, 10, 10], size = (n, 3))
+    centroids = np.concatenate([p1, p2], axis = 0)
+
+    layers, particles = sep.classify_faces(centroids)
+    # First half should be mostly particle 0, second half particle 1.
+    assert (particles[:n] == 0).mean() > 0.95
+    assert (particles[n:] == 1).mean() > 0.95
+
+    print('[test] core_shell dimer cube: layers unique = {}, particles unique = {}'.format(
+            sorted(set(layers.tolist())), sorted(set(particles.tolist()))))
+
+
+def test_core_shell_rod():
+    from pymnpbem_simulation.postprocess import CoreShellSeparator
+
+    cfg = {
+            'type': 'core_shell_rod',
+            'core_diameter': 20.0,
+            'shell_thickness': 4.0,
+            'height': 80.0}
+
+    sep = CoreShellSeparator(cfg)
+    assert sep.num_layers() == 2
+
+    # Centroid along x-axis at y=z=0 (inside the capsule barrel) should be core.
+    inner = np.array([[0.0, 0.0, 0.0]])
+    outer = np.array([[0.0, 12.0, 0.0]])  # outside core radius (10), inside shell radius (14)
+
+    cm_inner = sep.get_core_mask(inner)
+    cm_outer = sep.get_core_mask(outer)
+    sm_outer = sep.get_shell_mask(outer)
+
+    assert cm_inner[0], '[error] inner point should be core'
+    assert sm_outer[0], '[error] outer point should be shell'
+    assert not cm_outer[0], '[error] outer point should not be core'
+
+    print('[test] core_shell rod: capsule classification OK')
+
+
 def test_plot_spectrum_energy_xaxis():
     """plot_spectrum should write spectrum.{png,pdf} when xaxis='energy' is set."""
     from pymnpbem_simulation.postprocess import (
