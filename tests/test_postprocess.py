@@ -195,6 +195,111 @@ def test_export_roundtrip():
     return True
 
 
+def test_spectrum_basic_analysis():
+    """analyze_spectrum should report per-pol peaks, fwhm, avg/max, multi-peak list."""
+    from pymnpbem_simulation.postprocess import analyze_spectrum
+
+    rng = np.random.default_rng(42)
+    wl = np.linspace(400.0, 800.0, 200)
+    # Synthesize 2-pol Lorentzian-like ext.
+    def lorentz(w, w0, gamma, amp):
+        return amp / (1.0 + ((w - w0) / gamma) ** 2)
+
+    ext = np.zeros((200, 2))
+    ext[:, 0] = lorentz(wl, 550.0, 30.0, 5.0) + lorentz(wl, 700.0, 40.0, 2.0)
+    ext[:, 1] = lorentz(wl, 600.0, 35.0, 4.0)
+
+    sca = ext * 0.6
+    abs_ = ext * 0.4
+
+    result = {'wavelength': wl, 'ext': ext, 'sca': sca, 'abs': abs_}
+    out = analyze_spectrum(result)
+
+    assert out['n_pol'] == 2, '[error] n_pol mismatch'
+    assert 'enhancement_factors' in out, '[error] missing enhancement_factors'
+    assert 'avg_extinction' in out, '[error] missing avg_extinction'
+
+    peaks_p0 = out['per_pol']['0']['peaks']
+    assert len(peaks_p0) >= 2, '[error] expected >=2 peaks for pol0, got {}'.format(len(peaks_p0))
+
+    print('[test] spectrum_basic: pol0 peaks = {}'.format(
+            [(round(p['wl_nm'], 1), round(p['value'], 3)) for p in peaks_p0]))
+
+
+def test_unpolarized_orthogonal_2pol():
+    from pymnpbem_simulation.postprocess import (
+            check_unpolarized_conditions,
+            calculate_unpolarized_spectrum,
+            analyze_spectrum_unpolarized)
+
+    pols = [[1, 0, 0], [0, 1, 0]]
+    info = check_unpolarized_conditions(pols, 'planewave', 2)
+    assert info['can_calculate'], '[error] orthogonal 2-pol should be calculable'
+    assert info['method'] == 'orthogonal_2pol_average'
+
+    # Synthetic
+    wl = np.linspace(500, 700, 100)
+    ext = np.zeros((100, 2))
+    ext[:, 0] = np.exp(-((wl - 600) / 30.0) ** 2)
+    ext[:, 1] = np.exp(-((wl - 580) / 40.0) ** 2)
+    sca = ext * 0.5
+    abs_ = ext - sca
+
+    result = {'wavelength': wl, 'ext': ext, 'sca': sca, 'abs': abs_}
+
+    unpol = calculate_unpolarized_spectrum(result, info)
+    assert unpol['n_averaged'] == 2
+    assert np.allclose(unpol['extinction'], 0.5 * (ext[:, 0] + ext[:, 1])), \
+            '[error] unpolarized averaging mismatch'
+
+    out = analyze_spectrum_unpolarized(result, polarizations = pols, excitation_type = 'planewave')
+    assert 'spectrum' in out, '[error] high-level wrapper missing spectrum'
+
+    print('[test] unpolarized 2pol: peak_wl={:.1f}'.format(unpol['peak_wavelength']))
+
+
+def test_unpolarized_eels_skip():
+    from pymnpbem_simulation.postprocess import check_unpolarized_conditions
+    info = check_unpolarized_conditions([[1, 0, 0]], 'eels', 1)
+    assert not info['can_calculate'], '[error] EELS should not support unpolarized'
+
+
+def test_plot_spectrum_energy_xaxis():
+    """plot_spectrum should write spectrum.{png,pdf} when xaxis='energy' is set."""
+    from pymnpbem_simulation.postprocess import (
+            plot_spectrum, plot_polarization_comparison,
+            plot_unpolarized_spectrum, plot_polarization_vs_unpolarized,
+            calculate_unpolarized_spectrum, check_unpolarized_conditions)
+
+    wl = np.linspace(500, 700, 50)
+    ext = np.column_stack([
+            np.exp(-((wl - 600) / 30.0) ** 2),
+            np.exp(-((wl - 580) / 40.0) ** 2)])
+    sca = ext * 0.6
+    abs_ = ext - sca
+
+    result = {'wavelength': wl, 'ext': ext, 'sca': sca, 'abs': abs_}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = plot_spectrum(tmp, result, xaxis = 'energy', plot_format = ['png'])
+        assert os.path.exists(path), '[error] missing spectrum.png'
+
+        files = plot_polarization_comparison(tmp, result, xaxis = 'energy', plot_format = ['png'])
+        assert len(files) == 3, '[error] expected 3 files (ext/sca/abs)'
+
+        info = check_unpolarized_conditions([[1, 0, 0], [0, 1, 0]], 'planewave', 2)
+        unpol = calculate_unpolarized_spectrum(result, info)
+
+        files = plot_unpolarized_spectrum(tmp, result, unpol, xaxis = 'energy')
+        assert all(os.path.exists(p) for p in files)
+
+        files = plot_polarization_vs_unpolarized(tmp, result, unpol, xaxis = 'energy')
+        # 3 channels + 1 all-in-one = 4 files
+        assert len(files) == 4, '[error] expected 4 comparison files, got {}'.format(len(files))
+
+    print('[test] plot energy xaxis: OK')
+
+
 def main():
     print('=' * 60)
     print('test_eigenmode_smoke')

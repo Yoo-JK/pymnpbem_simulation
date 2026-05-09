@@ -108,7 +108,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     save_json(os.path.join(out_dir, 'spectrum_analysis.json'), analysis)
 
     if cfg['output'].get('save_plots', True):
-        plot_spectrum(out_dir, result, title = out_name)
+        _create_spectrum_plots(out_dir, result, cfg, out_name)
 
     sc = result.get('surface_charge', None)
     if sc is not None and cfg['output'].get('save_plots', True):
@@ -199,7 +199,8 @@ def _build_enei(cfg: Dict[str, Any],
 
 def _reanalyze(out_dir: str) -> int:
     from .util import print_info, print_error, save_json
-    from .postprocess import (analyze_spectrum, plot_spectrum,
+    from .config import load_yaml
+    from .postprocess import (analyze_spectrum,
             plot_all_surface_charge, load_surface_charge_from_npz)
 
     npz_path = os.path.join(out_dir, 'spectrum.npz')
@@ -223,7 +224,13 @@ def _reanalyze(out_dir: str) -> int:
 
     analysis = analyze_spectrum(result)
     save_json(os.path.join(out_dir, 'spectrum_analysis.json'), analysis)
-    plot_spectrum(out_dir, result, title = os.path.basename(out_dir))
+
+    # Try to load config snapshot for richer plots (xaxis, polarization labels, unpolarized).
+    cfg_path = os.path.join(out_dir, 'config.yaml')
+    cfg = load_yaml(cfg_path) if os.path.exists(cfg_path) else dict()
+    cfg.setdefault('output', dict())
+
+    _create_spectrum_plots(out_dir, result, cfg, os.path.basename(out_dir))
 
     sc = load_surface_charge_from_npz(npz)
 
@@ -233,6 +240,62 @@ def _reanalyze(out_dir: str) -> int:
         print_info('reanalyze surface_charge: saved {} plot file(s)'.format(len(files)))
 
     return 0
+
+
+def _create_spectrum_plots(out_dir: str,
+        result: Dict[str, Any],
+        cfg: Dict[str, Any],
+        out_name: str) -> None:
+    """Generate the full spectrum plot set (basic + polarization + unpolarized).
+
+    Driven by the YAML config so users can opt-in via:
+        output.spectrum_xaxis: 'wavelength' | 'energy'
+        output.plot_format: ['png', 'pdf', ...]
+        output.plot_dpi: 150
+    Unpolarized plots are auto-emitted when polarizations satisfy orthogonality.
+    """
+    from .postprocess import (plot_spectrum, plot_polarization_comparison,
+            plot_unpolarized_spectrum, plot_polarization_vs_unpolarized,
+            check_unpolarized_conditions, calculate_unpolarized_spectrum)
+
+    output = cfg.get('output', dict())
+    sim = cfg.get('simulation', dict())
+
+    xaxis = output.get('spectrum_xaxis', 'wavelength')
+    plot_format = output.get('plot_format', ['png'])
+    if isinstance(plot_format, str):
+        plot_format = [plot_format]
+    dpi = int(output.get('plot_dpi', 150))
+
+    pol_labels = _make_polarization_labels(cfg)
+
+    # Basic spectrum plot (saved as spectrum.{fmt}).
+    plot_spectrum(out_dir, result, title = out_name,
+            xaxis = xaxis, polarization_labels = pol_labels,
+            plot_format = plot_format, dpi = dpi)
+
+    # Polarization comparison (only when n_pol > 1).
+    n_pol = int(np.asarray(result['ext']).shape[1])
+    if n_pol > 1:
+        plot_polarization_comparison(out_dir, result, title = out_name,
+                xaxis = xaxis, polarization_labels = pol_labels,
+                plot_format = plot_format, dpi = dpi)
+
+    # Unpolarized spectrum (only when conditions satisfied). Support both
+    # canonical key (simulation.excitation) and legacy alias (excitation_type).
+    excitation_type = sim.get('excitation', sim.get('excitation_type', 'planewave'))
+    polarizations = sim.get('polarizations', None)
+
+    info = check_unpolarized_conditions(polarizations, excitation_type, n_pol)
+    if info.get('can_calculate', False):
+        from .util import print_info
+        print_info('unpolarized: {} ({})'.format(info['method'], info['reason']))
+        unpol = calculate_unpolarized_spectrum(result, info)
+        plot_unpolarized_spectrum(out_dir, result, unpol, title = out_name,
+                xaxis = xaxis, plot_format = plot_format, dpi = dpi)
+        plot_polarization_vs_unpolarized(out_dir, result, unpol, title = out_name,
+                xaxis = xaxis, polarization_labels = pol_labels,
+                plot_format = plot_format, dpi = dpi)
 
 
 def _make_polarization_labels(cfg: Dict[str, Any]) -> List[str]:

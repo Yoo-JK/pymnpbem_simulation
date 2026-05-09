@@ -1,5 +1,15 @@
-from .spectrum import analyze_spectrum
-from .plot import plot_spectrum
+from .spectrum import (
+        analyze_spectrum,
+        find_spectrum_peaks,
+        compute_enhancement_factors,
+        check_unpolarized_conditions,
+        calculate_unpolarized_spectrum,
+        analyze_spectrum_unpolarized)
+from .plot import (
+        plot_spectrum,
+        plot_polarization_comparison,
+        plot_unpolarized_spectrum,
+        plot_polarization_vs_unpolarized)
 from .field_analyzer import (
         hotspot_location,
         field_enhancement,
@@ -23,7 +33,15 @@ from .export import export_npz, export_h5, export_csv, export_json
 
 __all__ = [
         'analyze_spectrum',
+        'find_spectrum_peaks',
+        'compute_enhancement_factors',
+        'check_unpolarized_conditions',
+        'calculate_unpolarized_spectrum',
+        'analyze_spectrum_unpolarized',
         'plot_spectrum',
+        'plot_polarization_comparison',
+        'plot_unpolarized_spectrum',
+        'plot_polarization_vs_unpolarized',
         'hotspot_location',
         'field_enhancement',
         'near_field_decay',
