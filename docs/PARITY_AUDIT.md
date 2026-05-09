@@ -18,15 +18,15 @@ mnpbem_simulation 의 MATLAB-based wrapper 와 pymnpbem_simulation (pure Python 
 
 | 기능 | mnpbem (MATLAB wrapper) | pymnpbem | 상태 | 우선순위 |
 |---|---|---|---|---|
-| Spectrum plot (per polarization) | visualizer.py:plot_spectrum | postprocess/plot.py:plot_spectrum | partial | H |
-| Spectrum xaxis = energy (eV) toggle | plot_spectrum (xaxis_unit) | (없음) | TODO | H |
-| Polarization comparison (ext/sca/abs 3 plots) | plot_polarization_comparison | (없음) | TODO | H |
-| Unpolarized spectrum (FDTD-style 2-pol average) | plot_unpolarized_spectrum + SpectrumAnalyzer.calculate | (없음) | TODO | H |
-| Comparison plot (pol vs unpolarized) | _plot_spectrum_comparison_with_unpolarized | (없음) | TODO | H |
-| All-in-one comparison (3 subplots) | comparison_all_unpolarized | (없음) | TODO | M |
-| Field plots (enhancement, 2D slice) | plot_fields, _plot_field_enhancement | plot_field.py:plot_field_2d_slice | partial | H |
-| Field intensity plots | _plot_field_intensity | (없음) | TODO | M |
-| Field vector plots (2D quiver) | _plot_field_vectors | (없음) | TODO | M |
+| Spectrum plot (per polarization) | visualizer.py:plot_spectrum | postprocess/plot.py:plot_spectrum | OK (Series A) | H |
+| Spectrum xaxis = energy (eV) toggle | plot_spectrum (xaxis_unit) | plot.py:plot_spectrum(xaxis='energy') | OK (Series A) | H |
+| Polarization comparison (ext/sca/abs 3 plots) | plot_polarization_comparison | plot.py:plot_polarization_comparison | OK (Series A) | H |
+| Unpolarized spectrum (FDTD-style 2-pol average) | plot_unpolarized_spectrum + SpectrumAnalyzer.calculate | spectrum.py:check_unpolarized_conditions + calculate_unpolarized_spectrum | OK (Series A) | H |
+| Comparison plot (pol vs unpolarized) | _plot_spectrum_comparison_with_unpolarized | plot.py:plot_polarization_vs_unpolarized | OK (Series A) | H |
+| All-in-one comparison (3 subplots) | comparison_all_unpolarized | plot_polarization_vs_unpolarized (4th file) | OK (Series A) | M |
+| Field plots (enhancement, 2D slice) | plot_fields, _plot_field_enhancement | plot_field.py:plot_field_2d_slice | OK | H |
+| Field intensity plots (LogNorm + percentile) | _plot_field_intensity | plot_field.py:plot_field_intensity_2d | OK (Series D) | M |
+| Field vector plots (2D quiver) | _plot_field_vectors | plot_field.py:plot_field_vectors_2d | OK (Series D) | M |
 | Field separate internal/external | plot_field_separate_internal_external | (없음) | TODO | M |
 | Field comparison (overlay all pols) | _plot_field_comparison | (없음) | TODO | M |
 | Field overlay (all pols on single plot) | _plot_field_overlay | (없음) | TODO | L |
@@ -37,32 +37,35 @@ mnpbem_simulation 의 MATLAB-based wrapper 와 pymnpbem_simulation (pure Python 
 | Surface charge phase analysis (Re/Im/abs/arg) | plot_surface_charge_phase_analysis | plot_surface_charge_phase | OK | - |
 | Hotspots 3D | (없음 — pyMNPBEM 측 별도) | plot_hotspots_3d | OK | - |
 | Near-field decay | (없음) | plot_near_field_decay | OK | - |
-| Eigenmode plots (mode patterns grid) | _plot_mode_patterns_grid | (없음) | TODO | M |
-| Eigenmode magnitude spectra | _plot_magnitude_spectra | (없음) | TODO | M |
-| Eigenmode phase spectra | _plot_phase_spectra | (없음) | TODO | M |
+| Eigenmode plots (mode patterns grid) | _plot_mode_patterns_grid | plot_eigenmode.py:plot_mode_patterns | OK (Series F) | M |
+| Eigenmode value spectrum (complex plane + bar) | (없음 — 직접) | plot_eigenmode.py:plot_eigenvalue_spectrum | OK (Series F) | M |
+| Eigenmode magnitude spectra (vs wl) | _plot_magnitude_spectra | (없음 — wl sweep 자료 미저장) | TODO | L |
+| Eigenmode phase spectra (vs wl) | _plot_phase_spectra | (없음 — 동상) | TODO | L |
 | Eigenmode delta phi comparison | _plot_delta_phi_comparison | (없음) | TODO | L |
-| Multipole character table | _plot_multipole_character_table | (없음) | TODO | M |
-| Fano fit plot | _plot_fano_fit | (없음 — fit 만 존재) | TODO | M |
+| SVD decay plot | (없음) | plot_eigenmode.py:plot_singular_value_decay | OK (Series F) | M |
+| Multipole bar chart (power per l) | (간접 only) | plot.py:plot_multipole_bar | OK (Series D) | M |
+| Multipole character table | _plot_multipole_character_table | (없음 — character classification 미포팅) | TODO | L |
+| Fano fit plot (data + fit + residual + annotations) | _plot_fano_fit | plot.py:plot_fano_fit | OK (Series D) | M |
 | Cross-validation summary | _plot_cross_validation_summary | (없음) | TODO | L |
 
 ## 2. Postprocess — Analysis
 
 | 기능 | mnpbem | pymnpbem | 상태 | 우선순위 |
 |---|---|---|---|---|
-| Peak finder (scipy.signal.find_peaks) | SpectrumAnalyzer._find_peaks | spectrum.py:argmax only | partial | H |
+| Peak finder (scipy.signal.find_peaks) | SpectrumAnalyzer._find_peaks | spectrum.py:find_spectrum_peaks (per-pol multi-peak list) | OK (Series A) | H |
 | FWHM 계산 | _calculate_fwhm | spectrum.py:_compute_fwhm | OK | - |
-| Multi-peak detection | _find_peaks (prominence) | (없음) | TODO | M |
-| Enhancement factors (pol1/pol2 ratio) | _calculate_enhancement | (없음) | TODO | M |
-| Avg/max cross sections | analyze (avg_*, max_*) | (없음) | TODO | M |
-| Unpolarized check (orthogonal pols) | _check_unpolarized_conditions | (없음) | TODO | H |
-| Unpolarized spectrum compute | _calculate_unpolarized_spectrum | (없음) | TODO | H |
-| Hotspot finder | FieldAnalyzer._find_hotspots | field_analyzer.py:hotspot_location | partial | H |
-| High-field region analysis | _analyze_high_field_regions | (없음) | TODO | M |
-| Near-field integration | calculate_near_field_integration | (없음) | TODO | M |
+| Multi-peak detection | _find_peaks (prominence) | spectrum.py:find_spectrum_peaks (sorted by amp, prominence) | OK (Series A) | M |
+| Enhancement factors (pol1/pol2 ratio) | _calculate_enhancement | spectrum.py:compute_enhancement_factors (all pairs) | OK (Series A) | M |
+| Avg/max cross sections | analyze (avg_*, max_*) | analyze_spectrum (avg_*, max_*) | OK (Series A) | M |
+| Unpolarized check (orthogonal pols) | _check_unpolarized_conditions | spectrum.py:check_unpolarized_conditions | OK (Series A) | H |
+| Unpolarized spectrum compute | _calculate_unpolarized_spectrum | spectrum.py:calculate_unpolarized_spectrum | OK (Series A) | H |
+| Hotspot finder | FieldAnalyzer._find_hotspots | field_analyzer.py:hotspot_location | OK | H |
+| High-field region analysis (n_pts, area, vol per threshold) | _analyze_high_field_regions | field_analyzer.py:high_field_regions | OK (Series C) | M |
+| Near-field integration | calculate_near_field_integration | (없음 — 복잡한 BEM-aware 코드, port 안 함) | TODO | L |
 | Near-field decay | (없음) | field_analyzer.py:near_field_decay | OK | - |
-| Field statistics | _calculate_statistics | (없음) | TODO | M |
-| Edge artifact detection | edge_filter.py:find_edge_artifacts | (없음) | TODO | L |
-| Geometry cross-section | geometry_cross_section.py:GeometryCrossSection | (없음) | TODO | M |
+| Field statistics (max/mean/median/percentiles) | _calculate_statistics | field_analyzer.py:field_statistics | OK (Series C) | M |
+| Edge artifact detection | edge_filter.py:find_edge_artifacts | (없음 — near-field integ 의존) | TODO | L |
+| Geometry cross-section | geometry_cross_section.py:GeometryCrossSection | (없음 — near-field integ 의존) | TODO | L |
 | QS eigenmode analysis | QSEigenAnalyzer (eigenmode_analyzer.py) | postprocess/eigenmode.py:qs_eigenmodes | OK | - |
 | SVD decomposition | SVDAnalyzer | eigenmode.py:svd_decomposition | OK | - |
 | Multipole projection | MultipoleAnalyzer | postprocess/multipole.py | OK | - |
@@ -70,7 +73,7 @@ mnpbem_simulation 의 MATLAB-based wrapper 와 pymnpbem_simulation (pure Python 
 | Mode comparator (cross-validate) | ModeComparator | (없음) | TODO | L |
 | Fano fit | FanoFitter | fano_fit.py:fano_fit | OK | - |
 | Multi-peak Fano | (없음) | multi_fano_fit | OK | - |
-| Core-shell separator | CoreShellSeparator | (없음) | TODO | H (Au@Ag) |
+| Core-shell separator | CoreShellSeparator | postprocess/core_shell.py:CoreShellSeparator | OK (Series B) | H (Au@Ag) |
 
 ## 3. Simulation Runners
 
@@ -154,10 +157,10 @@ mnpbem_simulation 의 MATLAB-based wrapper 와 pymnpbem_simulation (pure Python 
 | .npz spectrum | (없음) | io/writer.py | OK | - |
 | .json spectrum_analysis | data_exporter (json) | postprocess (json) | OK | - |
 | .csv spectrum | data_exporter (csv) | postprocess/export.py | OK | - |
-| .txt spectrum (header + data) | data_exporter._save_txt | (없음) | TODO | M |
-| .txt field data (per pol/wl) | DataExporter._export_single_field | (없음) | TODO | M |
+| .txt spectrum (header + per-pol + combined) | data_exporter._save_txt | export.py:export_spectrum_txt | OK (Series C) | M |
+| .txt field data (per pol/wl) | DataExporter._export_single_field | (없음 — 사용자 요청 없음) | TODO | L |
 | .png plot | matlab + visualizer | plot.py 등 | OK | - |
-| .pdf plot | visualizer (plot_format=['png','pdf']) | (PNG only by default) | TODO | M |
+| .pdf plot | visualizer (plot_format=['png','pdf']) | plot_spectrum 등 plot_format 인자 지원 | OK (Series A) | M |
 | .h5 export | (없음) | export.py:export_h5 | OK | - |
 | .mat export | matlab native | (없음) | skip | - |
 | .eps / .svg | (visualizer 옵션) | (없음) | TODO | L |
