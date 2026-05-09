@@ -25,7 +25,7 @@ compute: {use_parallel: true, n_workers: 5, n_threads: 1, wavelength_chunk_size:
   mirror: false, iterative: true, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
   hmode: dense}
 simulation:
-  type: ret
+  type: ret_iter
   interp: curv
   waitbar: 1
   excitation: planewave
