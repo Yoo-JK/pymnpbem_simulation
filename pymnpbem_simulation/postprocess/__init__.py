@@ -15,7 +15,9 @@ from .field_analyzer import (
         field_enhancement,
         near_field_decay,
         integrated_field_intensity,
-        hotspot_summary)
+        hotspot_summary,
+        field_statistics,
+        high_field_regions)
 from .plot_field import (
         plot_field_2d_slice,
         plot_hotspots_3d,
@@ -29,7 +31,12 @@ from .plot_surface_charge import (
 from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
 from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
 from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
-from .export import export_npz, export_h5, export_csv, export_json
+from .export import (
+        export_npz,
+        export_h5,
+        export_csv,
+        export_json,
+        export_spectrum_txt)
 from .core_shell import CoreShellSeparator, make_separator_from_config
 
 __all__ = [
@@ -48,6 +55,8 @@ __all__ = [
         'near_field_decay',
         'integrated_field_intensity',
         'hotspot_summary',
+        'field_statistics',
+        'high_field_regions',
         'plot_field_2d_slice',
         'plot_hotspots_3d',
         'plot_near_field_decay',
@@ -69,5 +78,6 @@ __all__ = [
         'export_h5',
         'export_csv',
         'export_json',
+        'export_spectrum_txt',
         'CoreShellSeparator',
         'make_separator_from_config']

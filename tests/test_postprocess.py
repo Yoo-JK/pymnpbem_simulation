@@ -264,6 +264,84 @@ def test_unpolarized_eels_skip():
     assert not info['can_calculate'], '[error] EELS should not support unpolarized'
 
 
+def test_field_statistics_and_high_field_regions():
+    from pymnpbem_simulation.postprocess import field_statistics, high_field_regions
+
+    # Synthetic 2D slice grid 11x11 in xy-plane
+    n = 11
+    xs = np.linspace(-5, 5, n)
+    ys = np.linspace(-5, 5, n)
+    xx, yy = np.meshgrid(xs, ys, indexing = 'ij')
+    pos = np.column_stack([xx.ravel(), yy.ravel(), np.zeros(n * n)])
+
+    # Gaussian-like enhancement, peak at center
+    e_amp = 10.0 * np.exp(-(xx ** 2 + yy ** 2) / 4.0)
+    e = np.zeros((n * n, 3), dtype = complex)
+    e[:, 0] = np.sqrt(e_amp.ravel())  # |E|^2 = e_amp
+
+    field_result = {'pos': pos, 'e': e}
+
+    stats = field_statistics(field_result)
+    assert stats['n_points'] == n * n
+    assert stats['max'] > 0
+
+    regions = high_field_regions(field_result, thresholds = [1, 5, 10])
+    assert regions['detected_dim'] == 2, '[error] should detect 2D slice (z constant)'
+    assert 'area_nm2' in regions['regions']['enhancement_above_1']
+    # All thresholds should yield decreasing counts.
+    n1 = regions['regions']['enhancement_above_1']['n_points']
+    n5 = regions['regions']['enhancement_above_5']['n_points']
+    n10 = regions['regions']['enhancement_above_10']['n_points']
+    assert n1 >= n5 >= n10
+
+    print('[test] high-field regions: n>1={}, n>5={}, n>10={}, area_above_1={:.2f} nm^2'.format(
+            n1, n5, n10,
+            regions['regions']['enhancement_above_1']['area_nm2']))
+
+
+def test_export_spectrum_txt():
+    from pymnpbem_simulation.postprocess import (
+            export_spectrum_txt,
+            calculate_unpolarized_spectrum,
+            check_unpolarized_conditions)
+
+    wl = np.linspace(500, 700, 50)
+    ext = np.column_stack([
+            np.exp(-((wl - 600) / 30.0) ** 2),
+            np.exp(-((wl - 580) / 40.0) ** 2)])
+    sca = ext * 0.6
+    abs_ = ext - sca
+
+    result = {'wavelength': wl, 'ext': ext, 'sca': sca, 'abs': abs_}
+
+    info = check_unpolarized_conditions([[1, 0, 0], [0, 1, 0]], 'planewave', 2)
+    unpol = calculate_unpolarized_spectrum(result, info)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = export_spectrum_txt(tmp, result,
+                polarization_labels = ['[100]', '[010]'],
+                unpolarized = unpol,
+                title = 'Au_dimer_test')
+
+        # 2 per-pol + 1 unpol + 1 combined = 4 files
+        assert len(files) == 4
+        for p in files:
+            assert os.path.exists(p)
+
+        # Round-trip the per-pol file.
+        pol1 = np.loadtxt(files[0])
+        assert pol1.shape == (50, 4), '[error] expected 50x4, got {}'.format(pol1.shape)
+        assert np.allclose(pol1[:, 0], wl)
+        assert np.allclose(pol1[:, 1], sca[:, 0])
+        assert np.allclose(pol1[:, 2], ext[:, 0])
+
+        combined = np.loadtxt(files[-1])
+        # 1 (wl) + 3 * n_pol + 3 (unpol) = 1 + 6 + 3 = 10 cols
+        assert combined.shape == (50, 10), '[error] combined cols: {}'.format(combined.shape)
+
+    print('[test] export_spectrum_txt: 4 files OK')
+
+
 def test_core_shell_monomer_cube():
     from pymnpbem_simulation.postprocess import CoreShellSeparator
 

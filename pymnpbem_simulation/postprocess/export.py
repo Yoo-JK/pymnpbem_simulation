@@ -1,7 +1,7 @@
 import os
 import json
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -111,6 +111,134 @@ def export_csv(result: Dict[str, Any],
     print_info('export_csv: <{}> (rows={}, cols={})'.format(
             output_path, matrix.shape[0], matrix.shape[1]))
     return output_path
+
+
+def export_spectrum_txt(out_dir: str,
+        result: Dict[str, Any],
+        polarization_labels: Optional[List[str]] = None,
+        unpolarized: Optional[Dict[str, Any]] = None,
+        title: str = '') -> List[str]:
+    """Export per-polarization, unpolarized, and combined .txt spectrum files.
+
+    Files written:
+        spectra_pol1.txt, spectra_pol2.txt, ...     (per polarization)
+        spectra_unpolarized.txt                      (if unpolarized provided)
+        spectra_all.txt                              (combined columns)
+    """
+    ensure_dir(out_dir)
+
+    wavelength = np.asarray(result['wavelength'])
+    ext = np.asarray(result['ext'])
+    sca = np.asarray(result['sca'])
+    abs_ = np.asarray(result['abs'])
+
+    n_pol = ext.shape[1]
+
+    if polarization_labels is None:
+        polarization_labels = ['pol{}'.format(i + 1) for i in range(n_pol)]
+
+    saved_files = []
+
+    # Per-polarization files
+    for ipol in range(n_pol):
+        pol_label = polarization_labels[ipol] if ipol < len(polarization_labels) \
+                else 'pol{}'.format(ipol + 1)
+
+        path = os.path.join(out_dir, 'spectra_pol{}.txt'.format(ipol + 1))
+        header = _format_spectrum_header(
+                'Polarization {}: {}'.format(ipol + 1, pol_label),
+                ['wavelength(nm)', 'scattering(nm^2)', 'extinction(nm^2)', 'absorption(nm^2)'],
+                title = title)
+
+        data_array = np.column_stack([
+                wavelength,
+                sca[:, ipol],
+                ext[:, ipol],
+                abs_[:, ipol]])
+
+        _write_txt(path, header, data_array)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+
+    # Unpolarized file
+    if unpolarized is not None:
+        path = os.path.join(out_dir, 'spectra_unpolarized.txt')
+
+        method = unpolarized.get('method', 'unknown')
+        n_avg = unpolarized.get('n_averaged', '?')
+        header = _format_spectrum_header(
+                'Unpolarized (averaged from {} polarizations, method: {})'.format(n_avg, method),
+                ['wavelength(nm)', 'scattering(nm^2)', 'extinction(nm^2)', 'absorption(nm^2)'],
+                title = title)
+
+        data_array = np.column_stack([
+                np.asarray(unpolarized['wavelength']),
+                np.asarray(unpolarized['scattering']),
+                np.asarray(unpolarized['extinction']),
+                np.asarray(unpolarized['absorption'])])
+
+        _write_txt(path, header, data_array)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+
+    # Combined file
+    columns = ['wavelength(nm)']
+    cols_data = [wavelength]
+
+    for ipol in range(n_pol):
+        short = polarization_labels[ipol] if ipol < len(polarization_labels) \
+                else 'pol{}'.format(ipol + 1)
+        # sanitize short label for column header (no spaces)
+        short_san = short.replace(' ', '_').replace('[', '').replace(']', '').replace(',', '_')
+        columns.extend([
+                'sca_{}(nm^2)'.format(short_san),
+                'ext_{}(nm^2)'.format(short_san),
+                'abs_{}(nm^2)'.format(short_san)])
+        cols_data.extend([sca[:, ipol], ext[:, ipol], abs_[:, ipol]])
+
+    if unpolarized is not None:
+        columns.extend(['sca_unpol(nm^2)', 'ext_unpol(nm^2)', 'abs_unpol(nm^2)'])
+        cols_data.extend([
+                np.asarray(unpolarized['scattering']),
+                np.asarray(unpolarized['extinction']),
+                np.asarray(unpolarized['absorption'])])
+
+    combined_path = os.path.join(out_dir, 'spectra_all.txt')
+    combined_header = _format_spectrum_header(
+            'Combined spectrum ({} polarizations{})'.format(
+                    n_pol,
+                    ', including unpolarized' if unpolarized is not None else ''),
+            columns,
+            title = title)
+
+    combined_array = np.column_stack(cols_data)
+    _write_txt(combined_path, combined_header, combined_array)
+    saved_files.append(combined_path)
+    print_info('saved <{}>'.format(combined_path))
+
+    return saved_files
+
+
+def _format_spectrum_header(description: str,
+        columns: List[str],
+        title: str = '') -> str:
+    lines = []
+
+    if title != '':
+        lines.append('# {}'.format(title))
+
+    lines.append('# {}'.format(description))
+    lines.append('# Columns: ' + ' | '.join(columns))
+    lines.append('# ' + ' '.join(['{:>16}'.format(c) for c in columns]))
+
+    return '\n'.join(lines)
+
+
+def _write_txt(path: str,
+        header: str,
+        data_array: np.ndarray,
+        fmt: str = '%.6e') -> None:
+    np.savetxt(path, data_array, header = header, comments = '', fmt = fmt)
 
 
 def export_json(result: Dict[str, Any],

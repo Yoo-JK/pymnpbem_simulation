@@ -256,7 +256,8 @@ def _create_spectrum_plots(out_dir: str,
     """
     from .postprocess import (plot_spectrum, plot_polarization_comparison,
             plot_unpolarized_spectrum, plot_polarization_vs_unpolarized,
-            check_unpolarized_conditions, calculate_unpolarized_spectrum)
+            check_unpolarized_conditions, calculate_unpolarized_spectrum,
+            export_spectrum_txt)
 
     output = cfg.get('output', dict())
     sim = cfg.get('simulation', dict())
@@ -287,6 +288,7 @@ def _create_spectrum_plots(out_dir: str,
     polarizations = sim.get('polarizations', None)
 
     info = check_unpolarized_conditions(polarizations, excitation_type, n_pol)
+    unpol = None
     if info.get('can_calculate', False):
         from .util import print_info
         print_info('unpolarized: {} ({})'.format(info['method'], info['reason']))
@@ -296,6 +298,16 @@ def _create_spectrum_plots(out_dir: str,
         plot_polarization_vs_unpolarized(out_dir, result, unpol, title = out_name,
                 xaxis = xaxis, polarization_labels = pol_labels,
                 plot_format = plot_format, dpi = dpi)
+
+    # Optional .txt spectrum export when configured.
+    formats = output.get('formats', [])
+    if isinstance(formats, str):
+        formats = [formats]
+    if 'txt' in [str(f).lower() for f in formats]:
+        export_spectrum_txt(out_dir, result,
+                polarization_labels = pol_labels,
+                unpolarized = unpol,
+                title = out_name)
 
 
 def _make_polarization_labels(cfg: Dict[str, Any]) -> List[str]:
