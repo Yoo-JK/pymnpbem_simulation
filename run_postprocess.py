@@ -19,6 +19,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             qs_eigenmodes,
             multipole_decomposition, dipole_quadrupole_ratio, dominant_l,
             plot_multipole_bar, plot_fano_fit,
+            plot_mode_patterns, plot_eigenvalue_spectrum,
             export_npz, export_h5, export_csv, export_json,
             export_spectrum_txt,
             check_unpolarized_conditions, calculate_unpolarized_spectrum,
@@ -236,6 +237,17 @@ def _run_eigenmode(result: Dict[str, Any],
             eigenvectors_r = eig['eigenvectors_r'],
             eigenvectors_l = eig['eigenvectors_l'])
     print_info('saved <{}>'.format(os.path.join(out_dir, 'eigenmodes.npz')))
+
+    # Auto-render eigenvalue spectrum + mode patterns (top n_modes).
+    try:
+        from pymnpbem_simulation.postprocess import (
+                plot_eigenvalue_spectrum, plot_mode_patterns)
+        plot_eigenvalue_spectrum(out_dir, eig, title = 'QS eigenmodes')
+        plot_mode_patterns(out_dir, eig, p,
+                n_modes = min(args.n_modes, 5),
+                title = 'QS mode patterns')
+    except Exception as e:
+        print_error('eigenmode plots failed: {}'.format(e))
 
     return out
 

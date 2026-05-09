@@ -327,6 +327,76 @@ def test_plot_field_intensity_and_vectors():
     print('[test] plot_field_intensity_2d + plot_field_vectors_2d: OK')
 
 
+def test_plot_mode_patterns_synthetic():
+    """Mock particle + eigenmode dict; check render works without BEM call."""
+    from pymnpbem_simulation.postprocess import plot_mode_patterns
+
+    # Tetrahedral verts + faces (4 vertices, 4 triangles)
+    verts = np.array([
+            [1, 1, 1],
+            [-1, -1, 1],
+            [-1, 1, -1],
+            [1, -1, -1]], dtype = float)
+    faces = np.array([
+            [0, 1, 2],
+            [0, 2, 3],
+            [0, 3, 1],
+            [1, 3, 2]], dtype = int)
+
+    class MockParticle:
+        pass
+    p = MockParticle()
+    p.verts = verts
+    p.faces = faces
+
+    n_faces = faces.shape[0]
+    rng = np.random.default_rng(0)
+    eigenmode = {
+            'eigenvalues': np.array([0.5, 0.3, 0.2, 0.1]),
+            'eigenvectors_r': rng.standard_normal((n_faces, 4)),
+            'eigenvectors_l': rng.standard_normal((4, n_faces)),
+            'n_modes': 4}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = plot_mode_patterns(tmp, eigenmode, p, n_modes = 3)
+        assert len(files) == 1, '[error] expected 1 mode_patterns file'
+
+    print('[test] plot_mode_patterns_synthetic: OK')
+
+
+def test_plot_eigenvalue_spectrum_and_svd():
+    from pymnpbem_simulation.postprocess import (
+            plot_eigenvalue_spectrum, plot_singular_value_decay)
+
+    # Synthetic eigenmode dict
+    rng = np.random.default_rng(7)
+    ene = rng.standard_normal(8) + 1j * 0.05 * rng.standard_normal(8)
+
+    eigenmode = {
+            'eigenvalues': ene,
+            'eigenvectors_r': rng.standard_normal((100, 8)),
+            'eigenvectors_l': rng.standard_normal((8, 100)),
+            'n_modes': 8}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = plot_eigenvalue_spectrum(tmp, eigenmode)
+        assert len(files) == 1
+        assert os.path.exists(files[0])
+
+    # SVD decay
+    sv = np.exp(-np.arange(20) / 3.0)
+    svd_result = {
+            'singular_values': sv,
+            'energy_cumulative': np.cumsum(sv ** 2) / np.sum(sv ** 2),
+            'rank_eff': 5}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        files = plot_singular_value_decay(tmp, svd_result)
+        assert len(files) == 1
+
+    print('[test] plot_eigenvalue_spectrum + plot_singular_value_decay: OK')
+
+
 def test_field_statistics_and_high_field_regions():
     from pymnpbem_simulation.postprocess import field_statistics, high_field_regions
 

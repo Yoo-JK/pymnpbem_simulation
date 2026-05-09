@@ -33,6 +33,10 @@ from .plot_surface_charge import (
         plot_surface_charge_phase,
         load_surface_charge_from_npz)
 from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
+from .plot_eigenmode import (
+        plot_mode_patterns,
+        plot_eigenvalue_spectrum,
+        plot_singular_value_decay)
 from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
 from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
 from .export import (
@@ -76,6 +80,9 @@ __all__ = [
         'qs_eigenmodes',
         'svd_decomposition',
         'retarded_eigenmodes',
+        'plot_mode_patterns',
+        'plot_eigenvalue_spectrum',
+        'plot_singular_value_decay',
         'fano_fit',
         'multi_fano_fit',
         'fano_lineshape',
