@@ -55,7 +55,7 @@ args['field_hotspot_count'] = 10
 args['field_hotspot_min_distance'] = 3
 
 # Output settings
-args['output_dir'] = os.path.join(Path.home(), 'research/mnpbem/dimer')
+args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/monomer')
 args['output_formats'] = ['txt', 'csv', 'json']
 args['save_plots'] = True
 args['plot_format'] = ['png', 'pdf']

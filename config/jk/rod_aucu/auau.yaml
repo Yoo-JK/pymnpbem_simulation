@@ -1,6 +1,6 @@
 output:
   name: AuAu
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/rod_aucu
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

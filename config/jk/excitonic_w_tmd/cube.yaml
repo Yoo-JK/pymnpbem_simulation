@@ -1,6 +1,6 @@
 output:
   name: excitonic_cube
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/excitonic_w_tmd
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

@@ -1,6 +1,6 @@
 output:
   name: au_r0.2
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/monomer
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

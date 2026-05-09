@@ -1,6 +1,6 @@
 output:
   name: au_r0.2_g0.4_sub
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/au_dimer/sub
   formats: [json, npz, png]
   save_plots: true
   plot_format: [png, pdf]

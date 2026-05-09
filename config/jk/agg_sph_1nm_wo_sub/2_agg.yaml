@@ -1,6 +1,6 @@
 output:
   name: wo_sub/2_agg_1nm
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/agg_sph_1nm_wo_sub
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

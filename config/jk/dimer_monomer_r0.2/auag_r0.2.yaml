@@ -1,6 +1,6 @@
 output:
   name: auag_r0.2
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/monomer
   formats: [json, npz, png]
   save_plots: true
   plot_format: [png, pdf]

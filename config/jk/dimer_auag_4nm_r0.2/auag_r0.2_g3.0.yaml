@@ -1,6 +1,6 @@
 output:
   name: auag_r0.2_g3.0
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/auag_dimer_4nm
   formats: [json, npz, png]
   save_plots: true
   plot_format: [png, pdf]

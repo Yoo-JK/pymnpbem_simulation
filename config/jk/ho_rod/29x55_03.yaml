@@ -1,6 +1,6 @@
 output:
   name: 29x55_03
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/ho_rod
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

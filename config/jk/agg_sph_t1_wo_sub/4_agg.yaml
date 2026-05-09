@@ -1,6 +1,6 @@
 output:
   name: wo_sub/4_agg
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/agg_sph_t1_wo_sub
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

@@ -1,6 +1,6 @@
 output:
   name: nosub/ctab
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/rod_ctab_rod_nosub
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

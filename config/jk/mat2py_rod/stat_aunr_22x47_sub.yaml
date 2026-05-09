@@ -1,6 +1,6 @@
 output:
   name: aunr_22x47_sub
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/mat2py_rod
   formats: [npz, json, png]
   save_plots: true
   plot_format: [png]

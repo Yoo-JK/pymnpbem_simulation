@@ -1,6 +1,6 @@
 output:
   name: sphere_30nm
-  dir: ./results
+  dir: /home/yoojk20/research/pymnpbem/mat2py_sphere
   formats: [json, npz, png]
   save_plots: true
   plot_format: [png, pdf]
