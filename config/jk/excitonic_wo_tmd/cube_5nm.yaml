@@ -15,7 +15,7 @@ structure:
     mesh_density: 2
     refine: 3
     n_per_edge: 20
-  substrate: {eps: gold.dat, z_position: -25.0, z_shift: 1.0}
+  substrate: {eps: gold.dat, gap: 0.001}
 materials:
   particle_list: [gold]
   medium: air

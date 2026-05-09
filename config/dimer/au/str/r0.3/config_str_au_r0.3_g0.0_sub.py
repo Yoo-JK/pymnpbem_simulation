@@ -39,5 +39,5 @@ args['refractive_index_paths'] = {
 args['use_substrate'] = True
 args['substrate'] = {
     'material': 'ito',
-    'position': -23.501,
+    'gap': 0.001,
 }

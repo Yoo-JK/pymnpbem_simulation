@@ -135,8 +135,12 @@ def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
     sub_spec = materials.get('substrate', dict())
     ri_paths = materials.get('refractive_index_paths', dict())
     material_name = sub_spec.get('material', 'glass') if isinstance(sub_spec, dict) else 'glass'
-    z_position = float(sub_spec.get('position', 0.0)) if isinstance(sub_spec, dict) else 0.0
-    z_shift = float(sub_spec.get('z_shift', 1.0)) if isinstance(sub_spec, dict) else 1.0
+
+    if isinstance(sub_spec, dict) and ('position' in sub_spec or 'z_shift' in sub_spec):
+        print('[warn] substrate spec 에 <position>/<z_shift> 발견 — 무시됨. '
+                '<gap> 만 지원.')
+
+    gap = float(sub_spec.get('gap', 0.001)) if isinstance(sub_spec, dict) else 0.001
 
     eps_resolved = _resolve_substrate_eps(material_name, ri_paths)
 
@@ -148,8 +152,7 @@ def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
             'base': base_cfg,
             'substrate': {
                     'eps': eps_resolved,
-                    'z_position': z_position,
-                    'z_shift': z_shift}}
+                    'gap': gap}}
 
     sim_cfg = out.get('simulation', None)
 
@@ -160,8 +163,8 @@ def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
             sim_cfg['type'] = _SIM_LAYER_PROMOTE[sim_type]
 
     print('[info] auto-wrapped <structure.type={}> with substrate '
-            '(material={}, eps={}, z_position={}, sim.type -> {})'.format(
-                    base_type, material_name, eps_resolved, z_position,
+            '(material={}, eps={}, gap={}, sim.type -> {})'.format(
+                    base_type, material_name, eps_resolved, gap,
                     out.get('simulation', dict()).get('type', '?')))
 
     return out

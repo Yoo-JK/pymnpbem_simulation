@@ -8,7 +8,7 @@ output:
 structure:
   type: with_substrate
   base: {type: rod, diameter: 20, mesh_density: 2, refine: 3, height: 40}
-  substrate: {eps: gold.dat, z_position: -15.0, z_shift: 1.0}
+  substrate: {eps: gold.dat, gap: 0.001}
 materials:
   particle_list: [gold]
   medium: air

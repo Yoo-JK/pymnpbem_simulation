@@ -19,7 +19,7 @@ structure:
     rotation_angle: 0
     refine: 3
     n_per_edge: 24
-  substrate: {eps: 3.8809, z_position: -23.501, z_shift: 1.0}
+  substrate: {eps: 3.8809, gap: 0.001}
 materials:
   particle_list: [gold]
   medium: water

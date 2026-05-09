@@ -9,7 +9,7 @@ structure:
   type: with_substrate
   base: {type: core_shell_rod, refine: 3, core_diameter: 20, shell_thickness: 3.5,
     height: 67, nphi: 3, ntheta: 3, nz: 3}
-  substrate: {eps: 2.25, z_position: -13.501, z_shift: 1.0}
+  substrate: {eps: 2.25, gap: 0.001}
 materials:
   particle_list: [gold_olmon, ctab]
   medium: vacuum
