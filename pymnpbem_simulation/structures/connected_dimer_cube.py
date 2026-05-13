@@ -162,7 +162,7 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         tilt_axis = list(self.cfg_struct.get('tilt_axis', [0.0, 1.0, 0.0]))
         rotation_angle = float(self.cfg_struct.get('rotation_angle', 0.0))
         refine = int(self.cfg_struct.get('refine', 2))
-        interp = self.cfg_struct.get('interp', 'flat')
+        interp = self.cfg_struct.get('interp', 'curv')
 
         if gap > 0.0:
             raise ValueError(
@@ -233,7 +233,7 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         tilt_axis = list(self.cfg_struct.get('tilt_axis', [0.0, 1.0, 0.0]))
         rotation_angle = float(self.cfg_struct.get('rotation_angle', 0.0))
         refine = int(self.cfg_struct.get('refine', 2))
-        interp = self.cfg_struct.get('interp', 'flat')
+        interp = self.cfg_struct.get('interp', 'curv')
 
         # rounding: roundings=[core, shell] or single rounding/e
         if 'roundings' in self.cfg_struct:
