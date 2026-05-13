@@ -110,11 +110,16 @@ class AdvancedMonomerCubeBuilder(StructureBuilder):
             '[error] <materials> length must equal 1 (core) + len(shell_layers)'
 
         roundings = _resolve_roundings(self.cfg_struct, n_layers)
-        n_per_edges = _resolve_n_per_edge(self.cfg_struct, n_layers)
 
         sizes = [core_size]
         for thickness in shell_layers:
             sizes.append(sizes[-1] + 2.0 * float(thickness))
+
+        # Per-layer n_per_edge — same fix as advanced_dimer_cube (commit 481ca2d).
+        n_per_edges = []
+        for size in sizes:
+            n_per_edges.append(
+                    _resolve_n_per_edge(self.cfg_struct, 1, edge_override = size)[0])
 
         medium_name = self.cfg_materials.get('medium', 'water')
         eps_medium = _build_eps_medium(medium_name)
