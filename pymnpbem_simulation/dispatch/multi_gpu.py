@@ -53,8 +53,17 @@ def _dispatch_wavelength_split(cfg: Dict[str, Any],
     # which OOM'd on 12k+ face Au@Ag dimer when the user requested iter.
     bem_class_name = _resolve_bem_class_name(cfg)
 
+    # Forward iter options (hmatrix, tol, maxit, etc.) to the worker BEM
+    # constructor when using an iterative solver.
+    if bem_class_name in ('BEMRetIter', 'BEMRetLayerIter'):
+        iter_cfg = cfg['simulation'].get('iter', dict()) or dict()
+        for key in ('solver', 'tol', 'maxit', 'restart', 'precond',
+                    'output', 'hmatrix', 'htol', 'cleaf', 'kmax'):
+            if key in iter_cfg:
+                bem_kwargs[key] = iter_cfg[key]
+
     print_info('multi_gpu wavelength-split: n_gpus={}, n_wl={}, n_pol={}, bem_class={}'.format(
-            n_workers, n_wl, len(pol), bem_class_name))
+            n_workers, n_wl, len(pol), bem_class_name or 'BEMRet'))
 
     t0 = time.time()
     raw = solve_spectrum_multi_gpu(
@@ -208,13 +217,17 @@ def _resolve_bem_class_name(cfg: Dict[str, Any]) -> str:
 
     Mirrors the runner registry used by single-node dispatch.
     """
-    sim_type = cfg['simulation'].get('type', 'ret')
+    sim_type = cfg.get('simulation', {}).get('type', 'ret')
 
     table = {
-            'ret':        'BEMRet',
-            'ret_iter':   'BEMRetIter',
-            'ret_layer':  'BEMRetLayer',
-            'ret_layer_iter': 'BEMRetLayerIter'}
+            'ret':                      'BEMRet',
+            'ret_iter':                 'BEMRetIter',
+            'ret_layer':                'BEMRetLayer',
+            'ret_layer_iter':           'BEMRetLayerIter',
+            'planewave_ret':            'BEMRet',
+            'planewave_ret_iter':       'BEMRetIter',
+            'planewave_ret_layer':      'BEMRetLayer',
+            'planewave_ret_layer_iter': 'BEMRetLayerIter'}
 
     return table.get(sim_type, 'BEMRet')
 
