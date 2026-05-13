@@ -22,10 +22,79 @@ def is_field_calculation(cfg: Dict[str, Any]) -> bool:
     return False
 
 
+# Issue A (v1.5.1) — auto-redirect simulation.type when compute.iterative=true.
+#
+# Legacy py->yaml migration emits the original mnpbem_simulation flag
+# ``use_iterative_solver=True`` as ``compute.iterative=true`` while keeping
+# ``simulation.type='ret'`` (or 'stat' / 'ret_layer'). Previously this
+# combo silently fell through to the dense BEMRet solver, defeating the
+# user's intent (and OOM-ing on 12k+ face meshes such as the jk-config
+# Au@Ag dimer 4nm shell case).
+#
+# This helper rewrites ``simulation.type`` in-place on the cfg dict so all
+# downstream dispatch (single GPU / multi-GPU / CPU pool / MPI) sees the
+# correct iter-path runner key in ``REGISTRY``.
+_ITER_TYPE_MAP = {
+        'ret': 'ret_iter',
+        'stat': 'stat_iter',
+        'ret_layer': 'ret_layer_iter'}
+
+
+def _redirect_iterative_to_iter_type(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """If compute.iterative=true, redirect simulation.type to its _iter
+    counterpart when one exists. Returns the (possibly modified) cfg.
+
+    No-op when:
+      * compute.iterative is false / missing
+      * simulation.type is already an _iter variant
+      * no _iter variant exists for the current type (e.g. 'eels',
+        'dipole', 'field' — these have no iterative runner today)
+    """
+    if not isinstance(cfg, dict):
+        return cfg
+
+    compute = cfg.get('compute', dict())
+    iterative = bool(compute.get('iterative', False))
+
+    if not iterative:
+        return cfg
+
+    sim = cfg.get('simulation', dict())
+    sim_type = sim.get('type', 'ret')
+
+    if not isinstance(sim_type, str):
+        return cfg
+
+    if sim_type.endswith('_iter'):
+        return cfg
+
+    new_type = _ITER_TYPE_MAP.get(sim_type, None)
+
+    if new_type is None:
+        print_info(
+                'iterative redirect: simulation.type=<{}> has no _iter variant — left as-is'.format(
+                        sim_type))
+        return cfg
+
+    print_info(
+            'iterative redirect (Issue A): compute.iterative=true detected — '
+            'simulation.type <{}> -> <{}>'.format(sim_type, new_type))
+
+    sim['type'] = new_type
+    cfg['simulation'] = sim
+    return cfg
+
+
 def dispatch_single_node(cfg: Dict[str, Any],
         p: Any,
         epstab: Any,
         enei: np.ndarray) -> Dict[str, Any]:
+
+    # v1.5.1 — Issue A — translate compute.iterative=true into _iter type
+    # before any dispatch decision. Touch the cfg dict directly so the
+    # rewrite reaches all worker subprocesses (cpu_pool / multi_gpu) that
+    # snapshot cfg further down.
+    _redirect_iterative_to_iter_type(cfg)
 
     n_workers = int(cfg['compute']['n_workers'])
     n_gpus_per_worker = int(cfg['compute']['n_gpus_per_worker'])

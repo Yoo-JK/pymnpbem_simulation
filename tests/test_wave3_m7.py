@@ -173,7 +173,7 @@ def test_ret_iter_dimer_smoke() -> None:
 
 
 # ============================================================================
-# Nonlocal eps smoke
+# Nonlocal cover-layer (EpsNonlocal port, Wave 2)
 # ============================================================================
 
 def test_with_nonlocal_in_registry() -> None:
@@ -182,86 +182,171 @@ def test_with_nonlocal_in_registry() -> None:
     assert 'with_nonlocal' in REGISTRY
 
 
-def test_nonlocal_k0_matches_local() -> None:
-    """nonlocal eps at k=0 must reduce to base local eps exactly (bit-identical)."""
+def test_nonlocal_epstab_three_entries() -> None:
+    """epstab = [eps_embed, eps_metal_core, eps_nonlocal_shell]."""
     from pymnpbem_simulation.structures import build_structure
 
-    cfg_local = {'type': 'sphere', 'diameter': 20, 'mesh_density': 60}
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
     cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
-            'nonlocal': {'metal': 'gold', 'k_nm_inv': 0.0}}
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
     cfg_m = {'medium': 'water', 'particle': 'gold'}
 
-    _p, eps_loc, _ = build_structure(cfg_local, cfg_m)
-    _p2, eps_nl, _ = build_structure(cfg_nl, cfg_m)
+    p, epstab, _ = build_structure(cfg_nl, cfg_m)
 
-    e_loc, _ = eps_loc[1](600.0)
-    e_nl, _ = eps_nl[1](600.0)
-
-    assert np.isclose(e_loc, e_nl, rtol = 0, atol = 0), \
-            '[error] nonlocal at k=0 differs from local: {} vs {}'.format(e_loc, e_nl)
+    assert len(epstab) == 3, \
+            '[error] expected 3 epstab entries, got {}'.format(len(epstab))
+    for entry in epstab:
+        assert callable(entry)
 
 
-def test_nonlocal_kpos_shifts_eps() -> None:
-    """nonlocal eps at k>0 should differ from local."""
+def test_nonlocal_shell_eps_is_small() -> None:
+    """eps_shell is the artificial cover-layer permittivity (small magnitude)."""
+    from pymnpbem_simulation.structures import build_structure
+    from mnpbem.materials import EpsNonlocal
+
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
+    cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'water', 'particle': 'gold'}
+
+    _p, epstab, _ = build_structure(cfg_nl, cfg_m)
+
+    assert isinstance(epstab[2], EpsNonlocal)
+
+    val_shell, _ = epstab[2](600.0)
+    # Yu Luo cover-layer eps_t is typically O(0.1) complex at vis frequencies.
+    assert abs(val_shell) > 0.0
+    assert abs(val_shell) < 5.0
+
+
+def test_nonlocal_attaches_refun_on_particle() -> None:
+    """coverlayer.refine refun is stashed on the ComParticle so simulation
+    runners can forward it to BEMStat."""
     from pymnpbem_simulation.structures import build_structure
 
-    cfg_local = {'type': 'sphere', 'diameter': 20, 'mesh_density': 60}
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
     cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
-            'nonlocal': {'metal': 'gold', 'k_nm_inv': 0.05}}
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
     cfg_m = {'medium': 'water', 'particle': 'gold'}
 
-    _p, eps_loc, _ = build_structure(cfg_local, cfg_m)
-    _p2, eps_nl, _ = build_structure(cfg_nl, cfg_m)
+    p, _epstab, _ = build_structure(cfg_nl, cfg_m)
 
-    e_loc, _ = eps_loc[1](600.0)
-    e_nl, _ = eps_nl[1](600.0)
-
-    assert not np.isclose(e_loc, e_nl), \
-            '[error] nonlocal at k=0.05 should differ from local'
+    refun = getattr(p, '_mnpbem_refun', None)
+    assert refun is not None, '[error] _mnpbem_refun not attached'
+    assert callable(refun)
 
 
-def test_nonlocal_full_simulation_k0() -> None:
-    """Full BEM with nonlocal(k=0) should produce ext identical to local-baseline."""
+def test_nonlocal_two_subparticles_per_base() -> None:
+    """Each base sub-particle yields shell + core (2x sub-particles in
+    final ComParticle)."""
+    from pymnpbem_simulation.structures import build_structure
+
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
+    cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'water', 'particle': 'gold'}
+
+    p, _epstab, _ = build_structure(cfg_nl, cfg_m)
+
+    assert len(p.p) == 2, \
+            '[error] expected 2 sub-particles (shell + core), got {}'.format(len(p.p))
+
+
+def test_nonlocal_dimer_two_pairs() -> None:
+    """dimer base -> 4 sub-particles (2 shells + 2 cores)."""
+    from pymnpbem_simulation.structures import build_structure
+
+    cfg_local = {'type': 'dimer_sphere', 'diameter': 10, 'gap': 1.0,
+            'n_verts': 60}
+    cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'vacuum', 'particle': 'gold'}
+
+    p, _epstab, _ = build_structure(cfg_nl, cfg_m)
+
+    assert len(p.p) == 4, \
+            '[error] dimer nonlocal: expected 4 sub-particles, got {}'.format(len(p.p))
+
+
+def test_nonlocal_runs_planewave_stat_smoke() -> None:
+    """Full BEMStat run on a small nonlocal sphere produces finite + positive ext."""
     from pymnpbem_simulation.structures import build_structure
     from pymnpbem_simulation.simulation import build_simulation
 
-    cfg_local = {'type': 'sphere', 'diameter': 20, 'mesh_density': 60}
-    cfg_m = {'medium': 'water', 'particle': 'gold'}
-
-    p, eps, _ = build_structure(cfg_local, cfg_m)
-    res_loc = build_simulation(p, eps, {'structure': cfg_local,
-            'simulation': {'type': 'ret', 'excitation': 'planewave',
-                    'polarizations': [[1, 0, 0]], 'propagation_dirs': [[0, 0, 1]]}}).run(
-                    np.array([600.0]))
-
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
     cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
-            'nonlocal': {'metal': 'gold', 'k_nm_inv': 0.0}}
-    p2, eps2, _ = build_structure(cfg_nl, cfg_m)
-    res_nl = build_simulation(p2, eps2, {'structure': cfg_nl,
-            'simulation': {'type': 'ret', 'excitation': 'planewave',
-                    'polarizations': [[1, 0, 0]], 'propagation_dirs': [[0, 0, 1]]}}).run(
-                    np.array([600.0]))
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'vacuum', 'particle': 'gold'}
 
-    rel = abs(res_loc['ext'][0, 0] - res_nl['ext'][0, 0]) / abs(res_loc['ext'][0, 0])
-    assert rel < 1e-12, \
-            '[error] nonlocal(k=0) full sim rel diff {:.3e} != 0'.format(rel)
+    p, eps, _ = build_structure(cfg_nl, cfg_m)
+    cfg = {'structure': cfg_nl,
+            'simulation': {'type': 'stat', 'excitation': 'planewave',
+                    'polarizations': [[1, 0, 0]]}}
+    res = build_simulation(p, eps, cfg).run(np.array([550.0, 600.0, 650.0]))
+
+    assert res['ext'].shape == (3, 1)
+    assert np.all(np.isfinite(res['ext']))
+    assert np.all(res['ext'] > 0)
 
 
-def test_make_hydrodynamic_drude_eps_callable() -> None:
-    """Direct hydrodynamic Drude EpsFun smoke."""
-    from pymnpbem_simulation.material import make_hydrodynamic_drude_eps
+def test_nonlocal_dimer_nano_gap_blueshift() -> None:
+    """Sub-nm Au dimer gap: nonlocal cover layer must blueshift the bonding
+    plasmon peak relative to a purely local Drude dimer.
 
-    eps = make_hydrodynamic_drude_eps(eps_inf = 10, wp_eV = 9.0, gamma_eV = 0.07,
-            beta_m_s = 1.0e6, k_nm_inv = 0.0)
-    e0, k0 = eps(600.0)
-    assert np.isfinite(e0)
-    assert np.isfinite(k0)
+    Reference: Ciraci et al., Science 337, 1072 (2012); Luo et al., PRL 111,
+    093901 (2013). The peak shift increases as the gap shrinks; for a 1 nm
+    gap with 10 nm Au spheres the shift is on the order of several to tens
+    of nm. We only require a strict (positive) blueshift.
+    """
+    from pymnpbem_simulation.structures import build_structure
+    from pymnpbem_simulation.simulation import build_simulation
 
-    # at k=0.05 should differ
-    eps_k = make_hydrodynamic_drude_eps(eps_inf = 10, wp_eV = 9.0, gamma_eV = 0.07,
-            beta_m_s = 1.0e6, k_nm_inv = 0.05)
-    e_k, _ = eps_k(600.0)
-    assert not np.isclose(e0, e_k)
+    cfg_dimer_local = {'type': 'dimer_sphere', 'diameter': 10, 'gap': 1.0,
+            'n_verts': 144}
+    cfg_dimer_nl = {'type': 'with_nonlocal', 'base': cfg_dimer_local,
+            'nonlocal': {'metal': 'gold', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'vacuum', 'particle': 'gold'}
+
+    enei = np.linspace(450.0, 750.0, 31)
+
+    p_loc, eps_loc, _ = build_structure(cfg_dimer_local, cfg_m)
+    res_loc = build_simulation(p_loc, eps_loc,
+            {'structure': cfg_dimer_local,
+                    'simulation': {'type': 'stat', 'excitation': 'planewave',
+                            'polarizations': [[1, 0, 0]]}}).run(enei)
+
+    p_nl, eps_nl, _ = build_structure(cfg_dimer_nl, cfg_m)
+    res_nl = build_simulation(p_nl, eps_nl,
+            {'structure': cfg_dimer_nl,
+                    'simulation': {'type': 'stat', 'excitation': 'planewave',
+                            'polarizations': [[1, 0, 0]]}}).run(enei)
+
+    peak_loc = float(enei[int(np.argmax(res_loc['ext'][:, 0]))])
+    peak_nl = float(enei[int(np.argmax(res_nl['ext'][:, 0]))])
+
+    blueshift_nm = peak_loc - peak_nl
+    print('[info] dimer nano-gap nonlocal blueshift: peak_loc={:.2f}nm '
+            'peak_nl={:.2f}nm shift={:.2f}nm'.format(
+                    peak_loc, peak_nl, blueshift_nm))
+
+    msg = ('[error] expected blueshift > 0, got {:.2f} nm '
+            '(peak_local={:.2f}, peak_nonlocal={:.2f})').format(
+                    blueshift_nm, peak_loc, peak_nl)
+    assert blueshift_nm > 0.0, msg
+
+
+def test_nonlocal_silver_factory() -> None:
+    """silver metal name routes through make_nonlocal_pair (no Fermi velocity error)."""
+    from pymnpbem_simulation.structures import build_structure
+
+    cfg_local = {'type': 'sphere', 'diameter': 10, 'mesh_density': 60}
+    cfg_nl = {'type': 'with_nonlocal', 'base': cfg_local,
+            'nonlocal': {'metal': 'silver', 'delta_d': 0.05}}
+    cfg_m = {'medium': 'vacuum', 'particle': 'silver'}
+
+    _p, epstab, _ = build_structure(cfg_nl, cfg_m)
+    val, _ = epstab[2](500.0)
+    assert np.isfinite(val) and abs(val) > 0.0
 
 
 if __name__ == '__main__':

@@ -1,0 +1,35 @@
+args = {
+    'simulation_type': 'ret',
+    'excitation_type': 'planewave',
+    'wavelength_range': [300, 1000, 140],
+    'polarizations': [
+        [1, 0, 0],
+        [0, 1, 0]],
+    'propagation_dirs': [
+        [0, 0, 1],
+        [0, 0, 1]],
+    'interp': 'curv',
+    'waitbar': 1,
+    'relcutoff': 3,
+    'calculate_cross_sections': True,
+    'calculate_fields': False,
+    'compute': {
+        'use_parallel': True,
+        'n_workers': 5,
+        'n_threads': 1,
+        'wavelength_chunk_size': 10,
+        'mirror': False,
+        'iterative': True,
+        'nonlocal': False,
+        'n_gpus_per_worker': 0,
+        'multi_node': False,
+        'hmode': 'dense'},
+    'output': {
+        'dir': './results',
+        'name': 'auag_r0.2_g0.6',
+        'formats': ['json', 'npz', 'png'],
+        'save_plots': True,
+        'plot_format': ['png', 'pdf'],
+        'plot_dpi': 300},
+    'spectrum_xaxis': 'energy',
+    'run_eigenmode_analysis': True}

@@ -2,9 +2,13 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from ..util import print_info
+
+
+_DIMER_CUBE_DEFAULT_N = 24
 
 
 class DimerCubeBuilder(StructureBuilder):
@@ -14,7 +18,10 @@ class DimerCubeBuilder(StructureBuilder):
 
         edge = float(self.cfg_struct.get('edge', 47.0))
         gap = float(self.cfg_struct.get('gap', 0.6))
-        n_per_edge = int(self.cfg_struct.get('n_per_edge', 24))
+        if self.cfg_struct.get('mesh_density') is None and self.cfg_struct.get('n_per_edge') is None:
+            n_per_edge = _DIMER_CUBE_DEFAULT_N
+        else:
+            n_per_edge = _resolve_n_per_edge(self.cfg_struct, 1, edge_override = edge)[0]
         e = float(self.cfg_struct.get('e', 0.2))
         refine = int(self.cfg_struct.get('refine', 3))
         interp = self.cfg_struct.get('interp', 'curv')

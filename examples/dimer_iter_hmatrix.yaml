@@ -1,0 +1,67 @@
+# ~5k face dimer sphere with v1.3.0 H-matrix BEMRetIter explicitly ON.
+#
+# Roughly the smallest mesh size where ACA H-matrix Green function
+# starts paying off compared to dense. Useful as a regression target:
+# this example forces `hmatrix: true` so behaviour is independent of
+# the auto threshold (5000 faces).
+#
+# Compare against `dimer_iter.yaml` (dense, hmatrix: false) to verify
+# that iter results match within GMRES tolerance.
+#
+# v1.5.0 NOTE: this example deliberately leaves `iter.preconditioner`
+# unset so the runner does NOT forward the v1.5.0 H-matrix LU
+# preconditioner kwarg — preserving the v1.3.0 baseline. Use
+# `dimer_iter_precond.yaml` for the preconditioner-on variant, or
+# `nonlocal_iter_schur.yaml` for the all-in (precond + schur) variant.
+
+structure:
+  type: dimer_sphere
+  diameter: 30.0
+  gap: 5.0
+  n_verts: 256
+  refine: 1
+  interp: curv
+
+simulation:
+  type: ret_iter
+  excitation: planewave
+  enei_min: 500
+  enei_max: 800
+  n_wavelengths: 16
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+  iter:
+    solver: gmres
+    tol: 1.0e-6
+    maxit: 200
+    precond: hmat
+    output: 0
+    hmatrix: true            # v1.3.0: explicit ON regardless of face count
+    htol: 1.0e-6
+    kmax: [4, 100]
+    cleaf: 200
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: hmat
+
+output:
+  dir: ./results
+  name: dimer_iter_hmatrix
+  formats: [npz, json]
+  save_plots: false
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

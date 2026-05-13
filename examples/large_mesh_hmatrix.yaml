@@ -1,0 +1,67 @@
+# 25k+ face dimer with v1.3.0 BEMRetIter + ACA H-matrix Green functions.
+#
+# For very large meshes (>5000 faces) the dense Green function blocks
+# G/H stop fitting in either GPU VRAM or CPU RAM. The v1.3.0 hmatrix
+# option pushes BEMRetIter into ACA-compressed H-matrix mode so the
+# Green function is stored as a low-rank cluster tree rather than a
+# dense N x N block.
+#
+# `iter.hmatrix: auto` (default) flips H-matrix mode ON automatically
+# when the particle has more than 5000 faces. `auto` is the recommended
+# setting because dense G/H is faster on small meshes (no clustering /
+# ACA overhead). Set explicit `true` / `false` to override.
+#
+# This example targets ~25k faces (matches Lane E2 dimer regression set).
+
+structure:
+  type: dimer_cube
+  edge: 80.0
+  gap: 0.6
+  n_per_edge: 32
+  e: 0.2
+  refine: 4               # refine ~4x -> ~25k faces total
+  interp: curv
+
+simulation:
+  type: ret_iter
+  excitation: planewave
+  enei_min: 600
+  enei_max: 1100
+  n_wavelengths: 51
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+  iter:
+    solver: gmres
+    tol: 1.0e-6
+    maxit: 300
+    precond: hmat
+    output: 0
+    hmatrix: auto         # v1.3.0: auto | true | false
+    htol: 1.0e-6
+    kmax: [4, 100]
+    cleaf: 200
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 8
+  n_gpus_per_worker: 0    # H-matrix path is CPU; combine with VRAM-share separately if needed
+  multi_node: false
+  hmode: hmat
+
+output:
+  dir: ./results
+  name: large_mesh_hmatrix
+  formats: [npz, json, png]
+  save_plots: true
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

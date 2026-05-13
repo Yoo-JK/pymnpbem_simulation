@@ -1,0 +1,60 @@
+# Nano-gap gold dimer with hydrodynamic-Drude nonlocal cover layer +
+# v1.2.0 Schur-complement elimination of the cover-layer DOFs.
+#
+# The artificial nonlocal cover layer roughly doubles the surface DOF
+# count (one shell + one core mesh per metal sphere). Schur complement
+# eliminates the cover-layer block analytically before factorisation,
+# trimming peak memory by ~3-4x on this geometry while reproducing the
+# same bonding-mode spectrum (Yu Luo / Pendry et al., PRL 111, 093901,
+# 2013; demospecstat19.m).
+#
+# Set ``compute.schur_complement: false`` to compare against the dense
+# baseline (same physics, larger memory footprint).
+
+structure:
+  type: with_nonlocal
+  base:
+    type: dimer_sphere
+    diameter: 10.0
+    gap: 1.0
+    n_verts: 144
+    interp: curv
+  nonlocal:
+    metal: gold
+    delta_d: 0.05
+    beta: null
+    eps_embed: 1.0
+
+simulation:
+  type: stat
+  excitation: planewave
+  enei_min: 400
+  enei_max: 800
+  n_wavelengths: 41
+  polarizations:
+    - [1, 0, 0]
+
+materials:
+  medium: vacuum
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: dense
+  # v1.2.0: nonlocal cover-layer Schur elimination.
+  # 'auto' (default) turns it ON whenever a cover layer is detected.
+  # Set to false to disable, true to force ON regardless of geometry.
+  schur_complement: auto
+
+output:
+  dir: ./results
+  name: dimer_nonlocal_schur
+  formats: [npz, json]
+  save_plots: false
+
+postprocess:
+  spectrum_xaxis: wavelength
+  run_eigenmode_analysis: false

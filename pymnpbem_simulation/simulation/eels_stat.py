@@ -40,7 +40,7 @@ class EELSStatRunner(SimulationRunner):
     def build_solver(self) -> Any:
         from mnpbem.bem import BEMStat
 
-        return BEMStat(self.p)
+        return self._construct_bem(BEMStat, self.p, **self._bem_options())
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:

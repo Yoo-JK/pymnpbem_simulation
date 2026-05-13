@@ -16,7 +16,9 @@ python -m pymnpbem_simulation.cli [OPTIONS]
 
 | 옵션 | 의미 | 기본값 |
 |---|---|---|
-| `--config PATH` | YAML config 파일 경로 | (필수) |
+| `--config PATH` | YAML config 파일 경로 (legacy 단일 실행) | (셋 중 하나 필수) |
+| `--str-conf PATH --sim-conf PATH` | 구조 + 시뮬 분리 .py config (단일 실행) | |
+| `--sweep-conf PATH` | 여러 케이스 병렬 sweep YAML (다중 worker fan-out) | |
 
 ## 병렬 옵션 (3-축 모델)
 
@@ -93,6 +95,57 @@ postprocess:
 휴리스틱:
 - `G ≥ 1` 인 경우: `n_workers=G, n_gpus_per_worker=1, n_threads=C//G`
 - `G == 0` 인 경우: `n_workers=C, n_threads=1`
+
+## Sweep mode (`--sweep-conf`)
+
+여러 (str_conf, sim_conf) 페어를 병렬로 돌리는 모드. 각 worker 가 자기 GPU 에 pin (`CUDA_VISIBLE_DEVICES` + thread 한도) 되어, GPU 4개 노드에서 4 케이스를 1 GPU 씩 동시에 처리하면 4x throughput.
+
+### 포맷 A — 명시적 list
+
+```yaml
+# sweep.yaml
+sim_conf: configs/jk/sim_default.py        # 공통 sim_conf
+str_confs:
+  - configs/jk/.../auag_g0.6.py
+  - configs/jk/.../auag_g1.0.py
+  - configs/jk/.../auag_g2.0.py
+  - configs/jk/.../auag_g3.0.py
+n_workers: 4                                # GPU 수에 맞춰
+gpus_per_worker: 1
+output_dir: ./results/sweep_gap
+output_subdir_pattern: '{idx:02d}_{name}'   # 결과 폴더명 규칙
+```
+
+또는 case 별 sim_conf 가 다르면:
+
+```yaml
+cases:
+  - {str_conf: a.py, sim_conf: m1.py, name: foo}
+  - {str_conf: b.py, sim_conf: m2.py, name: bar}
+```
+
+### 포맷 B — parameter grid 자동 생성
+
+```yaml
+base_str_conf: configs/jk/auag_base.py
+sim_conf: configs/jk/sim_default.py
+overrides:
+  gap: [0.6, 1.0, 2.0, 3.0]
+n_workers: 4
+gpus_per_worker: 1
+```
+
+여러 키를 동시에 쓰면 cartesian product 로 케이스가 자동 확장된다.
+
+### 실행
+
+```bash
+python run_simulation.py --sweep-conf sweep.yaml
+```
+
+CLI 옵션 `--n-workers`, `--n-threads`, `--n-gpus-per-worker`, `--output-dir` 는 sweep YAML 의 같은 키를 override 한다.
+
+GPU id 는 `CUDA_VISIBLE_DEVICES` 또는 `nvidia-smi -L` 에서 자동 감지하여 worker 별로 round-robin 분배한다 (`gpu_ids: [0, 1, 2, 3]` 로 명시 가능).
 
 ## Migration: 기존 `.py` config → YAML
 

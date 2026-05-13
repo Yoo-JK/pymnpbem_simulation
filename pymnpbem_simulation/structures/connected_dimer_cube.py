@@ -2,9 +2,13 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
+from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
 from ..util import print_info
+
+
+_CONNECTED_DIMER_CUBE_DEFAULT_N = 12
 
 
 _RAY_DIRS = np.array([
@@ -139,7 +143,10 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         core_size = float(self.cfg_struct.get('core_size',
                 self.cfg_struct.get('size', 30.0)))
         gap = float(self.cfg_struct.get('gap', 0.0))
-        n_per_edge = int(self.cfg_struct.get('n_per_edge', 12))
+        if self.cfg_struct.get('mesh_density') is None and self.cfg_struct.get('n_per_edge') is None:
+            n_per_edge = _CONNECTED_DIMER_CUBE_DEFAULT_N
+        else:
+            n_per_edge = _resolve_n_per_edge(self.cfg_struct, 1, edge_override = core_size)[0]
         e = float(self.cfg_struct.get('e', self.cfg_struct.get('rounding', 0.25)))
         offset = list(self.cfg_struct.get('offset', [0.0, 0.0, 0.0]))
         tilt_angle = float(self.cfg_struct.get('tilt_angle', 0.0))

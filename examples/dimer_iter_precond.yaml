@@ -1,0 +1,70 @@
+# ~5k face dimer with v1.5.0 H-matrix LU preconditioner explicitly active.
+#
+# v1.5.0 (Agent α) introduces a hierarchical-block-Schur LU preconditioner
+# built directly on top of the HMatrix used by BEMRetIter. Compared to the
+# legacy dense LU preconditioner (built only when hmatrix: false) it:
+#
+#   - keeps memory at O(N log N) on 25k+ meshes (legacy dense LU OOMs)
+#   - typically halves outer GMRES iteration count
+#   - costs O(N log N * htol_precond^-2) one-time build per enei
+#
+# `iter.preconditioner: auto` (default) lets the BEM solver dispatch:
+#     - tree.n < 5000 -> hlu_dense (LU on the densified HMatrix)
+#     - tree.n >= 5000 -> hlu_tree (recursive block-Schur LU)
+# Set explicit `hlu_dense` / `hlu_tree` to override, or `none` to disable
+# the v1.5.0 preconditioner entirely (legacy behaviour).
+
+structure:
+  type: dimer_sphere
+  diameter: 30.0
+  gap: 5.0
+  n_verts: 256
+  refine: 1
+  interp: curv
+
+simulation:
+  type: ret_iter
+  excitation: planewave
+  enei_min: 500
+  enei_max: 800
+  n_wavelengths: 16
+  polarizations:
+    - [1, 0, 0]
+    - [0, 1, 0]
+  propagation_dirs:
+    - [0, 0, 1]
+    - [0, 0, 1]
+  iter:
+    solver: gmres
+    tol: 1.0e-6
+    maxit: 200
+    precond: hmat
+    output: 0
+    hmatrix: true              # H-matrix ON so the LU preconditioner has a tree
+    htol: 1.0e-6
+    kmax: [4, 100]
+    cleaf: 200
+    # v1.5.0 (Agent α)
+    preconditioner: auto       # auto | none | hlu_dense | hlu_tree
+    htol_precond: 1.0e-4       # LU drop tolerance (looser than htol -> cheaper build)
+
+materials:
+  medium: water
+  particle: gold
+
+compute:
+  n_workers: 1
+  n_threads: 4
+  n_gpus_per_worker: 0
+  multi_node: false
+  hmode: hmat
+
+output:
+  dir: ./results
+  name: dimer_iter_precond
+  formats: [npz, json]
+  save_plots: false
+
+postprocess:
+  spectrum_xaxis: energy
+  run_eigenmode_analysis: false

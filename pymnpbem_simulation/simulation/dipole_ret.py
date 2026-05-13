@@ -39,7 +39,9 @@ class DipoleRetRunner(SimulationRunner):
     def build_solver(self) -> Any:
         from mnpbem.bem import BEMRet
 
-        return BEMRet(self.p)
+        opts = self._bem_options()
+        opts.pop('refun', None)  # BEMRet does not yet consume refun
+        return self._construct_bem(BEMRet, self.p, **opts)
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:

@@ -23,7 +23,17 @@ class PlaneWaveRetRunner(SimulationRunner):
     def build_solver(self) -> Any:
         from mnpbem.bem import BEMRet
 
-        return BEMRet(self.p)
+        opts = self._bem_options()
+        if 'refun' in opts:
+            print_info('[warn] PlaneWaveRet: detected nonlocal <refun>, but BEMRet '
+                    'does not yet expose a coverlayer.refine hook. Nonlocal '
+                    'simulations should set simulation.type=stat '
+                    '(MATLAB demospecstat19.m). Ignoring refun.')
+            opts.pop('refun', None)
+        # v1.2.0: forward optional schur=... when explicitly enabled. The
+        # `_construct_bem` helper drops the kwarg gracefully if the
+        # installed mnpbem port (Agent α) has not landed yet.
+        return self._construct_bem(BEMRet, self.p, **opts)
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:
