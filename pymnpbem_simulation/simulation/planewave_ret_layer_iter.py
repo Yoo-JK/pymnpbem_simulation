@@ -61,7 +61,7 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
             enei: np.ndarray) -> Any:
         from mnpbem.greenfun import GreenTabLayer
 
-        tab_n = int(self.cfg['simulation'].get('tab_n', 5))
+        tab_n = int(self.cfg['simulation'].get('tab_n', len(enei)))
         tab_n = max(2, min(tab_n, len(enei)))
 
         tab = layer.tabspace(self.p)
