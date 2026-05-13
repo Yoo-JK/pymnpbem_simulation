@@ -8,8 +8,7 @@ structure:
     interp: curv
   substrate:
     eps: 2.25         # n=1.5 glass
-    z_position: 0.0
-    z_shift: 1.0      # 1nm gap above substrate
+    gap: 0.001        # touching
 
 simulation:
   type: ret_layer
