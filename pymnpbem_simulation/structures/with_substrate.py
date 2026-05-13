@@ -18,12 +18,13 @@ _SUBSTRATE_PRESETS = {
 class WithSubstrateBuilder(StructureBuilder):
     """Wrap an arbitrary base structure on top of a planar dielectric substrate.
 
-    The base structure is built first via the standard registry, then the
-    particle is shifted so its lowest point sits ``z_shift`` nm above the
-    substrate interface (``z_position``, default 0.0). A LayerStructure is
-    constructed using the medium (above) + substrate (below). The substrate
-    eps is appended to ``epstab`` so MNPBEM can resolve the layered Green
-    function.
+    The base structure is built first via the standard registry; its natural
+    coordinates are preserved (the particle is never shifted). The substrate
+    interface is placed automatically at ``substrate_z = particle_bottom - gap``
+    so the closest face sits exactly ``gap`` nm above the substrate. A
+    LayerStructure is constructed using the medium (above) + substrate
+    (below), and the substrate eps is appended to ``epstab`` so MNPBEM can
+    resolve the layered Green function.
 
     Returned tuple is ``(p, epstab, nfaces)`` to remain compatible with the
     standard build_structure contract; the LayerStructure is attached on
@@ -40,8 +41,7 @@ class WithSubstrateBuilder(StructureBuilder):
             mesh_density: 144
           substrate:
             eps: 2.25            # n=1.5 glass; or 'glass'/'silicon'/...
-            z_position: 0.0      # interface at z=0
-            z_shift: 1.0         # particle bottom 1nm above substrate
+            gap: 0.001           # nm above substrate (default touching)
 
         materials:
           medium: vacuum
@@ -62,8 +62,12 @@ class WithSubstrateBuilder(StructureBuilder):
 
         cfg_sub = self.cfg_struct.get('substrate', dict())
 
-        z_position = float(cfg_sub.get('z_position', 0.0))
-        z_shift = float(cfg_sub.get('z_shift', 1.0))
+        if 'z_position' in cfg_sub or 'z_shift' in cfg_sub:
+            print_info(
+                '[warn] WithSubstrate: <z_position>/<z_shift> 무시됨 — '
+                '<gap> 만 지원 (default 0.001 nm = touching).')
+
+        gap = float(cfg_sub.get('gap', 0.001))
         eps_sub_spec = cfg_sub.get('eps', 'glass')
 
         # Build the base particle using the existing registry
@@ -82,8 +86,19 @@ class WithSubstrateBuilder(StructureBuilder):
         # LayerStructure.ind uses 1-based MATLAB indexing.
         medium_idx = 1
 
+        # Place the substrate interface so the particle bottom sits <gap> nm
+        # above it. Particle coordinates are NEVER modified; the substrate
+        # plane adapts to the particle's natural geometry.
+        try:
+            zmin = float(_get_particle_pos(p)[:, 2].min())
+        except Exception as e:
+            raise RuntimeError(
+                '[error] WithSubstrateBuilder: cannot read particle z positions: {}'.format(e))
+
+        substrate_z = zmin - gap
+
         # Build the LayerStructure: top layer = medium, bottom layer = substrate.
-        layer = LayerStructure(epstab, [medium_idx, sub_idx], [z_position])
+        layer = LayerStructure(epstab, [medium_idx, sub_idx], [substrate_z])
 
         # ComParticle was built by the base builder with only [medium, particle]
         # in its eps list. Spectrum/far-field code paths reference
@@ -101,17 +116,6 @@ class WithSubstrateBuilder(StructureBuilder):
             except Exception:
                 pass
 
-        # Shift the base particle so its lowest face sits z_shift above the
-        # substrate interface.
-        try:
-            zmin = float(_get_particle_pos(p)[:, 2].min())
-        except Exception as e:
-            raise RuntimeError(
-                '[error] WithSubstrateBuilder: cannot read particle z positions: {}'.format(e))
-
-        dz = z_position + z_shift - zmin
-        _shift_particle(p, [0.0, 0.0, dz])
-
         # Stash the layer on the particle for the simulation runner to pick up.
         # We use a dedicated attribute name to avoid colliding with mnpbem internals.
         try:
@@ -124,12 +128,12 @@ class WithSubstrateBuilder(StructureBuilder):
         nfaces = _count_faces(p, fallback = nfaces_base)
 
         print_info(
-            'WithSubstrate: base={}, substrate eps={}, z_position={}, z_shift={}, dz={:.3f}'.format(
+            'WithSubstrate: base={}, eps={}, gap={} nm, substrate_z={:.4f} nm, nfaces={}'.format(
                 cfg_base.get('type'), _eps_repr(eps_sub_spec),
-                z_position, z_shift, dz))
+                gap, substrate_z, nfaces))
         print_info(
-            'WithSubstrate: layer ind=[{}, {}] (medium, substrate), nfaces={}'.format(
-                medium_idx, sub_idx, nfaces))
+            'WithSubstrate: layer ind=[{}, {}] (medium, substrate)'.format(
+                medium_idx, sub_idx))
 
         return p, epstab, nfaces
 
@@ -168,16 +172,6 @@ def _get_particle_pos(p: Any) -> np.ndarray:
     if hasattr(p, 'pfull') and hasattr(p.pfull, 'pos'):
         return np.asarray(p.pfull.pos)
     raise AttributeError('[error] particle has no <pos> attribute')
-
-
-def _shift_particle(p: Any, dxyz) -> None:
-    if hasattr(p, 'shift'):
-        p.shift(list(dxyz))
-        return
-    if hasattr(p, 'pfull') and hasattr(p.pfull, 'shift'):
-        p.pfull.shift(list(dxyz))
-        return
-    raise AttributeError('[error] particle has no <shift> method')
 
 
 def _count_faces(p: Any, fallback: int = -1) -> int:

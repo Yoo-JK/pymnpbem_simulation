@@ -18,7 +18,7 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
         structure:
           type: with_substrate
           base: { type: sphere, diameter: 30, mesh_density: 60 }
-          substrate: { eps: glass, z_position: 0.0, z_shift: 1.0 }
+          substrate: { eps: glass, gap: 0.001 }
 
         simulation:
           type: planewave_ret_layer_iter   # 또는 ret_layer_iter

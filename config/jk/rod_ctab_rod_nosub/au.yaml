@@ -1,0 +1,40 @@
+output:
+  name: nosub/au
+  dir: /home/yoojk20/research/pymnpbem/rod_ctab_rod_nosub
+  formats: [npz, json, png]
+  save_plots: true
+  plot_format: [png]
+  plot_dpi: 300
+structure: {type: rod, diameter: 20.0, refine: 3, height: 60, nphi: 3, ntheta: 3,
+  nz: 3}
+materials:
+  particle_list: [gold_olmon]
+  medium: vacuum
+  refractive_index_paths:
+    gold_olmon: /home/yoojk20/dataset/mnpbem/refrac/gold_olmon.dat
+    ctab: {type: constant, epsilon: 2.0736}
+  use_substrate: false
+  substrate:
+    material: {type: constant, epsilon: 2.3104}
+    position: -10.001
+  particle: /home/yoojk20/dataset/mnpbem/refrac/gold_olmon.dat
+compute: {use_parallel: true, n_workers: 1, mirror: false, iterative: false, nonlocal: false,
+  n_threads: 1, n_gpus_per_worker: 0, multi_node: false, hmode: dense}
+simulation:
+  type: ret
+  interp: curv
+  waitbar: 1
+  excitation: planewave
+  polarizations:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  propagation_dirs:
+  - [0, 0, 1]
+  - [0, 0, 1]
+  wavelength_range: [400, 1000, 300]
+  relcutoff: 3
+  calculate_cross_sections: true
+  enei_min: 400
+  enei_max: 1000
+  n_wavelengths: 300
+postprocess: {spectrum_xaxis: wavelength, run_eigenmode_analysis: false}

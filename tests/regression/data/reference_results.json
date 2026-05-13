@@ -37,11 +37,11 @@
   "sphere_substrate_2wl": {
     "yaml": "examples/sphere_substrate.yaml",
     "n_wavelengths": 2,
-    "peak_ext_x": 74.922,
+    "peak_ext_x": 76.543,
     "peak_wl_nm": 450.0,
     "tolerance": 1e-3,
     "marker": "fast",
-    "source": "Wave 2 smoke test 4"
+    "source": "Wave 2 smoke test 4 (gap=0.001 touching)"
   },
   "dimer_field_1wl": {
     "yaml": "examples/dimer_field.yaml",

@@ -15,12 +15,29 @@ def save_spectrum(out_dir: str,
     npz_path = os.path.join(out_dir, 'spectrum.npz')
     json_path = os.path.join(out_dir, 'spectrum.json')
 
-    np.savez_compressed(
-        npz_path,
-        wavelength = result['wavelength'],
-        ext = result['ext'],
-        sca = result['sca'],
-        abs = result['abs'])
+    save_kwargs = {
+            'wavelength': result['wavelength'],
+            'ext': result['ext'],
+            'sca': result['sca'],
+            'abs': result['abs']}
+
+    sc = result.get('surface_charge', None)
+
+    if sc is not None:
+        save_kwargs['surface_charge_wavelengths'] = np.asarray(sc['wavelengths'])
+        save_kwargs['surface_charge_wl_indices'] = np.asarray(sc['wl_indices'])
+        save_kwargs['surface_charge_sig2'] = np.asarray(sc['sig2'])
+        save_kwargs['surface_charge_sig1'] = np.asarray(sc['sig1'])
+        save_kwargs['surface_charge_verts'] = np.asarray(sc['verts'])
+        save_kwargs['surface_charge_faces'] = np.asarray(sc['faces'])
+        save_kwargs['surface_charge_centroids'] = np.asarray(sc['centroids'])
+        save_kwargs['surface_charge_normals'] = np.asarray(sc['normals'])
+        save_kwargs['surface_charge_areas'] = np.asarray(sc['areas'])
+        save_kwargs['surface_charge_polarizations'] = np.asarray(sc['polarizations'])
+        print_info('surface_charge: saving sigma at {} wavelengths'.format(
+                len(sc['wavelengths'])))
+
+    np.savez_compressed(npz_path, **save_kwargs)
 
     summary = {
         'n_wavelengths': int(result['wavelength'].size),

@@ -1,0 +1,48 @@
+output:
+  name: wo_sub/1_agg
+  dir: /home/yoojk20/research/pymnpbem/agg_sph_wo_sub
+  formats: [npz, json, png]
+  save_plots: true
+  plot_format: [png]
+  plot_dpi: 300
+structure: {type: sphere_cluster_aggregate, n_spheres: 1, diameter: 50, gap: 2, mesh_density: 2,
+  refine: 3, n_verts: 144}
+materials:
+  medium: '1.459'
+  particle_list: [gold]
+  use_substrate: false
+  substrate: {material: gold, position: -25.001}
+  particle: gold
+compute: {use_parallel: false, n_workers: 2, wavelength_chunk_size: 10, mirror: false,
+  iterative: false, hmode: dense, nonlocal: false, n_threads: 1, n_gpus_per_worker: 0,
+  multi_node: false}
+simulation:
+  type: ret
+  interp: curv
+  waitbar: 0
+  excitation: planewave
+  polarizations:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  propagation_dirs:
+  - [0, 0, 1]
+  - [0, 0, 1]
+  wavelength_range: [400, 1000, 200]
+  relcutoff: 3
+  calculate_cross_sections: true
+  calculate_fields: true
+  field_region:
+    x_range: [-150, 150, 151]
+    y_range: [-100, 100, 101]
+    z_range: [0, 0, 1]
+  field_wavelength_idx: [400, 430, 460, 490, 520, 550, 580, 610, 640, 670, 700, 730,
+    760, 790, 820, 850, 880, 910, 940, 970, 1000]
+  field_mindist: 0.5
+  field_nmax: 2000
+  export_field_arrays: true
+  field_hotspot_count: 10
+  field_hotspot_min_distance: 3
+  enei_min: 400
+  enei_max: 1000
+  n_wavelengths: 200
+postprocess: {spectrum_xaxis: eV, run_eigenmode_analysis: false}

@@ -18,7 +18,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             fano_fit, multi_fano_fit,
             qs_eigenmodes,
             multipole_decomposition, dipole_quadrupole_ratio, dominant_l,
-            export_npz, export_h5, export_csv, export_json)
+            plot_multipole_bar, plot_fano_fit,
+            plot_mode_patterns, plot_eigenvalue_spectrum,
+            export_npz, export_h5, export_csv, export_json,
+            export_spectrum_txt,
+            check_unpolarized_conditions, calculate_unpolarized_spectrum,
+            plot_polarization_comparison, plot_unpolarized_spectrum,
+            plot_polarization_vs_unpolarized)
 
     if not os.path.exists(args.result):
         print_error('result file not found: <{}>'.format(args.result))
@@ -44,12 +50,42 @@ def main(argv: Optional[List[str]] = None) -> int:
         analysis = analyze_spectrum(result)
         summary['spectrum'] = analysis
         save_json(os.path.join(out_dir, 'spectrum_analysis.json'), analysis)
-        plot_spectrum(out_dir, result,
-                title = os.path.basename(args.result))
+
+        title = os.path.basename(args.result)
+        plot_spectrum(out_dir, result, title = title, xaxis = args.xaxis)
+
+        n_pol = int(np.asarray(result['ext']).shape[1])
+        if n_pol > 1:
+            plot_polarization_comparison(out_dir, result, title = title, xaxis = args.xaxis)
+
+        # Unpolarized — only if user passes --polarizations
+        if args.polarizations is not None:
+            try:
+                pols = json.loads(args.polarizations)
+            except Exception as e:
+                print_error('failed to parse --polarizations as JSON: {}'.format(e))
+                pols = None
+            if pols is not None:
+                info = check_unpolarized_conditions(pols, args.excitation, n_pol)
+                if info.get('can_calculate', False):
+                    unpol = calculate_unpolarized_spectrum(result, info)
+                    plot_unpolarized_spectrum(out_dir, result, unpol,
+                            title = title, xaxis = args.xaxis)
+                    plot_polarization_vs_unpolarized(out_dir, result, unpol,
+                            title = title, xaxis = args.xaxis)
 
     if 'fano' in analyzers:
         fano_res = _run_fano(result, n_peaks = args.fano_peaks)
         summary['fano'] = fano_res
+        if fano_res is not None and args.fano_peaks <= 1:
+            try:
+                enei = np.asarray(result['wavelength'])
+                ext = np.asarray(result['ext'])
+                spectrum = ext[:, 0] if ext.ndim >= 2 else ext
+                plot_fano_fit(out_dir, enei, spectrum, fano_res,
+                        title = 'Fano fit (pol 0)')
+            except Exception as e:
+                print_error('plot_fano_fit failed: {}'.format(e))
 
     if 'eigenmode' in analyzers:
         eig_res = _run_eigenmode(result, args, out_dir)
@@ -60,6 +96,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         mp_res = _run_multipole(result, args, out_dir)
         if mp_res is not None:
             summary['multipole'] = mp_res
+            try:
+                # Reconstruct power_l + max_l for plot helper.
+                plot_multipole_bar(out_dir, {
+                        'power_l': np.asarray(mp_res['power_l']),
+                        'max_l': args.max_l},
+                        title = 'Multipole decomposition')
+            except Exception as e:
+                print_error('plot_multipole_bar failed: {}'.format(e))
 
     save_json(os.path.join(out_dir, 'postprocess_summary.json'), summary)
 
@@ -74,6 +118,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             export_csv(export_data, os.path.join(out_dir, 'export.csv'))
         if 'json' in formats:
             export_json(export_data, os.path.join(out_dir, 'export.json'))
+        if 'txt' in formats:
+            # spectrum txt export (per-pol + combined)
+            try:
+                export_spectrum_txt(out_dir, result,
+                        title = os.path.basename(args.result))
+            except Exception as e:
+                print_error('export_spectrum_txt failed: {}'.format(e))
 
     print_info('postprocess done. results in <{}>'.format(out_dir))
     return 0
@@ -103,7 +154,19 @@ def _build_parser() -> argparse.ArgumentParser:
             help = 'Multipole expansion order.')
 
     parser.add_argument('--export-formats', type = str, default = None,
-            help = 'Comma-separated formats: npz,h5,csv,json.')
+            help = 'Comma-separated formats: npz,h5,csv,json,txt.')
+
+    parser.add_argument('--xaxis', type = str,
+            choices = ['wavelength', 'energy'],
+            default = 'wavelength',
+            help = 'Spectrum x-axis: wavelength(nm) (default) or energy(eV).')
+    parser.add_argument('--polarizations', type = str, default = None,
+            help = 'JSON list of polarization vectors '
+                   '(e.g. \'[[1,0,0],[0,1,0]]\') for unpolarized comparison.')
+    parser.add_argument('--excitation', type = str,
+            choices = ['planewave', 'dipole', 'eels'],
+            default = 'planewave',
+            help = 'Excitation type for unpolarized check.')
 
     return parser
 
@@ -174,6 +237,17 @@ def _run_eigenmode(result: Dict[str, Any],
             eigenvectors_r = eig['eigenvectors_r'],
             eigenvectors_l = eig['eigenvectors_l'])
     print_info('saved <{}>'.format(os.path.join(out_dir, 'eigenmodes.npz')))
+
+    # Auto-render eigenvalue spectrum + mode patterns (top n_modes).
+    try:
+        from pymnpbem_simulation.postprocess import (
+                plot_eigenvalue_spectrum, plot_mode_patterns)
+        plot_eigenvalue_spectrum(out_dir, eig, title = 'QS eigenmodes')
+        plot_mode_patterns(out_dir, eig, p,
+                n_modes = min(args.n_modes, 5),
+                title = 'QS mode patterns')
+    except Exception as e:
+        print_error('eigenmode plots failed: {}'.format(e))
 
     return out
 

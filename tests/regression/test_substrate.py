@@ -36,7 +36,7 @@ def test_with_substrate_builder():
 
 @pytest.mark.slow
 def test_sphere_substrate_smoke(repo_root, reference_results):
-    """Wave 2 smoke 4: sphere on glass, 2 wl, peak ext_x = 74.922."""
+    """Wave 2 smoke 4: sphere on glass, 2 wl, peak ext_x = 76.543 (gap=0.001 touching)."""
     from .runners.compute_grade import compute_grade
 
     yaml_path = repo_root / 'examples' / 'sphere_substrate.yaml'

@@ -1,0 +1,49 @@
+output:
+  name: 22x47_01
+  dir: /home/yoojk20/research/pymnpbem/ho_rod
+  formats: [npz, json, png]
+  save_plots: true
+  plot_format: [png]
+  plot_dpi: 300
+structure: {type: core_shell_rod, mesh_density: 2, refine: 3, core_diameter: 22, shell_thickness: 1,
+  height: 49}
+materials:
+  particle_list: [gold, polymer]
+  medium: water
+  refractive_index_paths: {polymer: /home/yoojk20/dataset/mnpbem/refrac/ho_polymer.txt}
+  use_substrate: false
+  core: gold
+  shell: silver
+  particle: gold
+compute: {use_parallel: false, n_workers: 1, n_threads: 1, wavelength_chunk_size: 10,
+  mirror: false, iterative: false, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
+  hmode: dense}
+simulation:
+  type: ret
+  interp: curv
+  waitbar: 1
+  excitation: planewave
+  polarizations:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  propagation_dirs:
+  - [0, 0, 1]
+  - [0, 0, 1]
+  wavelength_range: [400, 900, 200]
+  relcutoff: 3
+  calculate_cross_sections: true
+  calculate_fields: true
+  field_region:
+    x_range: [-80, 80, 161]
+    y_range: [0, 0, 1]
+    z_range: [-80, 80, 161]
+  field_mindist: 0.5
+  field_nmax: 2000
+  field_wavelength_idx: peak_sca
+  export_field_arrays: false
+  field_hotspot_count: 10
+  field_hotspot_min_distance: 3
+  enei_min: 400
+  enei_max: 900
+  n_wavelengths: 200
+postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: false}
