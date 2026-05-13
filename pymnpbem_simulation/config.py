@@ -85,6 +85,15 @@ def apply_defaults(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out['simulation']['enei_max'] = wr[1]
         out['simulation']['n_wavelengths'] = wr[2]
 
+    # Forward simulation.interp -> structure.interp when the user wrote interp
+    # only under the simulation block (MATLAB-style op.interp convention).
+    # Builders read structure.interp only, so without this forward the
+    # user-specified interp is silently ignored.
+    if ('structure' in out and 'simulation' in out
+            and 'interp' in out['simulation']
+            and 'interp' not in out['structure']):
+        out['structure']['interp'] = out['simulation']['interp']
+
     out = _auto_wrap_substrate(out)
 
     return out
