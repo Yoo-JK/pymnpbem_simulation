@@ -137,6 +137,15 @@ def _fuse_two_meshes(verts1: np.ndarray, faces1: np.ndarray,
 class ConnectedDimerCubeBuilder(StructureBuilder):
 
     def build(self) -> Tuple[Any, Any, int]:
+        shell_layers = list(self.cfg_struct.get('shell_layers', []) or [])
+        if shell_layers:
+            return self._build_core_shell(shell_layers)
+        return self._build_single()
+
+    # ------------------------------------------------------------------
+    # Single-material branch (backward compatibility)
+    # ------------------------------------------------------------------
+    def _build_single(self) -> Tuple[Any, Any, int]:
         from mnpbem.geometry import tricube, ComParticle
         from mnpbem.geometry.particle import Particle
 
@@ -182,7 +191,10 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         clean_verts, clean_faces = _fuse_two_meshes(
                 c1.verts, c1.faces, c2.verts, c2.faces)
 
-        fused = Particle(clean_verts, clean_faces, interp = interp)
+        # See note in _build_core_shell: fused-mesh Particle must be created
+        # with 'flat' so verts2/faces2 stay None. ComParticle then promotes
+        # to 'curv' (calling curved() -> midpoints()) when the user asks for it.
+        fused = Particle(clean_verts, clean_faces, interp = 'flat')
 
         p = ComParticle(epstab, [fused], [[2, 1]],
                 interp = interp, refine = refine)
@@ -192,3 +204,165 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
             core_size, gap, nfaces))
 
         return p, epstab, nfaces
+
+    # ------------------------------------------------------------------
+    # Core-shell branch (shell_layers given)
+    # ------------------------------------------------------------------
+    def _build_core_shell(self, shell_layers: List[Any]) -> Tuple[Any, Any, int]:
+        from mnpbem.geometry import tricube, ComParticle
+        from mnpbem.geometry.particle import Particle
+
+        if len(shell_layers) != 1:
+            raise ValueError(
+                '[error] connected_dimer_cube core-shell mode requires exactly '
+                '1 shell layer, got <{}>.'.format(len(shell_layers)))
+
+        core_size = float(self.cfg_struct.get('core_size',
+                self.cfg_struct.get('size', 30.0)))
+        shell_thickness = float(shell_layers[0])
+        shell_size = core_size + 2.0 * shell_thickness
+
+        gap = float(self.cfg_struct.get('gap', 0.0))
+        if gap > 0.0:
+            raise ValueError(
+                '[error] connected_dimer_cube requires <gap> <= 0; '
+                'got <{}>. Use <advanced_dimer_cube> for separated cubes.'.format(gap))
+
+        offset = list(self.cfg_struct.get('offset', [0.0, 0.0, 0.0]))
+        tilt_angle = float(self.cfg_struct.get('tilt_angle', 0.0))
+        tilt_axis = list(self.cfg_struct.get('tilt_axis', [0.0, 1.0, 0.0]))
+        rotation_angle = float(self.cfg_struct.get('rotation_angle', 0.0))
+        refine = int(self.cfg_struct.get('refine', 2))
+        interp = self.cfg_struct.get('interp', 'flat')
+
+        # rounding: roundings=[core, shell] or single rounding/e
+        if 'roundings' in self.cfg_struct:
+            roundings = list(self.cfg_struct['roundings'])
+            if len(roundings) != 2:
+                raise ValueError(
+                    '[error] connected_dimer_cube core-shell requires '
+                    '<roundings> with 2 values [core, shell]; got <{}>.'.format(
+                        len(roundings)))
+            core_rounding = float(roundings[0])
+            shell_rounding = float(roundings[1])
+        else:
+            single_e = float(self.cfg_struct.get('e',
+                    self.cfg_struct.get('rounding', 0.25)))
+            core_rounding = single_e
+            shell_rounding = single_e
+
+        # n_per_edge per layer (mesh_density honors actual layer size)
+        if (self.cfg_struct.get('mesh_density') is None
+                and self.cfg_struct.get('n_per_edge') is None
+                and 'n_per_edges' not in self.cfg_struct):
+            core_n_per_edge = _CONNECTED_DIMER_CUBE_DEFAULT_N
+            shell_n_per_edge = _CONNECTED_DIMER_CUBE_DEFAULT_N
+        else:
+            core_n_per_edge = _resolve_n_per_edge(
+                    self.cfg_struct, 1, edge_override = core_size)[0]
+            shell_n_per_edge = _resolve_n_per_edge(
+                    self.cfg_struct, 1, edge_override = shell_size)[0]
+
+        # Materials: cfg_struct.materials list > cfg_materials.particle_list >
+        # [cfg_materials.particle, cfg_materials.shell]
+        materials = self._resolve_materials()
+
+        # Shifts: particle centers at +/- shell_shift (cores share that center)
+        shell_shift = (shell_size + gap) / 2.0
+        core_gap = gap + 2.0 * shell_thickness
+        fuse_cores = (core_gap <= 0.0)
+
+        medium_name = self.cfg_materials.get('medium', 'water')
+        eps_medium = _build_eps_medium(medium_name)
+        eps_core = _build_eps_particle(materials[0])
+        eps_shell = _build_eps_particle(materials[1])
+        epstab = [eps_medium, eps_core, eps_shell]
+
+        # ----- Shell meshes (always fused) -----
+        s1 = tricube(shell_n_per_edge, shell_size, e = shell_rounding)
+        s1.shift([-shell_shift, 0.0, 0.0])
+
+        s2 = tricube(shell_n_per_edge, shell_size, e = shell_rounding)
+        if rotation_angle != 0.0:
+            s2.rot(rotation_angle, [0.0, 0.0, 1.0])
+        if tilt_angle != 0.0:
+            s2.rot(tilt_angle, tilt_axis)
+        s2.shift([shell_shift + offset[0], offset[1], offset[2]])
+
+        shell_verts, shell_faces = _fuse_two_meshes(
+                s1.verts, s1.faces, s2.verts, s2.faces)
+        # Always build the fused-mesh Particle as 'flat'. If the user asked
+        # for 'curv', ComParticle.__init__ will call particle.curved() which
+        # generates midpoints on the fused mesh — that path works only when
+        # the Particle was constructed with interp='flat' first (verts2 None).
+        p_shell = Particle(shell_verts, shell_faces, interp = 'flat')
+
+        # ----- Core meshes (fused or separate) -----
+        c1 = tricube(core_n_per_edge, core_size, e = core_rounding)
+        c1.shift([-shell_shift, 0.0, 0.0])
+
+        c2 = tricube(core_n_per_edge, core_size, e = core_rounding)
+        if rotation_angle != 0.0:
+            c2.rot(rotation_angle, [0.0, 0.0, 1.0])
+        if tilt_angle != 0.0:
+            c2.rot(tilt_angle, tilt_axis)
+        c2.shift([shell_shift + offset[0], offset[1], offset[2]])
+
+        if fuse_cores:
+            core_verts, core_faces = _fuse_two_meshes(
+                    c1.verts, c1.faces, c2.verts, c2.faces)
+            p_core = Particle(core_verts, core_faces, interp = 'flat')
+            particles = [p_core, p_shell]
+            inout = [[2, 3], [3, 1]]
+        else:
+            particles = [c1, c2, p_shell]
+            inout = [[2, 3], [2, 3], [3, 1]]
+
+        p = ComParticle(epstab, particles, inout,
+                interp = interp, refine = refine)
+
+        nfaces = _count_faces(p)
+        print_info(
+                'ConnectedDimerCubeBuilder[core-shell]: core={}nm, '
+                'shell_thickness={}nm, shell_size={}nm, gap={}nm, '
+                'core_gap={:.4f}nm ({}), materials={}, '
+                'n_per_edge(core/shell)=({}/{}), nfaces={}'.format(
+                    core_size, shell_thickness, shell_size, gap,
+                    core_gap, 'FUSED' if fuse_cores else 'SEPARATE',
+                    materials, core_n_per_edge, shell_n_per_edge, nfaces))
+
+        return p, epstab, nfaces
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _resolve_materials(self) -> List[str]:
+        """Resolve [core_material, shell_material] for core-shell mode.
+
+        Precedence:
+            1. cfg_struct.materials  (list of length 2)
+            2. cfg_materials.particle_list  (list of length 2)
+            3. [cfg_materials.particle, cfg_materials.shell] fallback
+        """
+        cs_mats = self.cfg_struct.get('materials')
+        if isinstance(cs_mats, (list, tuple)) and len(cs_mats) == 2:
+            return [str(cs_mats[0]), str(cs_mats[1])]
+
+        pl = self.cfg_materials.get('particle_list')
+        if isinstance(pl, (list, tuple)) and len(pl) == 2:
+            return [str(pl[0]), str(pl[1])]
+
+        if isinstance(cs_mats, (list, tuple)) and len(cs_mats) != 2:
+            raise ValueError(
+                '[error] connected_dimer_cube core-shell requires <materials> '
+                'with 2 entries [core, shell]; got <{}>.'.format(len(cs_mats)))
+        if isinstance(pl, (list, tuple)) and len(pl) != 2:
+            raise ValueError(
+                '[error] connected_dimer_cube core-shell requires '
+                '<materials.particle_list> with 2 entries [core, shell]; '
+                'got <{}>.'.format(len(pl)))
+
+        core_name = self.cfg_materials.get('core',
+                self.cfg_materials.get('particle', 'gold'))
+        shell_name = self.cfg_materials.get('shell', 'silver')
+        return [str(core_name), str(shell_name)]
