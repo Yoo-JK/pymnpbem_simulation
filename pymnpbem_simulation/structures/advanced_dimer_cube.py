@@ -35,11 +35,21 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
             '[error] <materials> length must equal 1 (core) + len(shell_layers)'
 
         roundings = _resolve_roundings(self.cfg_struct, n_layers)
-        n_per_edges = _resolve_n_per_edge(self.cfg_struct, n_layers)
 
         sizes = [core_size]
         for thickness in shell_layers:
             sizes.append(sizes[-1] + 2.0 * float(thickness))
+
+        # Per-layer n_per_edge: each layer uses its own size for mesh_density.
+        # Without edge_override, _resolve_n_per_edge would use core_size for all
+        # layers — making the shell mesh sparser than the core under the same
+        # mesh_density (e.g. shell size 55nm at density 2nm should get n=28,
+        # not n=24 derived from core size 47). connected_dimer_cube uses the
+        # same per-layer pattern.
+        n_per_edges = []
+        for size in sizes:
+            n_per_edges.append(
+                    _resolve_n_per_edge(self.cfg_struct, 1, edge_override = size)[0])
 
         total_size = sizes[-1]
         shift_distance = (total_size + gap) / 2.0
