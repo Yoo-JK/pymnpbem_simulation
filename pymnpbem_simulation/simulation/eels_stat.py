@@ -63,6 +63,8 @@ class EELSStatRunner(SimulationRunner):
         psurf[0, :] = self._flatten(ps0, n_imp)
         pbulk[0, :] = self._flatten(pb0, n_imp)
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
         print_info('  psurf[0] = {}'.format(psurf[0, :].tolist()))
 
@@ -74,6 +76,8 @@ class EELSStatRunner(SimulationRunner):
             ps_i, pb_i = exc.loss(sig)
             psurf[i, :] = self._flatten(ps_i, n_imp)
             pbulk[i, :] = self._flatten(pb_i, n_imp)
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

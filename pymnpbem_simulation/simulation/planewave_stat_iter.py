@@ -93,6 +93,8 @@ class PlaneWaveStatIterRunner(SimulationRunner):
         sca[0, :] = self._extract(exc.scattering(sig), n_pol)
         abs_[0, :] = self._extract(exc.absorption(sig), n_pol)
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
 
         t_loop = time.time()
@@ -102,6 +104,8 @@ class PlaneWaveStatIterRunner(SimulationRunner):
             ext[i, :] = self._extract(exc.extinction(sig), n_pol)
             sca[i, :] = self._extract(exc.scattering(sig), n_pol)
             abs_[i, :] = self._extract(exc.absorption(sig), n_pol)
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

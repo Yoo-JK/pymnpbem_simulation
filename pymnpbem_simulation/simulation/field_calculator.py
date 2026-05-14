@@ -68,8 +68,6 @@ class FieldCalculator(SimulationRunner):
         return x, y, z, pts
 
     def build_excitation(self) -> Any:
-        from mnpbem.simulation import PlaneWaveRet, PlaneWaveStat
-
         sim_cfg = self.cfg['simulation']
         exc_type = sim_cfg.get('excitation', 'planewave')
         sim_type = sim_cfg.get('type', 'ret')
@@ -77,39 +75,61 @@ class FieldCalculator(SimulationRunner):
         pol = sim_cfg.get('polarizations', [[1, 0, 0]])
         prop = sim_cfg.get('propagation_dirs', [[0, 0, 1]] * len(pol))
 
-        match (sim_type, exc_type):
+        # Strip the _iter suffix — the excitation class is the same regardless
+        # of whether the BEM solver runs dense LU or GMRES.
+        base_sim_type = sim_type.replace('_iter', '')
 
-            case ('ret', 'planewave') | ('ret', 'planewave_ret'):
+        if exc_type != 'planewave':
+            raise ValueError(
+                    '[error] FieldCalculator fallback supports planewave only '
+                    '(got <{}>). Provide a complete sigma cache to skip BEM solve.'.format(
+                            exc_type))
 
-                return PlaneWaveRet(pol, prop)
+        if base_sim_type == 'ret':
+            from mnpbem.simulation import PlaneWaveRet
+            return PlaneWaveRet(pol, prop)
 
-            case ('stat', 'planewave') | ('stat', 'planewave_stat'):
+        if base_sim_type == 'stat':
+            from mnpbem.simulation import PlaneWaveStat
+            return PlaneWaveStat(pol)
 
-                return PlaneWaveStat(pol)
+        if base_sim_type == 'ret_layer':
+            from mnpbem.simulation import PlaneWaveRetLayer
+            return PlaneWaveRetLayer(pol, prop)
 
-            case _:
-
-                raise ValueError('[error] Unsupported (sim_type, excitation) = (<{}>, <{}>)!'.format(
-                        sim_type, exc_type))
+        raise ValueError(
+                '[error] Unsupported (sim_type, excitation) = (<{}>, <{}>) '
+                'for FieldCalculator BEM fallback'.format(sim_type, exc_type))
 
     def build_solver(self) -> Any:
-        from mnpbem.bem import BEMRet, BEMStat
-
         sim_type = self.cfg['simulation'].get('type', 'ret')
 
-        match sim_type:
+        if sim_type == 'ret':
+            from mnpbem.bem import BEMRet
+            return BEMRet(self.p)
 
-            case 'ret':
+        if sim_type == 'stat':
+            from mnpbem.bem import BEMStat
+            return BEMStat(self.p)
 
-                return BEMRet(self.p)
+        if sim_type == 'ret_iter':
+            from mnpbem.bem import BEMRetIter
+            return BEMRetIter(self.p)
 
-            case 'stat':
+        if sim_type == 'stat_iter':
+            from mnpbem.bem import BEMStatIter
+            return BEMStatIter(self.p)
 
-                return BEMStat(self.p)
+        if sim_type == 'ret_layer':
+            from mnpbem.bem import BEMRetLayer
+            return BEMRetLayer(self.p)
 
-            case _:
+        if sim_type == 'ret_layer_iter':
+            from mnpbem.bem import BEMRetLayerIter
+            return BEMRetLayerIter(self.p)
 
-                raise ValueError('[error] Invalid <simulation.type> = <{}>!'.format(sim_type))
+        raise ValueError(
+                '[error] Invalid <simulation.type> = <{}>!'.format(sim_type))
 
     def _make_meshfield(self) -> Any:
         from mnpbem.simulation import MeshField
@@ -147,9 +167,6 @@ class FieldCalculator(SimulationRunner):
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:
 
-        bem = self.build_solver()
-        exc = self.build_excitation()
-
         n_wl = len(enei)
         n_pts = self.grid_points.shape[0]
 
@@ -157,11 +174,20 @@ class FieldCalculator(SimulationRunner):
 
         e_all = np.zeros((n_wl, n_pts, 3, n_pol), dtype = np.complex128)
         h_all = None
-
         first_h_set = False
 
+        # Lazy build — only instantiate the BEM solver/excitation when at
+        # least one wavelength misses the sigma cache.
+        bem = None
+        exc = None
+
         for i in range(n_wl):
-            sig, bem = bem.solve(exc(self.p, enei[i]))
+            sig = self._sig_from_cache_or_solve(float(enei[i]), bem, exc)
+            # If we had to fall back to a BEM solve, remember the solver
+            # so subsequent misses can reuse the init state.
+            if isinstance(sig, tuple):
+                sig, bem, exc = sig
+
             field_res = self.evaluate(sig)
 
             e_arr = self._broadcast_pol(field_res.e, n_pol)
@@ -187,6 +213,85 @@ class FieldCalculator(SimulationRunner):
                 'inout': self.inout}
 
         return out
+
+    def _cache_manifest_compatible(self) -> bool:
+        """Return True when the on-disk sigma manifest matches the current
+        cfg's structure/eps hashes (or when no manifest exists yet).
+
+        Cached result: hash check runs once per FieldCalculator instance.
+        """
+        if hasattr(self, '_cache_compat_cached'):
+            return self._cache_compat_cached
+
+        from .. import sigma_cache as _sc
+
+        output_dir = self._sigma_output_dir()
+        if not output_dir:
+            self._cache_compat_cached = False
+            return False
+
+        manifest = _sc.read_manifest(output_dir)
+        if manifest is None:
+            self._cache_compat_cached = True
+            return True
+
+        struct_h = _sc.compute_structure_hash(self.cfg.get('structure', dict()))
+        eps_h = _sc.compute_eps_hash(self.cfg.get('materials', dict()))
+        compat = (manifest.get('structure_hash') == struct_h
+                and manifest.get('eps_hash') == eps_h)
+        self._cache_compat_cached = compat
+        return compat
+
+    def _sig_from_cache_or_solve(self,
+            wavelength_nm: float,
+            bem: Any,
+            exc: Any) -> Any:
+        """Try to load sigma from <output_dir>/sigma/; fall back to BEM
+        solve when a file is missing.
+
+        Returns either:
+          * a CompStruct (cache hit; bem/exc unchanged)
+          * a (CompStruct, bem, exc) tuple (cache miss — bem/exc may have
+            been lazily instantiated and should be propagated by caller).
+        """
+        from .. import sigma_cache as _sc
+
+        output_dir = self._sigma_output_dir()
+        sim = self.cfg.get('simulation', dict())
+        pol = sim.get('polarizations', [[1, 0, 0]])
+        prop = sim.get('propagation_dirs', [[0, 0, 1]] * len(pol))
+
+        cached = None
+        if output_dir and self._cache_manifest_compatible():
+            try:
+                cached = _sc.load_sigma(output_dir, wavelength_nm, pol, prop)
+            except Exception as e:
+                print_info('sigma load failed at {:.2f} nm — will BEM solve. ({})'.format(
+                        wavelength_nm, e))
+                cached = None
+
+        if cached is not None:
+            from mnpbem.greenfun import CompStruct
+            if cached['solver_type'] == 'retarded':
+                return CompStruct(self.p, wavelength_nm,
+                        sig1 = cached['sig1'], sig2 = cached['sig2'],
+                        h1 = cached['h1'], h2 = cached['h2'])
+            return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
+
+        # Cache miss: lazy-build solver and run BEM solve. Save sigma
+        # afterwards so subsequent field passes can reuse it.
+        if bem is None:
+            bem = self.build_solver()
+        if exc is None:
+            exc = self.build_excitation()
+
+        sig, bem = bem.solve(exc(self.p, wavelength_nm))
+        try:
+            self.save_sigma_for_wavelength(sig, wavelength_nm)
+        except Exception as e:
+            print_info('sigma save failed at {:.2f} nm (continuing). ({})'.format(
+                    wavelength_nm, e))
+        return (sig, bem, exc)
 
     def _flatten_field(self,
             arr: np.ndarray) -> np.ndarray:

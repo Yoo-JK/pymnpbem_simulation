@@ -333,6 +333,91 @@ class SimulationRunner(object):
             refun = getattr(self.p.pfull, '_mnpbem_refun', None)
         return refun is not None
 
+    def _sigma_cache_enabled(self) -> bool:
+        """Sigma cache opt-in flag — defaults to True so spectrum sweeps
+        automatically persist BEM solver state for later field/EELS
+        re-runs without recomputing. Set <simulation.save_sigma_cache>
+        to ``False`` in the yaml to disable.
+        """
+        sim = self.cfg.get('simulation', dict()) if isinstance(self.cfg, dict) else dict()
+        return bool(sim.get('save_sigma_cache', True))
+
+    def _sigma_solver_type(self) -> str:
+        sim_type = str(self.cfg.get('simulation', dict()).get('type', '')).lower()
+        if 'stat' in sim_type:
+            return 'quasistatic'
+        return 'retarded'
+
+    def _sigma_excitations(self) -> Tuple[Any, Any]:
+        """Return (polarizations, propagation_dirs) lists from cfg."""
+        sim = self.cfg.get('simulation', dict()) if isinstance(self.cfg, dict) else dict()
+        pol = sim.get('polarizations', [[1, 0, 0], [0, 1, 0]])
+        prop = sim.get('propagation_dirs', [[0, 0, 1]] * len(pol))
+        return pol, prop
+
+    def _sigma_n_faces(self) -> int:
+        for attr in ('nfaces', 'n'):
+            v = getattr(self.p, attr, None)
+            if isinstance(v, (int, np.integer)) and v > 0:
+                return int(v)
+        return 0
+
+    def _sigma_output_dir(self) -> str:
+        """Return <output.dir>/<output.name>/ — the per-run result folder
+        where sigma/ should live (mirrors cli.py's out_dir computation).
+        """
+        import os as _os
+
+        if not isinstance(self.cfg, dict):
+            return ''
+        output = self.cfg.get('output', dict())
+        root = output.get('dir', None)
+        if not root:
+            return ''
+        name = output.get('name', 'simulation')
+        return _os.path.join(root, name)
+
+    def save_sigma_for_wavelength(self,
+            sig: Any,
+            wavelength_nm: float) -> None:
+        """Persist BEM solver state for one wavelength to
+        <output.dir>/<output.name>/sigma/.
+
+        Safe to call from any simulator's wavelength loop. Failures are
+        logged but do not interrupt the spectrum sweep — the sigma cache
+        is an opt-in convenience, not a correctness dependency.
+        """
+        if not self._sigma_cache_enabled():
+            return
+
+        output_dir = self._sigma_output_dir()
+        if not output_dir:
+            return
+
+        pol, prop = self._sigma_excitations()
+        solver_type = self._sigma_solver_type()
+        n_faces = self._sigma_n_faces()
+
+        try:
+            from .. import sigma_cache as _sc
+            _sc.save_sigma_per_pol(
+                    output_dir, sig, wavelength_nm, pol, prop,
+                    solver_type = solver_type)
+            structure_hash = _sc.compute_structure_hash(self.cfg.get('structure', dict()))
+            eps_hash = _sc.compute_eps_hash(self.cfg.get('materials', dict()))
+            _sc.update_manifest_append(
+                    output_dir,
+                    n_faces = n_faces,
+                    solver_type = solver_type,
+                    structure_hash = structure_hash,
+                    eps_hash = eps_hash,
+                    polarizations = pol,
+                    propagation_dirs = prop,
+                    wavelength_nm = wavelength_nm)
+        except Exception as e:
+            print('[warn] sigma cache save failed at wl={:.2f} nm: {}'.format(
+                    float(wavelength_nm), e))
+
     def _resolve_schur(self,
             has_cover_layer: bool) -> Any:
         """Resolve the v1.2.0 Schur-complement option.

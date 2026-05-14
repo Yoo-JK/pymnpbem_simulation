@@ -112,6 +112,8 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
         sca[0, :] = sv[:n_pol]
         abs_[0, :] = ext[0, :] - sca[0, :]
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
 
         t_loop = time.time()
@@ -124,6 +126,8 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
             ext[i, :] = ev[:n_pol]
             sca[i, :] = sv[:n_pol]
             abs_[i, :] = ext[i, :] - sca[i, :]
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

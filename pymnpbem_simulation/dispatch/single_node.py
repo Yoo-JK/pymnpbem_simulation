@@ -15,6 +15,15 @@ def is_field_calculation(cfg: Dict[str, Any]) -> bool:
     if sim_type in ('field', 'field_ret', 'field_stat'):
         return True
 
+    # Explicit field-only mode: calculate_spectrum=false + calculate_fields=true.
+    # When the user wants to evaluate fields on an existing spectrum sweep
+    # without redoing cross-section integration, this branch routes to the
+    # field calculator (which will load sigma cache + skip BEM solve when
+    # available, or BEM-solve + cache sigma when not).
+    if (sim_cfg.get('calculate_spectrum') is False
+            and sim_cfg.get('calculate_fields') is True):
+        return True
+
     # Implicit: a 'grid' block in 'simulation' implies a field calculation.
     if 'grid' in sim_cfg:
         return True

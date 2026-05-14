@@ -66,6 +66,8 @@ class DipoleRetRunner(SimulationRunner):
         decay_radiative[0, :] = self._flatten_decay(rad, n_dip)
         decay_free[0, :] = self._flatten_decay(rad0, n_dip)
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
         print_info('  decay_total[0] = {}'.format(decay_total[0, :].tolist()))
 
@@ -78,6 +80,8 @@ class DipoleRetRunner(SimulationRunner):
             decay_total[i, :] = self._flatten_decay(tot, n_dip)
             decay_radiative[i, :] = self._flatten_decay(rad, n_dip)
             decay_free[i, :] = self._flatten_decay(rad0, n_dip)
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

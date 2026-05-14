@@ -90,6 +90,8 @@ class EelsRetLayerRunner(SimulationRunner):
 
         psurf[0, :] = self._flatten_loss(loss, n_imp)
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
 
         t_loop = time.time()
@@ -98,6 +100,8 @@ class EelsRetLayerRunner(SimulationRunner):
             sig, bem = bem.solve(exc(self.p, float(enei[i])))
             loss = exc.loss(sig)
             psurf[i, :] = self._flatten_loss(loss, n_imp)
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop
