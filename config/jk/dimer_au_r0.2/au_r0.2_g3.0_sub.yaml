@@ -6,21 +6,17 @@ output:
   plot_format: [png, pdf]
   plot_dpi: 300
 structure:
-  type: with_substrate
-  base:
-    type: advanced_dimer_cube
-    core_size: 47
-    shell_layers: []
-    roundings: [0.2]
-    mesh_density: 2
-    gap: 3.0
-    offset: [0, 0, 0]
-    tilt_angle: 0
-    tilt_axis: [1, 0, 0]
-    rotation_angle: 0
-    refine: 3
-    n_per_edge: 24
-  substrate: {eps: 3.8809, gap: 0.001}
+  type: advanced_dimer_cube
+  core_size: 47
+  shell_layers: []
+  roundings: [0.2]
+  mesh_density: 2
+  gap: 3.0
+  offset: [0, 0, 0]
+  tilt_angle: 0
+  tilt_axis: [1, 0, 0]
+  rotation_angle: 0
+  refine: 3
 materials:
   particle_list: [gold]
   medium: water
@@ -28,11 +24,13 @@ materials:
     agcl: {type: constant, epsilon: 2.02}
     ito: {type: constant, epsilon: 3.8809}
   particle: gold
+  use_substrate: true
+  substrate: {material: ito, gap: 0.001}
 compute: {use_parallel: true, n_workers: 4, n_threads: 1, wavelength_chunk_size: 10,
   mirror: false, iterative: false, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
   hmode: dense}
 simulation:
-  type: ret_layer
+  type: ret
   interp: curv
   waitbar: 1
   excitation: planewave

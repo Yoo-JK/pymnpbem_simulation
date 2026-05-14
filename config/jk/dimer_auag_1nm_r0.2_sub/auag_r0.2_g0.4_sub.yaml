@@ -1,0 +1,62 @@
+output:
+  name: auag_r0.2_g0.4_sub
+  dir: /home/yoojk20/research/pymnpbem/auag_dimer_1nm
+  formats: [json, npz, png]
+  save_plots: true
+  plot_format: [png, pdf]
+  plot_dpi: 300
+structure:
+  type: advanced_dimer_cube
+  core_size: 47
+  shell_layers: [1]
+  roundings: [0.2, 0.2]
+  mesh_density: 2
+  gap: 0.4
+  offset: [0, 0, 0]
+  tilt_angle: 0
+  tilt_axis: [1, 0, 0]
+  rotation_angle: 0
+  refine: 3
+materials:
+  particle_list: [gold, silver]
+  medium: water
+  refractive_index_paths:
+    agcl: {type: constant, epsilon: 2.02}
+    ito: {type: constant, epsilon: 3.8809}
+  particle: gold
+  use_substrate: true
+  substrate: {material: ito, gap: 0.001}
+compute: {use_parallel: true, n_workers: 5, n_threads: 1, wavelength_chunk_size: 10,
+  mirror: false, iterative: true, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
+  hmode: dense}
+simulation:
+  type: ret
+  interp: curv
+  waitbar: 1
+  excitation: planewave
+  polarizations:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  propagation_dirs:
+  - [0, 0, 1]
+  - [0, 0, 1]
+  wavelength_range: [300, 1000, 140]
+  relcutoff: 3
+  calculate_cross_sections: true
+  calculate_fields: false
+  field_region:
+    x_range: [-80, 80, 161]
+    y_range: [0, 0, 1]
+    z_range: [-80, 80, 161]
+  field_mindist: 0.5
+  field_nmax: 2000
+  field_wavelength_idx: [510, 547, 564, 581, 593, 596, 605, 613, 619, 634, 644, 671,
+    681, 706, 716, 770, 786, 859, 869, 891]
+  export_field_arrays: false
+  field_hotspot_count: 10
+  field_hotspot_min_distance: 3
+  enei_min: 300
+  enei_max: 1000
+  n_wavelengths: 140
+  iter: {solver: gmres, tol: 0.0001, maxit: 200, restart: 50}
+postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: true}

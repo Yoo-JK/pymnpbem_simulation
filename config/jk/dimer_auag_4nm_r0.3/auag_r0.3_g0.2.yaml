@@ -17,7 +17,6 @@ structure:
   tilt_axis: [1, 0, 0]
   rotation_angle: 0
   refine: 3
-  n_per_edge: 24
 materials:
   particle_list: [gold, silver]
   medium: water
@@ -39,7 +38,7 @@ simulation:
   propagation_dirs:
   - [0, 0, 1]
   - [0, 0, 1]
-  wavelength_range: [300, 1000, 21]
+  wavelength_range: [300, 1000, 140]
   relcutoff: 3
   calculate_cross_sections: true
   calculate_fields: false
@@ -49,11 +48,13 @@ simulation:
     z_range: [-80, 80, 161]
   field_mindist: 0.5
   field_nmax: 2000
-  field_wavelength_idx: [510, 547, 555, 583, 593, 605, 613, 617, 636, 644, 671, 681, 706, 718, 770, 786, 859, 869, 891]
+  field_wavelength_idx: [510, 547, 555, 583, 593, 605, 613, 617, 636, 644, 671, 681,
+    706, 718, 770, 786, 859, 869, 891]
   export_field_arrays: false
   field_hotspot_count: 10
   field_hotspot_min_distance: 3
   enei_min: 300
   enei_max: 1000
-  n_wavelengths: 21
+  n_wavelengths: 140
+  iter: {solver: gmres, tol: 0.0001, maxit: 200, restart: 50}
 postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: true}
