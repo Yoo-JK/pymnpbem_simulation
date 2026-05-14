@@ -96,6 +96,7 @@ def apply_defaults(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     out = _auto_promote_iter(out)
     out = _auto_wrap_substrate(out)
+    out = _auto_convert_field_region(out)
 
     return out
 
@@ -109,6 +110,53 @@ _SIM_LAYER_PROMOTE = {
     'ret': 'ret_layer',
     'stat': 'stat_layer',
     'ret_iter': 'ret_layer_iter'}
+
+
+def _auto_convert_field_region(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert legacy <simulation.field_region> (with [min, max, npts]
+    triples) into the modern <simulation.grid> rectangular block expected
+    by FieldCalculator.
+
+    Also maps <field_mindist> -> <mindist> and <field_nmax> -> <nmax>.
+    No-op when <grid> already exists or <field_region> is missing.
+
+    Without this conversion, jk-config yamls that use the legacy
+    field_region schema (Au sub, Au@Ag, all hotspot-style field configs)
+    would fail to route to FieldCalculator in field-only mode because the
+    grid block is missing.
+    """
+    sim = cfg.get('simulation', None)
+
+    if not isinstance(sim, dict):
+        return cfg
+
+    if 'grid' in sim:
+        return cfg
+
+    region = sim.get('field_region', None)
+    if not isinstance(region, dict):
+        return cfg
+
+    grid: Dict[str, Any] = {'type': 'rectangular'}
+    n_points: List[int] = []
+
+    for axis in ('x', 'y', 'z'):
+        rng = region.get('{}_range'.format(axis), None)
+        if isinstance(rng, (list, tuple)) and len(rng) >= 2:
+            grid['{}_range'.format(axis)] = [float(rng[0]), float(rng[1])]
+            n_points.append(int(rng[2]) if len(rng) >= 3 else 1)
+
+    if len(n_points) == 3:
+        grid['n_points'] = n_points
+
+    sim['grid'] = grid
+
+    if 'field_mindist' in sim and 'mindist' not in sim:
+        sim['mindist'] = sim['field_mindist']
+    if 'field_nmax' in sim and 'nmax' not in sim:
+        sim['nmax'] = sim['field_nmax']
+
+    return cfg
 
 
 def _auto_promote_iter(cfg: Dict[str, Any]) -> Dict[str, Any]:
