@@ -72,6 +72,8 @@ class EELSRetRunner(SimulationRunner):
         except Exception as e:
             print_info('  rad() failed at warmup: {}'.format(e))
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
         print_info('  psurf[0] = {}'.format(psurf[0, :].tolist()))
 
@@ -89,6 +91,8 @@ class EELSRetRunner(SimulationRunner):
                 prad[i, :] = self._flatten(pr_i, n_imp)
             except Exception:
                 pass
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

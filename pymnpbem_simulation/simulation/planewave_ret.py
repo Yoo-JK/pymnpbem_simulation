@@ -66,6 +66,8 @@ class PlaneWaveRetRunner(SimulationRunner):
         if self._is_surface_charge_wl(enei[0], sc_target_wls, sc_tol):
             sc_records.append(self._extract_sigma(sig, enei[0], 0, n_pol))
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
 
         t_loop = time.time()
@@ -81,6 +83,8 @@ class PlaneWaveRetRunner(SimulationRunner):
 
             if self._is_surface_charge_wl(enei[i], sc_target_wls, sc_tol):
                 sc_records.append(self._extract_sigma(sig, enei[i], i, n_pol))
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

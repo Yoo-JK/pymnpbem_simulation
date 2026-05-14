@@ -90,6 +90,8 @@ class DipoleRetLayerRunner(SimulationRunner):
         tot[0, :] = self._flatten_decay(t_val, n_dip)
         rad[0, :] = self._flatten_decay(r_val, n_dip)
 
+        self.save_sigma_for_wavelength(sig, float(enei[0]))
+
         print_info('warmup done in {:.1f}s'.format(warm_s))
 
         t_loop = time.time()
@@ -101,6 +103,8 @@ class DipoleRetLayerRunner(SimulationRunner):
 
             tot[i, :] = self._flatten_decay(t_val, n_dip)
             rad[i, :] = self._flatten_decay(r_val, n_dip)
+
+            self.save_sigma_for_wavelength(sig, float(enei[i]))
 
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop

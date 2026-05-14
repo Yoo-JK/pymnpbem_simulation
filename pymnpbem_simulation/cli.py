@@ -96,7 +96,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     out_dir = os.path.join(out_root, out_name)
     ensure_dir(out_dir)
 
-    snapshot_path = os.path.join(out_dir, 'config.yaml')
+    # In field-only mode preserve any existing config.yaml (which records
+    # the original spectrum sweep) and write the field-pass parameters to
+    # config_field.yaml. This keeps the spectrum run reproducible from the
+    # original config while the new field calc retains its own snapshot.
+    _sim_cfg_for_snap = cfg.get('simulation', dict()) if isinstance(cfg, dict) else dict()
+    _field_only_snap = (_sim_cfg_for_snap.get('calculate_spectrum') is False
+            and _sim_cfg_for_snap.get('calculate_fields') is True)
+    if _field_only_snap and os.path.exists(os.path.join(out_dir, 'config.yaml')):
+        snapshot_path = os.path.join(out_dir, 'config_field.yaml')
+    else:
+        snapshot_path = os.path.join(out_dir, 'config.yaml')
     save_yaml(snapshot_path, cfg)
     print_info('saved config snapshot <{}>'.format(snapshot_path))
 
@@ -119,6 +129,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p, epstab, nfaces = build_structure(cfg_struct, cfg_materials)
 
     save_run_metadata(out_dir, cfg, nfaces, timestamp = now_str())
+
+    # When entering field-only mode against an existing sigma cache, verify
+    # the manifest's structure/eps hashes match the current cfg. A mismatch
+    # means the cache was produced from a different mesh/eps configuration
+    # and will yield wrong field values if reused — warn loudly so the user
+    # can decide whether to remove sigma/ and re-run from scratch.
+    if _field_only_snap:
+        _verify_sigma_manifest_compat(out_dir, cfg_struct, cfg_materials)
 
     if args.reanalyze:
         print_info('--reanalyze: skipping simulation, postprocess only')
@@ -281,6 +299,50 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _verify_sigma_manifest_compat(out_dir: str,
+        cfg_struct: Dict[str, Any],
+        cfg_materials: Dict[str, Any]) -> None:
+    """Compare the cfg hashes against the existing sigma manifest.
+
+    Warns (and prompts the user via stderr) when the cache appears to be
+    from a different mesh/eps configuration. Does NOT raise — the cache
+    miss path will fall back to BEM solve per-wavelength anyway.
+    """
+    from . import sigma_cache as _sc
+
+    manifest = _sc.read_manifest(out_dir)
+    if manifest is None:
+        print_info('field-only: no existing sigma manifest at <{}/sigma/> — '
+                'BEM solve will run from scratch (cache will be populated).'.format(
+                        out_dir))
+        return
+
+    new_struct_hash = _sc.compute_structure_hash(cfg_struct)
+    new_eps_hash = _sc.compute_eps_hash(cfg_materials)
+
+    struct_ok = (manifest.get('structure_hash') == new_struct_hash)
+    eps_ok = (manifest.get('eps_hash') == new_eps_hash)
+
+    if struct_ok and eps_ok:
+        print_info('field-only: sigma manifest hash OK — cache compatible '
+                '({} wavelengths cached).'.format(
+                        len(manifest.get('wavelengths_nm', []))))
+        return
+
+    print_info('[warn] field-only: sigma manifest hash MISMATCH:')
+    if not struct_ok:
+        print_info('  structure_hash: cached={}... current={}...'.format(
+                str(manifest.get('structure_hash'))[:12],
+                new_struct_hash[:12]))
+    if not eps_ok:
+        print_info('  eps_hash:       cached={}... current={}...'.format(
+                str(manifest.get('eps_hash'))[:12],
+                new_eps_hash[:12]))
+    print_info('[warn] field-only: cached sigma may be from a different '
+            'configuration. Will refuse to load — every wavelength will '
+            're-run BEM solve.')
+
+
 def _build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
     return {
         'compute': {
@@ -298,6 +360,38 @@ def _build_enei(cfg: Dict[str, Any],
         override_n: Optional[int]) -> np.ndarray:
 
     sim = cfg['simulation']
+
+    field_only = (sim.get('calculate_spectrum') is False
+            and sim.get('calculate_fields') is True)
+
+    # field-only mode wavelength resolution (priority order):
+    #   1. simulation.field_wavelengths — explicit nm list (preferred)
+    #   2. simulation.field_wavelength_idx — indices into the original
+    #      spectrum's wavelength grid (legacy compat with existing yamls
+    #      that picked hotspots by index after the spectrum sweep)
+    #   3. fall through to wavelength_range / enei_min..enei_max (e.g.
+    #      when calculate_spectrum is False but the user wants every wl)
+    if field_only:
+        fw = sim.get('field_wavelengths')
+        if fw is not None and len(fw) > 0:
+            return np.asarray([float(w) for w in fw], dtype = float)
+
+        fwi = sim.get('field_wavelength_idx')
+        if fwi is not None and len(fwi) > 0:
+            # Resolve indices against the spectrum grid implied by
+            # wavelength_range / enei_min..enei_max. The same grid the
+            # original spectrum sweep used.
+            if 'wavelength_range' in sim:
+                wr = sim['wavelength_range']
+                grid = np.linspace(float(wr[0]), float(wr[1]), int(wr[2]))
+            else:
+                grid = np.linspace(
+                        float(sim['enei_min']),
+                        float(sim['enei_max']),
+                        int(sim['n_wavelengths']))
+            idx = np.asarray([int(i) for i in fwi], dtype = int)
+            idx = idx[(idx >= 0) & (idx < len(grid))]
+            return grid[idx].astype(float)
 
     if 'wavelength_range' in sim:
         wr = sim['wavelength_range']
