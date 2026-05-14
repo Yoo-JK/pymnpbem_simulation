@@ -94,15 +94,52 @@ def apply_defaults(cfg: Dict[str, Any]) -> Dict[str, Any]:
             and 'interp' not in out['structure']):
         out['structure']['interp'] = out['simulation']['interp']
 
+    out = _auto_promote_iter(out)
     out = _auto_wrap_substrate(out)
 
     return out
+
+
+_SIM_ITER_PROMOTE = {
+    'ret': 'ret_iter',
+    'stat': 'stat_iter'}
 
 
 _SIM_LAYER_PROMOTE = {
     'ret': 'ret_layer',
     'stat': 'stat_layer',
     'ret_iter': 'ret_layer_iter'}
+
+
+def _auto_promote_iter(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Promote <simulation.type> from <ret>/<stat> to the <_iter> variant when
+    <compute.iterative>=True. Runs before _auto_wrap_substrate so the chain
+    <ret> -> <ret_iter> -> <ret_layer_iter> resolves in one pass when both
+    <iterative> and <use_substrate> are True.
+    """
+
+    cmp_ = cfg.get('compute', None)
+
+    if not isinstance(cmp_, dict):
+        return cfg
+
+    if cmp_.get('iterative') is not True:
+        return cfg
+
+    sim = cfg.get('simulation', None)
+
+    if not isinstance(sim, dict):
+        return cfg
+
+    sim_type = str(sim.get('type', '')).lower()
+
+    if sim_type in _SIM_ITER_PROMOTE:
+        promoted = _SIM_ITER_PROMOTE[sim_type]
+        sim['type'] = promoted
+        print('[info] auto-promoted simulation.type <{}> -> <{}> '
+                '(compute.iterative=true)'.format(sim_type, promoted))
+
+    return cfg
 
 
 def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
