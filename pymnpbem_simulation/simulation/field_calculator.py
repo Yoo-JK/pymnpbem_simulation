@@ -102,6 +102,14 @@ class FieldCalculator(SimulationRunner):
                 'for FieldCalculator BEM fallback'.format(sim_type, exc_type))
 
     def build_solver(self) -> Any:
+        """Construct the BEM solver, forwarding iter / hmatrix /
+        preconditioner / schur options from cfg.
+
+        Mirrors the planewave_ret_iter / planewave_ret_layer_iter
+        helpers so iter solvers respect the yaml's hmatrix=false (etc.)
+        instead of falling back to BEMRetIter defaults that auto-enable
+        H-matrix for face>5000 — which OOMs on our 15k-face Au@Ag mesh.
+        """
         sim_type = self.cfg['simulation'].get('type', 'ret')
 
         if sim_type == 'ret':
@@ -114,11 +122,13 @@ class FieldCalculator(SimulationRunner):
 
         if sim_type == 'ret_iter':
             from mnpbem.bem import BEMRetIter
-            return BEMRetIter(self.p)
+            opts = self._iter_solver_opts()
+            return self._construct_bem(BEMRetIter, self.p, **opts)
 
         if sim_type == 'stat_iter':
             from mnpbem.bem import BEMStatIter
-            return BEMStatIter(self.p)
+            opts = self._iter_solver_opts()
+            return self._construct_bem(BEMStatIter, self.p, **opts)
 
         if sim_type == 'ret_layer':
             from mnpbem.bem import BEMRetLayer
@@ -126,10 +136,30 @@ class FieldCalculator(SimulationRunner):
 
         if sim_type == 'ret_layer_iter':
             from mnpbem.bem import BEMRetLayerIter
-            return BEMRetLayerIter(self.p)
+            opts = self._iter_solver_opts()
+            return self._construct_bem(BEMRetLayerIter, self.p, **opts)
 
         raise ValueError(
                 '[error] Invalid <simulation.type> = <{}>!'.format(sim_type))
+
+    def _iter_solver_opts(self) -> Dict[str, Any]:
+        """Collect iter solver kwargs (gmres knobs + hmatrix + precond)
+        mirroring planewave_ret_iter._iter_options et al.
+        """
+        from .planewave_ret_iter import (
+                _iter_options, _iter_hmatrix_options,
+                _iter_preconditioner_options, _iter_schur_options)
+
+        opts = _iter_options(self.cfg)
+        bem_opts = self._bem_options()
+        bem_opts.pop('refun', None)
+        opts.update(bem_opts)
+        opts.update(_iter_hmatrix_options(self, self.p, self.cfg))
+        opts.update(_iter_preconditioner_options(self, self.cfg))
+        schur = _iter_schur_options(self, self.cfg)
+        if schur:
+            opts.update(schur)
+        return opts
 
     def _make_meshfield(self) -> Any:
         from mnpbem.simulation import MeshField
