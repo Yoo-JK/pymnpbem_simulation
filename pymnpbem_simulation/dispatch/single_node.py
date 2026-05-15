@@ -24,8 +24,12 @@ def is_field_calculation(cfg: Dict[str, Any]) -> bool:
             and sim_cfg.get('calculate_fields') is True):
         return True
 
-    # Implicit: a 'grid' block in 'simulation' implies a field calculation.
-    if 'grid' in sim_cfg:
+    # Implicit: a 'grid' block in 'simulation' implies a field calculation —
+    # but only when calculate_fields is actually requested. Many spectrum-
+    # only yamls carry a grid (or field_region) as metadata for a future
+    # field run; we must not route those to FieldCalculator while the user
+    # is asking for a spectrum sweep (calculate_fields=false / unset).
+    if 'grid' in sim_cfg and sim_cfg.get('calculate_fields') is True:
         return True
 
     return False
