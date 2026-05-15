@@ -117,13 +117,18 @@ def _auto_convert_field_region(cfg: Dict[str, Any]) -> Dict[str, Any]:
     triples) into the modern <simulation.grid> rectangular block expected
     by FieldCalculator.
 
+    ONLY triggers when this is actually a field-evaluation pass — i.e.:
+      * <calculate_fields> is True, OR
+      * <calculate_spectrum> is False (field-only mode), OR
+      * <type> is already 'field'
+
+    If a yaml carries field_region metadata for a future field run but
+    the current pass is spectrum-only (calculate_fields=false, default),
+    the conversion is skipped so dispatch correctly routes to the
+    spectrum runner instead of FieldCalculator.
+
     Also maps <field_mindist> -> <mindist> and <field_nmax> -> <nmax>.
     No-op when <grid> already exists or <field_region> is missing.
-
-    Without this conversion, jk-config yamls that use the legacy
-    field_region schema (Au sub, Au@Ag, all hotspot-style field configs)
-    would fail to route to FieldCalculator in field-only mode because the
-    grid block is missing.
     """
     sim = cfg.get('simulation', None)
 
@@ -135,6 +140,14 @@ def _auto_convert_field_region(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     region = sim.get('field_region', None)
     if not isinstance(region, dict):
+        return cfg
+
+    is_field_pass = (
+            sim.get('calculate_fields') is True
+            or sim.get('calculate_spectrum') is False
+            or sim.get('type') in ('field', 'field_ret', 'field_stat'))
+
+    if not is_field_pass:
         return cfg
 
     grid: Dict[str, Any] = {'type': 'rectangular'}
