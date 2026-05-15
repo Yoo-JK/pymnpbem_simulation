@@ -56,5 +56,5 @@ simulation:
   enei_min: 300
   enei_max: 1000
   n_wavelengths: 140
-  iter: {solver: gmres, tol: 0.0001, maxit: 200, restart: 50}
+  iter: {solver: gmres, tol: 0.0001, maxit: 200, restart: 50, hmatrix: false}
 postprocess: {spectrum_xaxis: energy, run_eigenmode_analysis: true}
