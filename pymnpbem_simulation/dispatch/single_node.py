@@ -125,6 +125,19 @@ def dispatch_single_node(cfg: Dict[str, Any],
         return dispatch_mpi(cfg, p, epstab, enei)
 
     if n_gpus_per_worker >= 2:
+        # Two routes inside dispatch_multi_gpu:
+        #   - n_workers == 1 : single worker pools all GPUs for one big LU
+        #     via cfg.compute.vram_share (single _dispatch_vram_share path).
+        #   - n_workers >= 2 : each worker gets a disjoint partition of
+        #     n_gpus_per_worker GPUs (vram_share_pool path). The cfg dict
+        #     carries the per-worker vram_share block including device_ids.
+        if n_workers >= 2:
+            print_info('dispatch_single_node: VRAM-share pool — {} workers x {} GPUs each'.format(
+                    n_workers, n_gpus_per_worker))
+        else:
+            print_info('dispatch_single_node: VRAM-share single worker — {} GPUs'.format(
+                    n_gpus_per_worker))
+
         from .multi_gpu import dispatch_multi_gpu
         return dispatch_multi_gpu(cfg, p, epstab, enei)
 
