@@ -6,6 +6,77 @@ from typing import Any, List, Sequence, Tuple
 import numpy as np
 
 
+def split_grid(
+        grid_x: np.ndarray,
+        grid_y: np.ndarray,
+        grid_z: np.ndarray,
+        n_chunks: int) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray,
+                np.ndarray, int, int]]:
+    """Split a grid (x, y, z) into ``n_chunks`` contiguous slices along the
+    flattened point axis.
+
+    The grid is treated as a flat list of ``N = grid_x.size`` points so the
+    split is robust to any grid dimensionality (rectangular 3-D, spherical,
+    single z-plane, custom points). Each chunk is returned as a tuple of
+    1-D ``np.ndarray`` of identical length, so the downstream ``MeshField``
+    constructor sees fully matching shapes and skips its ``_expand``
+    broadcast path.
+
+    Parameters
+    ----------
+    grid_x, grid_y, grid_z : np.ndarray
+        Source grid arrays of identical shape (rectangular 3-D meshgrid,
+        spherical meshgrid, or 1-D custom points).
+    n_chunks : int
+        Number of chunks to split into. Must be >= 1.
+
+    Returns
+    -------
+    list of (x_chunk, y_chunk, z_chunk, pts_chunk, start, stop)
+        ``x/y/z_chunk`` are 1-D arrays of length ``stop - start``.
+        ``pts_chunk`` is (stop - start, 3). ``start, stop`` are the flat
+        index slice the chunk covers (so callers can scatter results back).
+    """
+    assert n_chunks >= 1, '[error] n_chunks must be >= 1!'
+
+    x_flat = np.asarray(grid_x, dtype = np.float64).ravel()
+    y_flat = np.asarray(grid_y, dtype = np.float64).ravel()
+    z_flat = np.asarray(grid_z, dtype = np.float64).ravel()
+
+    n_total = x_flat.size
+
+    assert y_flat.size == n_total and z_flat.size == n_total, \
+            '[error] grid x/y/z must have identical size, got <{}, {}, {}>!'.format(
+                    x_flat.size, y_flat.size, z_flat.size)
+
+    if n_chunks > n_total:
+        n_chunks = max(1, n_total)
+
+    chunk_size = (n_total + n_chunks - 1) // n_chunks
+
+    chunks: List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]] = []
+
+    for g in range(n_chunks):
+        start = g * chunk_size
+        stop = min(n_total, (g + 1) * chunk_size)
+
+        if start >= stop:
+            continue
+
+        x_chunk = x_flat[start:stop].copy()
+        y_chunk = y_flat[start:stop].copy()
+        z_chunk = z_flat[start:stop].copy()
+
+        pts_chunk = np.empty((stop - start, 3), dtype = np.float64)
+        pts_chunk[:, 0] = x_chunk
+        pts_chunk[:, 1] = y_chunk
+        pts_chunk[:, 2] = z_chunk
+
+        chunks.append((x_chunk, y_chunk, z_chunk, pts_chunk, start, stop))
+
+    return chunks
+
+
 def make_rectangular_grid(
         x_range: Sequence[float],
         y_range: Sequence[float],
