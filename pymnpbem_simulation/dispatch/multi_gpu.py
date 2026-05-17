@@ -185,6 +185,9 @@ def _ensure_vram_share_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
             n_gpus:  int  (default n_gpus_per_worker)
             backend: str  ('cusolvermg' | 'magma' | 'nccl')
             device_ids: list[int] | None
+            distributed: bool (default False) — gate B-3 distributed
+                          build (bem_ret.py etc.) via
+                          MNPBEM_VRAM_SHARE_DISTRIBUTED env var
     """
     compute = cfg.setdefault('compute', dict())
     existing = compute.get('vram_share', None)
@@ -209,6 +212,10 @@ def _ensure_vram_share_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     vs_cfg.setdefault('device_ids', None)
 
+    # B-3 distributed build gate. Default False so legacy yaml (no
+    # ``distributed`` key) keeps the dense in-process build path.
+    vs_cfg.setdefault('distributed', False)
+
     compute['vram_share'] = vs_cfg
     return vs_cfg
 
@@ -223,7 +230,8 @@ def _apply_vram_share_env(vs_cfg: Dict[str, Any]) -> Dict[str, str]:
     keys = ('MNPBEM_VRAM_SHARE',
             'MNPBEM_VRAM_SHARE_GPUS',
             'MNPBEM_VRAM_SHARE_BACKEND',
-            'MNPBEM_VRAM_SHARE_DEVICE_IDS')
+            'MNPBEM_VRAM_SHARE_DEVICE_IDS',
+            'MNPBEM_VRAM_SHARE_DISTRIBUTED')
     saved = {k: os.environ[k] for k in keys if k in os.environ}
 
     if not vs_cfg.get('enabled', True):
@@ -244,6 +252,14 @@ def _apply_vram_share_env(vs_cfg: Dict[str, Any]) -> Dict[str, str]:
     else:
         os.environ.pop('MNPBEM_VRAM_SHARE_DEVICE_IDS', None)
 
+    # B-3 distributed build gate. Only emit the env var when explicitly
+    # requested so legacy runs (cfg without ``distributed`` key) keep the
+    # in-process dense build path.
+    if vs_cfg.get('distributed', False):
+        os.environ['MNPBEM_VRAM_SHARE_DISTRIBUTED'] = '1'
+    else:
+        os.environ.pop('MNPBEM_VRAM_SHARE_DISTRIBUTED', None)
+
     return saved
 
 
@@ -256,7 +272,8 @@ def _restore_env(saved: Dict[str, str]) -> None:
     keys = ('MNPBEM_VRAM_SHARE',
             'MNPBEM_VRAM_SHARE_GPUS',
             'MNPBEM_VRAM_SHARE_BACKEND',
-            'MNPBEM_VRAM_SHARE_DEVICE_IDS')
+            'MNPBEM_VRAM_SHARE_DEVICE_IDS',
+            'MNPBEM_VRAM_SHARE_DISTRIBUTED')
 
     for k in keys:
         if k in saved:
