@@ -36,6 +36,7 @@ _KEY_TO_SECTION = {
     'use_iterative_solver': ('compute', 'iterative'),
     'use_nonlocality': ('compute', 'nonlocal'),
     'use_h2_compression': ('compute', 'hmode'),
+    'gpu_precision': ('compute', 'gpu_precision'),
     'medium': ('materials', 'medium'),
     'materials': ('materials', 'particle_list'),
     'substrate': ('materials', 'substrate'),
