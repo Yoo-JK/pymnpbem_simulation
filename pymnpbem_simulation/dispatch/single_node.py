@@ -187,16 +187,14 @@ def _dispatch_field(cfg: Dict[str, Any],
 
 
 def _apply_gpu_precision_env(cfg: Dict[str, Any]) -> None:
-    """Bridge ``compute.gpu_precision`` / ``compute.gpu_iterative_refinement``
-    config keys to the mnpbem env vars.
+    """Bridge ``compute.gpu_precision`` config key to the mnpbem env var.
 
-    - ``gpu_precision: fp32`` -> ``MNPBEM_GPU_LOWPREC=1`` — the BEMRet
-      LU/Sigma pipeline runs in complex64 (~14x faster on RTX A6000,
-      fp64 there is 1/32 of fp32).  Verified accuracy: Au dimer worst
-      4.5e-4, Au@Ag worst 1.14e-3.  Default ``fp64`` keeps complex128.
-    - ``gpu_iterative_refinement: true`` -> ``MNPBEM_GPU_REFINE=1`` —
-      complex64 solve + complex128 residual correction (restores
-      complex128 accuracy at ~20% extra cost).
+    ``gpu_precision: fp32`` -> ``MNPBEM_GPU_LOWPREC=1`` — the BEMRet
+    LU/Sigma pipeline runs in complex64 (~14x faster on RTX A6000,
+    fp64 there is 1/32 of fp32).  Verified accuracy: Au dimer
+    spectrum worst 4.5e-4, surface charge worst 4.9e-4, Au@Ag spectrum
+    worst 1.14e-3 — all below the 1e-3 BEM tolerance.  Default
+    ``fp64`` keeps complex128.
     """
     compute = cfg.get('compute', {}) or {}
     prec = str(compute.get('gpu_precision', 'fp64')).strip().lower()
@@ -205,11 +203,6 @@ def _apply_gpu_precision_env(cfg: Dict[str, Any]) -> None:
         print_info('GPU precision: fp32/complex64 (MNPBEM_GPU_LOWPREC=1)')
     else:
         os.environ.pop('MNPBEM_GPU_LOWPREC', None)
-    if bool(compute.get('gpu_iterative_refinement', False)):
-        os.environ['MNPBEM_GPU_REFINE'] = '1'
-        print_info('GPU iterative refinement: ON (MNPBEM_GPU_REFINE=1)')
-    else:
-        os.environ.pop('MNPBEM_GPU_REFINE', None)
 
 
 def _dispatch_single_gpu(cfg: Dict[str, Any],
