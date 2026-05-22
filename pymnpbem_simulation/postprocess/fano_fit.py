@@ -115,6 +115,59 @@ def multi_fano_fit(enei: np.ndarray,
         'success': bool(result.success)})
 
 
+def q_to_delta_phi(q: float) -> float:
+
+    # Relation between the Fano asymmetry parameter q and the inter-mode phase
+    # difference: q = cot(delta/2)  =>  Delta_phi = 2 * arctan(1 / q).
+    # Limits: q -> inf gives Delta_phi -> 0 (symmetric Lorentzian),
+    #         q  -> 0  gives Delta_phi -> pi (anti-resonance / dark mode).
+    # Ported from mnpbem_simulation/.../fano_fitter.py:q_to_delta_phi (line 165).
+    eps_safe = 1e-15
+    if np.isinf(q):
+        return 0.0
+    if np.abs(q) < eps_safe:
+        return float(np.pi)
+    return float(2.0 * np.arctan(1.0 / q))
+
+
+def validate_consistency(q_fit: float,
+        delta_phi_measured: np.ndarray,
+        wavelength_at_center: float,
+        wavelengths: np.ndarray,
+        consistency_threshold: float = np.pi / 4) -> Box:
+
+    # Cross-check the Fano-fit asymmetry q against the directly measured
+    # inter-mode phase difference Delta-phi at the resonance center.
+    # Ported from mnpbem_simulation/.../fano_fitter.py:validate_consistency
+    # (lines 175-192).
+    wavelengths = np.asarray(wavelengths, dtype = float)
+    delta_phi_measured = np.asarray(delta_phi_measured, dtype = float)
+
+    if wavelengths.shape != delta_phi_measured.shape:
+        raise ValueError(
+                '[error] <wavelengths> and <delta_phi_measured> shape mismatch')
+
+    idx = int(np.argmin(np.abs(wavelengths - wavelength_at_center)))
+    measured_here = float(delta_phi_measured[idx])
+
+    delta_phi_theory = q_to_delta_phi(q_fit)
+
+    deviation = float(np.abs(np.angle(np.exp(1j * (measured_here - delta_phi_theory)))))
+    is_consistent = bool(deviation < consistency_threshold)
+
+    print_info('validate_consistency: q={:.3f}, dphi_theory={:.3f}, dphi_measured={:.3f}, dev={:.3f} rad, ok={}'.format(
+            q_fit, delta_phi_theory, measured_here, deviation, is_consistent))
+
+    return Box({
+        'q_value': float(q_fit),
+        'delta_phi_from_q': delta_phi_theory,
+        'delta_phi_measured': measured_here,
+        'deviation_rad': deviation,
+        'is_consistent': is_consistent,
+        'wavelength_at_center': float(wavelength_at_center),
+        'center_index': idx})
+
+
 def _fano_initial_guess(enei: np.ndarray,
         spectrum: np.ndarray) -> Dict[str, float]:
 
