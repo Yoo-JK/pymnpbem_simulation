@@ -207,6 +207,90 @@ def assign_bright_dark(multipole_output: Dict[str, Any],
     return Box(result)
 
 
+def assign_bright_dark_multipole(eigenvectors_r: np.ndarray,
+        p: Any,
+        magnitudes: np.ndarray,
+        max_l: int = 4) -> Box:
+
+    # Auto-assign bright/dark eigenmodes directly from a multipole decomposition
+    # of the (right) eigenvectors -- no externally supplied character labels.
+    # Mirrors the delta_phi prototype (steps 4-5):
+    #   1. For each mode k, decompose ur[:, k] into multipole power-per-l shells
+    #      (multipole_decomposition). dipole = power_l[1], dominant_l = argmax
+    #      over l>=1, high-order = sum(power_l[2:]).
+    #   2. bright = argmax(dipole_norm * coupling_norm).
+    #   3. dark = among modes (!= bright) with dominant_l >= 2, the one with the
+    #      strongest coupling (peak |g| over wavelength). If no genuinely
+    #      higher-order mode exists, fall back to argmax((1 - dipole_norm) *
+    #      coupling_norm) over the remaining modes.
+    # coupling = peak modal-projection magnitude |g_k(lambda)| over wavelength.
+    from .multipole import multipole_decomposition
+
+    eigenvectors_r = np.asarray(eigenvectors_r)
+    magnitudes = np.asarray(magnitudes)
+
+    if eigenvectors_r.ndim != 2:
+        raise ValueError('[error] <eigenvectors_r> must be 2D (nfaces, K)')
+    if magnitudes.ndim != 2:
+        raise ValueError('[error] <magnitudes> must be 2D (K, nlambda)')
+
+    nfaces = int(np.asarray(p.pos).shape[0])
+    if eigenvectors_r.shape[0] != nfaces:
+        # Accept (K, nfaces) layout too.
+        if eigenvectors_r.shape[1] == nfaces:
+            eigenvectors_r = eigenvectors_r.T
+        else:
+            raise ValueError('[error] <eigenvectors_r> rows ({}) != nfaces ({})'.format(
+                    eigenvectors_r.shape[0], nfaces))
+
+    n_modes = eigenvectors_r.shape[1]
+    if magnitudes.shape[0] != n_modes:
+        raise ValueError('[error] <magnitudes> rows ({}) != n_modes ({})'.format(
+                magnitudes.shape[0], n_modes))
+
+    dipole = np.zeros(n_modes, dtype = float)
+    high_order = np.zeros(n_modes, dtype = float)
+    dominant_l = np.zeros(n_modes, dtype = int)
+
+    for k in range(n_modes):
+        power_l = np.asarray(
+                multipole_decomposition(eigenvectors_r[:, k], p, max_l = max_l)['power_l'])
+        dipole[k] = float(power_l[1]) if power_l.size > 1 else 0.0
+        high_order[k] = float(power_l[2:].sum()) if power_l.size > 2 else 0.0
+        dominant_l[k] = int(np.argmax(power_l[1:]) + 1) if power_l.size > 1 else -1
+
+    peak_mag = np.max(magnitudes, axis = 1)
+
+    eps = 1e-30
+    dipole_norm = dipole / (np.max(dipole) + eps)
+    coupling_norm = peak_mag / (np.max(peak_mag) + eps)
+
+    bright_idx = int(np.argmax(dipole_norm * coupling_norm))
+
+    dark_cands = [k for k in range(n_modes)
+            if k != bright_idx and dominant_l[k] >= 2]
+    if dark_cands:
+        dark_idx = int(max(dark_cands, key = lambda k: coupling_norm[k]))
+    else:
+        fallback = [k for k in range(n_modes) if k != bright_idx]
+        dark_idx = int(max(fallback,
+                key = lambda k: (1.0 - dipole_norm[k]) * coupling_norm[k]))
+
+    coupling_strength_ratio = float(peak_mag[bright_idx] / (peak_mag[dark_idx] + eps))
+
+    print_info('assign_bright_dark_multipole: bright=mode {} (l={}), dark=mode {} (l={}), ratio={:.3f}'.format(
+            bright_idx, dominant_l[bright_idx], dark_idx, dominant_l[dark_idx],
+            coupling_strength_ratio))
+
+    return Box({
+        'bright_idx': bright_idx,
+        'dark_idx': dark_idx,
+        'dominant_l': dominant_l,
+        'dipole': dipole,
+        'high_order': high_order,
+        'coupling_strength_ratio': coupling_strength_ratio})
+
+
 # -------------------------------------------------------------------------
 # Sanity test (mirrors mnpbem_simulation/.../mode_comparator.py __main__)
 # -------------------------------------------------------------------------
