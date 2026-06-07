@@ -27,7 +27,7 @@ materials:
   substrate: {material: ito, gap: 0.001}
 compute: {use_parallel: true, n_workers: 4, n_threads: 1, wavelength_chunk_size: 10,
   mirror: false, iterative: false, nonlocal: false, n_gpus_per_worker: 0, multi_node: false,
-  hmode: dense}
+  hmode: dense, gpu_precision: fp32}
 simulation:
   type: ret
   interp: curv
