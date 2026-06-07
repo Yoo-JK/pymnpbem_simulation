@@ -207,10 +207,45 @@ def assign_bright_dark(multipole_output: Dict[str, Any],
     return Box(result)
 
 
+def _net_dipole_mag(sig, pos, area, center):
+    # Physical radiative dipole moment magnitude |d| = |sum area*sig*(r-r0)|.
+    # Bright modes (bonding dipole) have large |d|; dark/subradiant modes ~0.
+    rel = pos - center[None, :]
+    d = (area[:, None] * np.asarray(sig).reshape(-1)[:, None] * rel).sum(axis = 0)
+    return float(np.linalg.norm(d))
+
+
+def _per_particle_dominant_l(sig, pos, area, particle_centers, max_l):
+    # Dominant multipole order from a LOCAL decomposition about each particle
+    # center. The global decomposition spuriously inflates l for a dimer because
+    # two separated dipoles look high-l from the cluster centroid (#238).
+    from .multipole import multipole_decomposition
+    centers = np.asarray(particle_centers)
+    d2 = np.stack([np.linalg.norm(pos - c[None, :], axis = 1) for c in centers], axis = 1)
+    owner = np.argmin(d2, axis = 1)
+    best_l, best_pow = -1, -1.0
+    for pi in range(len(centers)):
+        m = owner == pi
+        if not np.any(m):
+            continue
+        shim = Box({'pos': pos[m], 'area': area[m]})
+        powl = np.asarray(multipole_decomposition(
+                np.asarray(sig).reshape(-1)[m], shim, max_l = max_l,
+                center = centers[pi])['power_l'])
+        if powl.size <= 1:
+            continue
+        l_here = int(np.argmax(powl[1:]) + 1)
+        p_here = float(powl[1:].max())
+        if p_here > best_pow:
+            best_pow, best_l = p_here, l_here
+    return best_l
+
+
 def assign_bright_dark_multipole(eigenvectors_r: np.ndarray,
         p: Any,
         magnitudes: np.ndarray,
-        max_l: int = 4) -> Box:
+        max_l: int = 4,
+        particle_centers = None) -> Box:
 
     # Auto-assign bright/dark eigenmodes directly from a multipole decomposition
     # of the (right) eigenvectors -- no externally supplied character labels.
@@ -248,45 +283,59 @@ def assign_bright_dark_multipole(eigenvectors_r: np.ndarray,
         raise ValueError('[error] <magnitudes> rows ({}) != n_modes ({})'.format(
                 magnitudes.shape[0], n_modes))
 
-    dipole = np.zeros(n_modes, dtype = float)
+    pos = np.asarray(p.pos)
+    area = np.asarray(p.area).reshape(-1)
+    center = (pos * area[:, None]).sum(axis = 0) / area.sum()
+
+    dipole_mag = np.zeros(n_modes, dtype = float)
     high_order = np.zeros(n_modes, dtype = float)
     dominant_l = np.zeros(n_modes, dtype = int)
 
     for k in range(n_modes):
+        sig_k = eigenvectors_r[:, k]
+        # Bright/dark discriminator: physical net radiative dipole moment |d|.
+        dipole_mag[k] = _net_dipole_mag(sig_k, pos, area, center)
         power_l = np.asarray(
-                multipole_decomposition(eigenvectors_r[:, k], p, max_l = max_l)['power_l'])
-        dipole[k] = float(power_l[1]) if power_l.size > 1 else 0.0
+                multipole_decomposition(sig_k, p, max_l = max_l)['power_l'])
         high_order[k] = float(power_l[2:].sum()) if power_l.size > 2 else 0.0
-        dominant_l[k] = int(np.argmax(power_l[1:]) + 1) if power_l.size > 1 else -1
+        # Multipole-order label: per-particle local l for dimers, else global.
+        if particle_centers is not None and len(particle_centers) > 1:
+            dominant_l[k] = _per_particle_dominant_l(
+                    sig_k, pos, area, particle_centers, max_l)
+        else:
+            dominant_l[k] = int(np.argmax(power_l[1:]) + 1) if power_l.size > 1 else -1
 
     peak_mag = np.max(magnitudes, axis = 1)
 
     eps = 1e-30
-    dipole_norm = dipole / (np.max(dipole) + eps)
+    dipole_norm = dipole_mag / (np.max(dipole_mag) + eps)
     coupling_norm = peak_mag / (np.max(peak_mag) + eps)
 
+    # Bright = strong radiative dipole AND strong coupling.
     bright_idx = int(np.argmax(dipole_norm * coupling_norm))
+    # Group split for combination plots: bright = non-negligible net dipole.
+    is_bright = dipole_norm > 0.1
+    is_bright[bright_idx] = True
 
-    dark_cands = [k for k in range(n_modes)
-            if k != bright_idx and dominant_l[k] >= 2]
-    if dark_cands:
-        dark_idx = int(max(dark_cands, key = lambda k: coupling_norm[k]))
-    else:
-        fallback = [k for k in range(n_modes) if k != bright_idx]
-        dark_idx = int(max(fallback,
-                key = lambda k: (1.0 - dipole_norm[k]) * coupling_norm[k]))
+    # Dark = subradiant (small net dipole) with strongest coupling.
+    dark_cands = [k for k in range(n_modes) if k != bright_idx and not is_bright[k]]
+    if not dark_cands:
+        dark_cands = [k for k in range(n_modes) if k != bright_idx]
+    dark_idx = int(max(dark_cands, key = lambda k: coupling_norm[k]))
 
     coupling_strength_ratio = float(peak_mag[bright_idx] / (peak_mag[dark_idx] + eps))
 
-    print_info('assign_bright_dark_multipole: bright=mode {} (l={}), dark=mode {} (l={}), ratio={:.3f}'.format(
-            bright_idx, dominant_l[bright_idx], dark_idx, dominant_l[dark_idx],
-            coupling_strength_ratio))
+    print_info('assign_bright_dark_multipole: bright=mode {} (l={}, |d|={:.2e}), dark=mode {} (l={}), ratio={:.3f}'.format(
+            bright_idx, dominant_l[bright_idx], dipole_mag[bright_idx],
+            dark_idx, dominant_l[dark_idx], coupling_strength_ratio))
 
     return Box({
         'bright_idx': bright_idx,
         'dark_idx': dark_idx,
         'dominant_l': dominant_l,
-        'dipole': dipole,
+        'dipole': dipole_mag,
+        'dipole_mag': dipole_mag,
+        'is_bright': is_bright,
         'high_order': high_order,
         'coupling_strength_ratio': coupling_strength_ratio})
 
