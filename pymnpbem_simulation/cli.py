@@ -309,6 +309,7 @@ def _verify_sigma_manifest_compat(out_dir: str,
     miss path will fall back to BEM solve per-wavelength anyway.
     """
     from . import sigma_cache as _sc
+    from .util import print_info
 
     manifest = _sc.read_manifest(out_dir)
     if manifest is None:

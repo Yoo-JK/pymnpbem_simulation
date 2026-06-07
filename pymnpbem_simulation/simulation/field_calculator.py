@@ -294,7 +294,7 @@ class FieldCalculator(SimulationRunner):
 
         if base_sim_type == 'ret_layer':
             from mnpbem.simulation import PlaneWaveRetLayer
-            return PlaneWaveRetLayer(pol, prop)
+            return PlaneWaveRetLayer(pol, prop, self._build_layer())
 
         raise ValueError(
                 '[error] Unsupported (sim_type, excitation) = (<{}>, <{}>) '
@@ -331,7 +331,7 @@ class FieldCalculator(SimulationRunner):
 
         if sim_type == 'ret_layer':
             from mnpbem.bem import BEMRetLayer
-            return BEMRetLayer(self.p)
+            return BEMRetLayer(self.p, self._build_layer())
 
         if sim_type == 'ret_layer_iter':
             from mnpbem.bem import BEMRetLayerIter
@@ -340,6 +340,19 @@ class FieldCalculator(SimulationRunner):
 
         raise ValueError(
                 '[error] Invalid <simulation.type> = <{}>!'.format(sim_type))
+
+    def _build_layer(self) -> Any:
+        """Extract the LayerStructure attached to the particle (mirrors
+        planewave_ret_layer.build_layer) for substrate field evaluation.
+        """
+        layer = getattr(self.p, '_mnpbem_layer', None)
+        if layer is None and hasattr(self.p, 'pfull'):
+            layer = getattr(self.p.pfull, '_mnpbem_layer', None)
+        if layer is None:
+            raise RuntimeError(
+                    '[error] FieldCalculator: particle has no <_mnpbem_layer>; '
+                    'use structure.type=with_substrate to enable substrate.')
+        return layer
 
     def _iter_solver_opts(self) -> Dict[str, Any]:
         """Collect iter solver kwargs (gmres knobs + hmatrix + precond)
@@ -360,6 +373,56 @@ class FieldCalculator(SimulationRunner):
             opts.update(schur)
         return opts
 
+    def _layer_field_kwargs(self) -> Dict[str, Any]:
+        """For substrate (ret_layer) sims, return the ``layer`` + ``greentab``
+        kwargs MeshField needs so its Green function is the layer-aware
+        CompGreenRetLayer (direct + reflected) rather than free-space
+        CompGreenRet. For non-layer sims return an empty dict.
+
+        The reflected-Green tabulation must cover the *grid* points (not
+        just the particle faces, which is what the BEM-solve greentab
+        spans), so we build a grid-aware tabspace via
+        ``layer.tabspace(p, grid_point)``. Cached per instance.
+        """
+        sim_type = self.cfg['simulation'].get('type', 'ret').replace('_iter', '')
+        if sim_type != 'ret_layer':
+            return dict()
+
+        if getattr(self, '_layer_field_cache', None) is not None:
+            return self._layer_field_cache
+
+        from mnpbem.greenfun import GreenTabLayer
+        from mnpbem.geometry.compoint import ComPoint
+
+        layer = self._build_layer()
+
+        # ComPoint over the flat grid so tabspace sees the grid (r, z) span.
+        grid_pt = ComPoint(self.p, self.grid_points,
+                mindist = self.mindist, layer = layer)
+        tab = layer.tabspace(self.p, grid_pt)
+        gt = GreenTabLayer(layer, tab = tab)
+
+        enei = np.atleast_1d(np.asarray(
+                getattr(self, '_field_enei', None)
+                if getattr(self, '_field_enei', None) is not None
+                else self.cfg['simulation'].get('field_wavelengths', [500.0]),
+                dtype = float))
+        if enei.size == 1:
+            e0 = float(enei[0])
+            enei_tab = np.array([0.999 * e0, 1.001 * e0])
+        else:
+            enei_tab = np.linspace(float(enei.min()), float(enei.max()),
+                    min(5, enei.size))
+        gt.set(enei_tab)
+
+        print_info(
+                'FieldCalculator: layer greentab tabulated at {} enei '
+                '({:.1f}-{:.1f} nm) over grid span'.format(
+                        len(enei_tab), float(enei_tab[0]), float(enei_tab[-1])))
+
+        self._layer_field_cache = dict(layer = layer, greentab = gt)
+        return self._layer_field_cache
+
     def _make_meshfield(self) -> Any:
         from mnpbem.simulation import MeshField
 
@@ -372,7 +435,8 @@ class FieldCalculator(SimulationRunner):
                 self.grid_z,
                 nmax = self.nmax,
                 mindist = self.mindist,
-                sim = sim_type)
+                sim = sim_type,
+                **self._layer_field_kwargs())
 
     def _make_meshfield_chunk(self,
             x_chunk: np.ndarray,
@@ -394,7 +458,8 @@ class FieldCalculator(SimulationRunner):
                 z_chunk,
                 nmax = self.nmax,
                 mindist = self.mindist,
-                sim = sim_type)
+                sim = sim_type,
+                **self._layer_field_kwargs())
 
     def evaluate(self,
             sig: Any) -> Box:
@@ -627,6 +692,11 @@ class FieldCalculator(SimulationRunner):
 
     def run(self,
             enei: np.ndarray) -> Dict[str, Any]:
+
+        # Remember the field wavelengths so a layer-aware greentab (built
+        # lazily in _make_meshfield) tabulates the reflected Green function
+        # at the wavelengths we actually evaluate.
+        self._field_enei = np.atleast_1d(np.asarray(enei, dtype = float))
 
         n_wl = len(enei)
         n_pts = self.grid_points.shape[0]
