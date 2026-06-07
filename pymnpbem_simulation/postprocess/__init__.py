@@ -32,12 +32,33 @@ from .plot_surface_charge import (
         plot_surface_charge_2d_8views,
         plot_surface_charge_phase,
         load_surface_charge_from_npz)
-from .eigenmode import qs_eigenmodes, svd_decomposition, retarded_eigenmodes
+from .eigenmode import (
+        qs_eigenmodes,
+        svd_decomposition,
+        retarded_eigenmodes,
+        retarded_eigen_full,
+        project)
+from .mode_compare import (
+        mode_similarity_matrix,
+        match_modes,
+        delta_phi_curve,
+        compare_delta_phi,
+        assign_bright_dark,
+        assign_bright_dark_multipole)
+from .mode_phase import mode_phase_analysis
 from .plot_eigenmode import (
         plot_mode_patterns,
         plot_eigenvalue_spectrum,
         plot_singular_value_decay)
-from .fano_fit import fano_fit, multi_fano_fit, fano_lineshape
+from .plot_mode_phase import (
+        plot_mode_phase,
+        plot_mode_phase_alt)
+from .fano_fit import (
+        fano_fit,
+        multi_fano_fit,
+        fano_lineshape,
+        q_to_delta_phi,
+        validate_consistency)
 from .multipole import multipole_decomposition, dipole_quadrupole_ratio, dominant_l
 from .export import (
         export_npz,
@@ -80,12 +101,25 @@ __all__ = [
         'qs_eigenmodes',
         'svd_decomposition',
         'retarded_eigenmodes',
+        'retarded_eigen_full',
+        'project',
+        'mode_similarity_matrix',
+        'match_modes',
+        'delta_phi_curve',
+        'compare_delta_phi',
+        'assign_bright_dark',
+        'assign_bright_dark_multipole',
+        'mode_phase_analysis',
         'plot_mode_patterns',
         'plot_eigenvalue_spectrum',
         'plot_singular_value_decay',
+        'plot_mode_phase',
+        'plot_mode_phase_alt',
         'fano_fit',
         'multi_fano_fit',
         'fano_lineshape',
+        'q_to_delta_phi',
+        'validate_consistency',
         'multipole_decomposition',
         'dipole_quadrupole_ratio',
         'dominant_l',

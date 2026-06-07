@@ -62,6 +62,9 @@ args['plot_format'] = ['png']
 args['plot_dpi'] = 300
 args['spectrum_xaxis'] = 'energy'
 
+# GPU precision (added 2026-05-28 for sigma phase-map sweep, fp32 통일)
+args['gpu_precision'] = 'fp32'
+
 # Advanced
 args['use_mirror_symmetry'] = False
 args['use_iterative_solver'] = True
