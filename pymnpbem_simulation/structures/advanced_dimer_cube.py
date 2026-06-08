@@ -21,6 +21,11 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
         tilt_angle = float(self.cfg_struct.get('tilt_angle', 0.0))
         tilt_axis = list(self.cfg_struct.get('tilt_axis', [0.0, 1.0, 0.0]))
         rotation_angle = float(self.cfg_struct.get('rotation_angle', 0.0))
+        # base_tilt_angle: tilt BOTH cubes about tilt_axis (the "base" orientation),
+        # while tilt_angle/rotation_angle add the relative rotation to particle 2.
+        # base_tilt = 45 - theta/2 + tilt_angle = theta tilts the dimer so both cubes
+        # rest on edges (mirror-symmetric) on a substrate.
+        base_tilt_angle = float(self.cfg_struct.get('base_tilt_angle', 0.0))
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')
 
@@ -62,6 +67,8 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
         particles_p1 = []
         for size, n_e, e in zip(sizes, n_per_edges, roundings):
             cube = tricube(n_e, size, e = e)
+            if base_tilt_angle != 0.0:
+                cube.rot(base_tilt_angle, tilt_axis)
             cube.shift([-shift_distance, 0.0, 0.0])
             particles_p1.append(cube)
 
@@ -70,6 +77,8 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
             cube = tricube(n_e, size, e = e)
             if rotation_angle != 0.0:
                 cube.rot(rotation_angle, [0.0, 0.0, 1.0])
+            if base_tilt_angle != 0.0:
+                cube.rot(base_tilt_angle, tilt_axis)
             if tilt_angle != 0.0:
                 cube.rot(tilt_angle, tilt_axis)
             cube.shift([shift_distance + offset[0], offset[1], offset[2]])
