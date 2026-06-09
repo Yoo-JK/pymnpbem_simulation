@@ -61,7 +61,8 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
 
         medium_name = self.cfg_materials.get('medium', 'water')
         eps_medium = _build_eps_medium(medium_name)
-        eps_layers = [_build_eps_particle(name) for name in materials]
+        rip = self.cfg_struct.get('refractive_index_paths', None)
+        eps_layers = [_build_eps_particle(name, rip) for name in materials]
         epstab = [eps_medium] + eps_layers
 
         particles_p1 = []
