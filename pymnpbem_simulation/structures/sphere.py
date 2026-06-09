@@ -57,7 +57,7 @@ def _build_eps_medium(name: str) -> Any:
     return EpsConst(float(name))
 
 
-def _build_eps_particle(name: str) -> Any:
+def _build_eps_particle(name: str, custom: Any = None) -> Any:
     from mnpbem.materials import EpsTable, EpsDrude
 
     name_l = name.lower()
@@ -70,6 +70,19 @@ def _build_eps_particle(name: str) -> Any:
 
     if name.endswith('.dat'):
         return EpsTable(name)
+
+    # custom material from refractive_index_paths (e.g. agcl, ito):
+    #   {'agcl': {'type': 'constant', 'epsilon': 2.02}}  ->  EpsConst(2.02)
+    #   {'foo':  {'type': 'table', 'path': 'foo.dat'}}   ->  EpsTable('foo.dat')
+    if custom:
+        cmap = {str(k).lower(): v for k, v in custom.items()}
+        if name_l in cmap:
+            from mnpbem.materials import EpsConst
+            m = cmap[name_l]
+            mtype = str(m.get('type', 'constant')).lower()
+            if mtype == 'constant':
+                return EpsConst(float(m['epsilon']))
+            return EpsTable(m.get('path', m.get('file', name)))
 
     raise ValueError('[error] Unsupported <particle> = <{}>!'.format(name))
 
