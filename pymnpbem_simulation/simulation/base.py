@@ -418,6 +418,97 @@ class SimulationRunner(object):
             print('[warn] sigma cache save failed at wl={:.2f} nm: {}'.format(
                     float(wavelength_nm), e))
 
+    def _cache_manifest_compatible(self) -> bool:
+        """Return True when the on-disk sigma manifest matches the current
+        cfg's structure/eps hashes (or when no manifest exists yet).
+
+        Cached per-instance so the hash check runs once.
+        """
+        if hasattr(self, '_cache_compat_cached'):
+            return self._cache_compat_cached
+
+        from .. import sigma_cache as _sc
+
+        output_dir = self._sigma_output_dir()
+        if not output_dir:
+            self._cache_compat_cached = False
+            return False
+
+        manifest = _sc.read_manifest(output_dir)
+        if manifest is None:
+            self._cache_compat_cached = True
+            return True
+
+        struct_h = _sc.compute_structure_hash(self.cfg.get('structure', dict()))
+        eps_h = _sc.compute_eps_hash(self.cfg.get('materials', dict()))
+        compat = (manifest.get('structure_hash') == struct_h
+                and manifest.get('eps_hash') == eps_h)
+        self._cache_compat_cached = compat
+        return compat
+
+    def load_sigma_for_wavelength(self,
+            wavelength_nm: float) -> Any:
+        """Reconstruct a CompStruct sig for one wavelength from the sigma
+        cache, or return ``None`` on any miss/failure.
+
+        This is the RESUME counterpart of :meth:`save_sigma_for_wavelength`.
+        A spectrum sweep can call it per wavelength: a hit lets the sweep
+        recompute extinction/scattering from the cached BEM solution instead
+        of re-solving (cheap), so a killed run resumes near where it stopped
+        rather than restarting from the first wavelength.
+
+        Returns ``None`` unless the cache is enabled, the manifest hashes
+        match the current structure/eps, and all polarizations are present
+        for this wavelength.
+        """
+        if not self._sigma_cache_enabled():
+            return None
+
+        output_dir = self._sigma_output_dir()
+        if not output_dir or not self._cache_manifest_compatible():
+            return None
+
+        pol, prop = self._sigma_excitations()
+        try:
+            from .. import sigma_cache as _sc
+            cached = _sc.load_sigma(output_dir, wavelength_nm, pol, prop)
+        except Exception:
+            return None
+
+        if cached is None:
+            return None
+
+        try:
+            from mnpbem.greenfun import CompStruct
+            if cached.get('solver_type') == 'retarded':
+                return CompStruct(self.p, float(wavelength_nm),
+                        sig1 = cached['sig1'], sig2 = cached['sig2'],
+                        h1 = cached['h1'], h2 = cached['h2'])
+            return CompStruct(self.p, float(wavelength_nm), sig = cached['sig'])
+        except Exception:
+            return None
+
+    def count_cached_wavelengths(self,
+            enei: Any) -> int:
+        """Number of sweep wavelengths already fully cached (all pols).
+
+        Used only for progress/ETA reporting; the authoritative per-wl
+        decision is made by :meth:`load_sigma_for_wavelength`.
+        """
+        if not self._sigma_cache_enabled():
+            return 0
+        output_dir = self._sigma_output_dir()
+        if not output_dir or not self._cache_manifest_compatible():
+            return 0
+        pol, prop = self._sigma_excitations()
+        try:
+            from .. import sigma_cache as _sc
+            cached = set(round(float(w), 2)
+                    for w in _sc.find_cached_wavelengths(output_dir, pol, prop))
+        except Exception:
+            return 0
+        return sum(1 for w in enei if round(float(w), 2) in cached)
+
     def _resolve_schur(self,
             has_cover_layer: bool) -> Any:
         """Resolve the v1.2.0 Schur-complement option.
