@@ -87,8 +87,6 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
             enei: np.ndarray) -> Dict[str, Any]:
 
         layer = self.build_layer()
-        greentab = self.build_greentab(layer, enei)
-        bem = self.build_solver(layer, greentab)
         exc = self.build_excitation(layer)
 
         n_wl = len(enei)
@@ -98,28 +96,43 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
         sca = np.zeros((n_wl, n_pol))
         abs_ = np.zeros((n_wl, n_pol))
 
-        print_info(
-            'PlaneWaveRetLayer: warming up at enei={:.1f} nm'.format(float(enei[0])))
-        t_warm = time.time()
+        # Spectrum-sweep RESUME: wavelengths already in the sigma cache are
+        # reloaded and their extinction/scattering recomputed from the cached
+        # BEM solution (cheap) instead of re-solving.  The Green tabulation +
+        # solver (the expensive ~warmup) build lazily on the first cache miss,
+        # so a fully-cached re-run skips them entirely.  A killed run thus
+        # resumes near where it stopped rather than restarting from wl 0.
+        n_cached0 = self.count_cached_wavelengths(enei)
+        n_to_solve = n_wl - n_cached0
+        if n_cached0 > 0:
+            print_info('PlaneWaveRetLayer: resume — {}/{} wl cached, {} to solve'.format(
+                n_cached0, n_wl, n_to_solve))
 
-        sig, bem = bem.solve(exc(self.p, float(enei[0])))
-        warm_s = time.time() - t_warm
-
-        ev = self._extract_extinction(exc.extinction(sig), n_pol)
-        sv = self._extract_scattering(exc.scattering(sig), n_pol)
-
-        ext[0, :] = ev[:n_pol]
-        sca[0, :] = sv[:n_pol]
-        abs_[0, :] = ext[0, :] - sca[0, :]
-
-        self.save_sigma_for_wavelength(sig, float(enei[0]))
-
-        print_info('warmup done in {:.1f}s'.format(warm_s))
-
+        bem = None
+        warm_s = 0.0
+        n_solved = 0
         t_loop = time.time()
 
-        for i in range(1, n_wl):
-            sig, bem = bem.solve(exc(self.p, float(enei[i])))
+        for i in range(n_wl):
+            wl = float(enei[i])
+            sig = self.load_sigma_for_wavelength(wl)
+
+            if sig is None:
+                if bem is None:
+                    print_info(
+                        'PlaneWaveRetLayer: warming up at enei={:.1f} nm'.format(wl))
+                    t_warm = time.time()
+                    greentab = self.build_greentab(layer, enei)
+                    bem = self.build_solver(layer, greentab)
+                    sig, bem = bem.solve(exc(self.p, wl))
+                    warm_s = time.time() - t_warm
+                    print_info('warmup done in {:.1f}s'.format(warm_s))
+                    t_loop = time.time()
+                else:
+                    sig, bem = bem.solve(exc(self.p, wl))
+                self.save_sigma_for_wavelength(sig, wl)
+                n_solved += 1
+
             ev = self._extract_extinction(exc.extinction(sig), n_pol)
             sv = self._extract_scattering(exc.scattering(sig), n_pol)
 
@@ -127,13 +140,16 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
             sca[i, :] = sv[:n_pol]
             abs_[i, :] = ext[i, :] - sca[i, :]
 
-            self.save_sigma_for_wavelength(sig, float(enei[i]))
-
             if (i + 1) % 5 == 0 or (i + 1) == n_wl:
                 elapsed = time.time() - t_loop
-                eta = elapsed / (i + 1) * (n_wl - i - 1)
-                print_info('  wl {}/{}  elapsed={:.1f}min  ETA={:.1f}min'.format(
-                    i + 1, n_wl, elapsed / 60.0, eta / 60.0))
+                if n_solved > 0:
+                    eta = elapsed / n_solved * max(n_to_solve - n_solved, 0)
+                else:
+                    eta = 0.0
+                print_info(
+                    '  wl {}/{}  cached={} solved={}  elapsed={:.1f}min  ETA={:.1f}min'.format(
+                        i + 1, n_wl, (i + 1) - n_solved, n_solved,
+                        elapsed / 60.0, eta / 60.0))
 
         wall_s = time.time() - t_loop
 
