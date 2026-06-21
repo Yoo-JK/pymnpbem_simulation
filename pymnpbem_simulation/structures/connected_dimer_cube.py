@@ -4,7 +4,8 @@ import numpy as np
 
 from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from ..util import print_info
 
 
@@ -174,8 +175,9 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         medium_name = self.cfg_materials.get('medium', 'water')
         particle_name = self.cfg_materials.get('particle', 'gold')
 
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_particle = _build_eps_particle(particle_name)
+        eps_particle = _build_eps_particle(particle_name, rip)
         epstab = [eps_medium, eps_particle]
 
         c1 = tricube(n_per_edge, core_size, e = e)
@@ -273,9 +275,10 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
         fuse_cores = (core_gap <= 0.0)
 
         medium_name = self.cfg_materials.get('medium', 'water')
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_core = _build_eps_particle(materials[0])
-        eps_shell = _build_eps_particle(materials[1])
+        eps_core = _build_eps_particle(materials[0], rip)
+        eps_shell = _build_eps_particle(materials[1], rip)
         epstab = [eps_medium, eps_core, eps_shell]
 
         # ----- Shell meshes (always fused) -----
@@ -339,28 +342,21 @@ class ConnectedDimerCubeBuilder(StructureBuilder):
     def _resolve_materials(self) -> List[str]:
         """Resolve [core_material, shell_material] for core-shell mode.
 
-        Precedence:
+        Precedence (via _resolve_materials_list, which tolerates both the
+        ``structure.materials`` and migrated ``materials.particle_list``
+        layouts):
             1. cfg_struct.materials  (list of length 2)
             2. cfg_materials.particle_list  (list of length 2)
             3. [cfg_materials.particle, cfg_materials.shell] fallback
         """
-        cs_mats = self.cfg_struct.get('materials')
-        if isinstance(cs_mats, (list, tuple)) and len(cs_mats) == 2:
-            return [str(cs_mats[0]), str(cs_mats[1])]
+        mats = _resolve_materials_list(self.cfg_struct, self.cfg_materials)
+        if len(mats) == 2:
+            return [str(mats[0]), str(mats[1])]
 
-        pl = self.cfg_materials.get('particle_list')
-        if isinstance(pl, (list, tuple)) and len(pl) == 2:
-            return [str(pl[0]), str(pl[1])]
-
-        if isinstance(cs_mats, (list, tuple)) and len(cs_mats) != 2:
+        if len(mats) != 0:
             raise ValueError(
                 '[error] connected_dimer_cube core-shell requires <materials> '
-                'with 2 entries [core, shell]; got <{}>.'.format(len(cs_mats)))
-        if isinstance(pl, (list, tuple)) and len(pl) != 2:
-            raise ValueError(
-                '[error] connected_dimer_cube core-shell requires '
-                '<materials.particle_list> with 2 entries [core, shell]; '
-                'got <{}>.'.format(len(pl)))
+                'with 2 entries [core, shell]; got <{}>.'.format(len(mats)))
 
         core_name = self.cfg_materials.get('core',
                 self.cfg_materials.get('particle', 'gold'))

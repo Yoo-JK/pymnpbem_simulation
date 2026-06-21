@@ -4,7 +4,8 @@ import numpy as np
 
 from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from ..util import print_info
 
 
@@ -29,9 +30,10 @@ class DimerCoreShellCubeBuilder(StructureBuilder):
         core_name = self.cfg_materials.get('core', self.cfg_materials.get('particle', 'gold'))
         shell_name = self.cfg_materials.get('shell', 'silver')
 
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_core = _build_eps_particle(core_name)
-        eps_shell = _build_eps_particle(shell_name)
+        eps_core = _build_eps_particle(core_name, rip)
+        eps_shell = _build_eps_particle(shell_name, rip)
         epstab = [eps_medium, eps_core, eps_shell]
 
         c1 = tricube(n_per_edge, core_size, e = e)

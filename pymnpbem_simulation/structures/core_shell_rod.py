@@ -3,7 +3,8 @@ from typing import Any, Dict, Tuple
 import numpy as np
 
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from .rod import _resolve_rod_mesh
 from .core_shell_sphere import _normalize_shells, _build_inout_table
 from ..util import print_info
@@ -58,12 +59,13 @@ class CoreShellRodBuilder(StructureBuilder):
         core_name = self.cfg_materials.get('core',
                 self.cfg_materials.get('particle', 'gold'))
 
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_core = _build_eps_particle(core_name)
+        eps_core = _build_eps_particle(core_name, rip)
 
         epstab = [eps_medium, eps_core]
         for sh in shells:
-            epstab.append(_build_eps_particle(sh['material']))
+            epstab.append(_build_eps_particle(sh['material'], rip))
 
         # Cumulative dimensions: each shell extends radius (and possibly
         # height) by `thickness`. We grow both diameter and height; height

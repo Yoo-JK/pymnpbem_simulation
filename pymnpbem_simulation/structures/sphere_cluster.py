@@ -3,7 +3,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from ..util import print_info
 
 
@@ -55,8 +56,9 @@ class SphereClusterBuilder(StructureBuilder):
         medium_name = self.cfg_materials.get('medium', 'water')
         particle_name = self.cfg_materials.get('particle', 'gold')
 
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_particle = _build_eps_particle(particle_name)
+        eps_particle = _build_eps_particle(particle_name, rip)
         epstab = [eps_medium, eps_particle]
 
         particles = []
