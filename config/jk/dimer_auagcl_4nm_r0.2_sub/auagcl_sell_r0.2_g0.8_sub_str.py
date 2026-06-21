@@ -1,7 +1,7 @@
 # generated
 args = {   'base_tilt_angle': 0,
     'core_size': 47,
-    'gap': 0.6,
+    'gap': 0.8,
     'materials': ['gold', 'agcl'],
     'medium': 'water',
     'mesh_density': 2,

@@ -1,4 +1,4 @@
-# Au@AgCl (gold core + AgCl shell) generated
+# generated
 args = {   'base_tilt_angle': 0,
     'core_size': 47,
     'gap': 0.6,
