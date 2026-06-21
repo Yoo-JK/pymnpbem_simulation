@@ -27,8 +27,9 @@ class SphereBuilder(StructureBuilder):
         medium_name = self.cfg_materials.get('medium', 'water')
         particle_name = self.cfg_materials.get('particle', 'gold')
 
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_particle = _build_eps_particle(particle_name)
+        eps_particle = _build_eps_particle(particle_name, rip)
         epstab = [eps_medium, eps_particle]
 
         sphere = trisphere(n, diameter)
@@ -85,6 +86,32 @@ def _build_eps_particle(name: str, custom: Any = None) -> Any:
             return EpsTable(m.get('path', m.get('file', name)))
 
     raise ValueError('[error] Unsupported <particle> = <{}>!'.format(name))
+
+
+def _resolve_materials_list(cfg_struct: Any, cfg_materials: Any) -> list:
+    """Per-layer materials list, tolerating both config layouts.
+
+    Direct .py configs carry the list under ``structure.materials``; the yaml
+    migration (py_to_yaml) routes it to ``materials.particle_list``. Read the
+    structure section first, then fall back to the materials section so CLI
+    runs (migrated) and direct builder calls resolve to the same materials.
+    """
+    mats = (cfg_struct or {}).get('materials')
+    if not mats:
+        mats = (cfg_materials or {}).get('particle_list')
+    return list(mats) if mats else []
+
+
+def _resolve_rip(cfg_struct: Any, cfg_materials: Any) -> Any:
+    """``refractive_index_paths`` from either config section (custom eps).
+
+    Same rationale as :func:`_resolve_materials_list` — the migration routes
+    ``refractive_index_paths`` into the materials section, so a builder reading
+    only ``cfg_struct`` would silently lose custom dielectrics under the CLI.
+    """
+    return ((cfg_struct or {}).get('refractive_index_paths')
+            or (cfg_materials or {}).get('refractive_index_paths')
+            or None)
 
 
 def _count_faces(p: Any) -> int:

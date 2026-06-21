@@ -5,7 +5,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from ..util import print_info
 
 
@@ -95,7 +96,7 @@ class AdvancedMonomerCubeBuilder(StructureBuilder):
 
         core_size = float(self.cfg_struct.get('core_size', 30.0))
         shell_layers = list(self.cfg_struct.get('shell_layers', []))
-        materials = list(self.cfg_struct.get('materials', []))
+        materials = _resolve_materials_list(self.cfg_struct, self.cfg_materials)
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')
 
@@ -122,8 +123,9 @@ class AdvancedMonomerCubeBuilder(StructureBuilder):
                     _resolve_n_per_edge(self.cfg_struct, 1, edge_override = size)[0])
 
         medium_name = self.cfg_materials.get('medium', 'water')
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_medium = _build_eps_medium(medium_name)
-        eps_layers = [_build_eps_particle(name) for name in materials]
+        eps_layers = [_build_eps_particle(name, rip) for name in materials]
         epstab = [eps_medium] + eps_layers
 
         particles = []

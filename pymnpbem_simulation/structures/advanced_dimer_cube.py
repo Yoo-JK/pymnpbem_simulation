@@ -3,7 +3,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 from .base import StructureBuilder
-from .sphere import _build_eps_medium, _build_eps_particle, _count_faces
+from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
+        _resolve_materials_list, _resolve_rip)
 from .advanced_monomer_cube import _resolve_roundings, _resolve_n_per_edge
 from ..util import print_info
 
@@ -15,7 +16,7 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
 
         core_size = float(self.cfg_struct.get('core_size', 30.0))
         shell_layers = list(self.cfg_struct.get('shell_layers', []))
-        materials = list(self.cfg_struct.get('materials', []))
+        materials = _resolve_materials_list(self.cfg_struct, self.cfg_materials)
         gap = float(self.cfg_struct.get('gap', 5.0))
         offset = list(self.cfg_struct.get('offset', [0.0, 0.0, 0.0]))
         tilt_angle = float(self.cfg_struct.get('tilt_angle', 0.0))
@@ -61,7 +62,7 @@ class AdvancedDimerCubeBuilder(StructureBuilder):
 
         medium_name = self.cfg_materials.get('medium', 'water')
         eps_medium = _build_eps_medium(medium_name)
-        rip = self.cfg_struct.get('refractive_index_paths', None)
+        rip = _resolve_rip(self.cfg_struct, self.cfg_materials)
         eps_layers = [_build_eps_particle(name, rip) for name in materials]
         epstab = [eps_medium] + eps_layers
 
