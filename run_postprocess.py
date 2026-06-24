@@ -92,6 +92,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         if eig_res is not None:
             summary['eigenmode'] = eig_res
 
+    if 'fano-analysis' in analyzers:
+        fa_res = _run_fano_analysis(args, out_dir)
+        if fa_res is not None:
+            summary['fano-analysis'] = fa_res
+
     if 'multipole' in analyzers:
         mp_res = _run_multipole(result, args, out_dir)
         if mp_res is not None:
@@ -139,7 +144,7 @@ def _build_parser() -> argparse.ArgumentParser:
             help = 'Path to result .npz file (with wavelength/ext/sca/abs).')
     parser.add_argument('--analyzers', type = str,
             default = 'spectrum',
-            help = 'Comma-separated: spectrum,fano,eigenmode,multipole.')
+            help = 'Comma-separated: spectrum,fano,eigenmode,multipole,fano-analysis.')
     parser.add_argument('--output', type = str, default = None,
             help = 'Output directory (default: alongside result).')
 
@@ -155,6 +160,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument('--export-formats', type = str, default = None,
             help = 'Comma-separated formats: npz,h5,csv,json,txt.')
+
+    # fano-analysis (bright/dark eigenmode + multi-Lorentzian Fano fit).
+    parser.add_argument('--case-dir', type = str, default = None,
+            help = 'Case directory (config.yaml + sigma/) for fano-analysis. '
+                   'Defaults to the directory containing --result.')
+    parser.add_argument('--fano-features', type = str, default = None,
+            help = 'Comma-separated Fano dip energies in eV (e.g. 1.43,1.79,1.91).')
+    parser.add_argument('--fano-pol', type = int, default = 0,
+            help = 'Polarization index for fano-analysis sigma.')
+    parser.add_argument('--eig-cache', type = str, default = None,
+            help = 'Path to the quasistatic full-eig .npz cache (keys: ene,vr,dvec). '
+                   'Loaded if present, else computed and saved here (HEAVY).')
 
     parser.add_argument('--xaxis', type = str,
             choices = ['wavelength', 'energy'],
@@ -250,6 +267,37 @@ def _run_eigenmode(result: Dict[str, Any],
         print_error('eigenmode plots failed: {}'.format(e))
 
     return out
+
+
+def _run_fano_analysis(args: argparse.Namespace,
+        out_dir: str) -> Optional[Dict[str, Any]]:
+
+    from pymnpbem_simulation.util import print_info, print_error
+    from pymnpbem_simulation.postprocess import analyze_fano
+
+    case_dir = args.case_dir
+    if case_dir is None:
+        case_dir = os.path.dirname(os.path.abspath(args.result))
+
+    if not os.path.exists(os.path.join(case_dir, 'config.yaml')):
+        print_error('fano-analysis: config.yaml not found in case dir <{}>'.format(case_dir))
+        return None
+    if not os.path.exists(os.path.join(case_dir, 'sigma', 'manifest.json')):
+        print_error('fano-analysis: sigma cache (sigma/manifest.json) not found in <{}>'.format(case_dir))
+        return None
+
+    if args.fano_features is None:
+        print_error('fano-analysis: --fano-features required (e.g. 1.43,1.79,1.91)')
+        return None
+
+    features = [float(x.strip()) for x in args.fano_features.split(',') if x.strip()]
+
+    print_info('fano-analysis: case <{}>, features {} eV'.format(case_dir, features))
+
+    summary = analyze_fano(case_dir, features, out_dir,
+            pol = args.fano_pol, eig_cache_path = args.eig_cache)
+
+    return summary.to_dict()
 
 
 def _run_multipole(result: Dict[str, Any],

@@ -67,6 +67,17 @@ from .export import (
         export_json,
         export_spectrum_txt)
 from .core_shell import CoreShellSeparator, make_separator_from_config
+from .fano_analysis import (
+        radiating_dipole_spectrum,
+        quasistatic_full_eigenbasis,
+        bright_dark_decompose,
+        multi_lorentzian_fano_fit,
+        plot_fano_phase,
+        plot_fano_verify,
+        plot_bright_dark,
+        analyze_fano,
+        geom_info,
+        FanoLorentzianFit)
 
 __all__ = [
         'analyze_spectrum',
@@ -129,4 +140,14 @@ __all__ = [
         'export_json',
         'export_spectrum_txt',
         'CoreShellSeparator',
-        'make_separator_from_config']
+        'make_separator_from_config',
+        'radiating_dipole_spectrum',
+        'quasistatic_full_eigenbasis',
+        'bright_dark_decompose',
+        'multi_lorentzian_fano_fit',
+        'plot_fano_phase',
+        'plot_fano_verify',
+        'plot_bright_dark',
+        'analyze_fano',
+        'geom_info',
+        'FanoLorentzianFit']
