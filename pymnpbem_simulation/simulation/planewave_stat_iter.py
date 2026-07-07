@@ -13,10 +13,10 @@ from ..util import print_info
 class PlaneWaveStatIterRunner(SimulationRunner):
     """Iterative quasistatic plane-wave BEM (BEMStatIter, GMRES + ACA H-matrix).
 
-    YAML config 예시::
+    YAML config example (예시)::
 
         simulation:
-          type: planewave_stat_iter   # 또는 stat_iter
+          type: planewave_stat_iter   # or stat_iter (또는 stat_iter)
           excitation: planewave
           enei_min: 500
           enei_max: 800
@@ -31,19 +31,21 @@ class PlaneWaveStatIterRunner(SimulationRunner):
             htol: 1.0e-6
             kmax: [4, 100]
             cleaf: 200
-            # v1.5.0 신규
+            # new in v1.5.0 (v1.5.0 신규)
             preconditioner: auto      # auto | none | hlu_dense | hlu_tree
             htol_precond: 1.0e-4
-            schur: auto               # auto | true | false (cover-layer 자동)
+            schur: auto               # auto | true | false (cover-layer auto / 자동)
             schur_g_ss_solver: auto   # auto | lu_dense | gmres
             schur_inner_tol: 1.0e-8
 
     ``hmatrix: auto`` activates ACA H-matrix Green functions only when
     the particle has more than 5000 faces.
 
-    ``preconditioner: auto`` (v1.5.0) -> H-matrix LU preconditioner 자동
-    선택. ``schur: auto`` (v1.5.0) -> nonlocal cover-layer 감지 시 iter
-    Schur reduction 자동 활성화 (BEMStatIter components=1).
+    ``preconditioner: auto`` (v1.5.0) -> auto-select the H-matrix LU
+    preconditioner. ``schur: auto`` (v1.5.0) -> auto-enable iter Schur
+    reduction when a nonlocal cover-layer is detected (BEMStatIter components=1).
+    (preconditioner: auto → H-matrix LU preconditioner 자동 선택.
+     schur: auto → nonlocal cover-layer 감지 시 iter Schur reduction 자동 활성화.)
     """
 
     def build_excitation(self) -> Any:

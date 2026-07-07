@@ -351,9 +351,11 @@ def _build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
         'n_gpus_per_worker': args.n_gpus_per_worker,
         'multi_node': args.multi_node if args.multi_node else None,
         'vram_share_backend': args.vram_share_backend}
-    # green build 를 컬럼 chunk 로 분산 (단일 GPU 메모리 초과 mesh 대응).
-    # n_gpus_per_worker>1 이면 자동 활성; 나머지 vram_share 필드는
-    # _ensure_vram_share_cfg 가 setdefault 로 채운다.
+    # Distribute the green build across column chunks (for meshes exceeding a
+    # single GPU's memory). Auto-enabled when n_gpus_per_worker>1; the remaining
+    # vram_share fields are filled in by _ensure_vram_share_cfg via setdefault.
+    # (green build 를 컬럼 chunk 로 분산 — 단일 GPU 메모리 초과 mesh 대응. n_gpus_per_worker>1 이면
+    #  자동 활성; 나머지 vram_share 필드는 _ensure_vram_share_cfg 가 setdefault 로 채운다.)
     if int(args.n_gpus_per_worker) > 1:
         compute['vram_share'] = {'distributed': True}
     return {

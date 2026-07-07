@@ -2,6 +2,8 @@
 
 Python wrapper for MNPBEM (Metal Nanoparticle Boundary Element Method) simulations.
 
+> English README: [README.en.md](./README.en.md).
+
 기존 MATLAB-기반 `mnpbem_simulation` wrapper 를 폐기하고 Python MNPBEM port (`/home/yoojk20/workspace/MNPBEM`) 를 직접 호출하도록 재작성한 것이다.
 
 핵심 변경:
@@ -96,6 +98,50 @@ python -m pymnpbem_simulation.migration.yaml_to_str_sim \
     input.yaml out_str.py out_sim.py
 ```
 
+### Postprocess 분석 config: `--anal-conf` (재현 가능한 분석)
+
+시뮬레이션이 `--str-conf`/`--sim-conf` 로 config-driven 이듯, 후처리 분석
+(Fano 위상차·eigenmode·multipole·spectrum)도 `--anal-conf <.py>` 로 하이퍼파라미터를
+config 에 담아 재현 가능하게 돌린다. 우선순위: **명시적 CLI 플래그 > `--anal-conf` > 기본값**.
+
+```bash
+# 분석 하이퍼파라미터를 config 로 (examples/fano_anal.py 참고)
+python run_postprocess.py \
+    --anal-conf examples/fano_anal.py \
+    --result /path/to/case/spectrum.npz          # result 는 config 에 넣어도 됨
+
+# CLI 로 개별 override (config 값보다 우선)
+python run_postprocess.py --anal-conf examples/fano_anal.py \
+    --result .../spectrum.npz --analyzers spectrum,fano-analysis --xaxis energy
+```
+
+`anal-conf` .py 는 `args = {...}` dict 로 argparse dest 키(`analyzers`, `fano_features`,
+`fano_pol`, `n_modes`, `max_l`, `export_formats`, `xaxis`, `eig_cache`, `case_dir`,
+`result`, `output` 등)를 담는다. 콤마-문자열 옵션은 Python list 로도, `polarizations`
+는 중첩 list 로도 쓸 수 있다.
+
+### 전체 파이프라인 한번에: `master.py` (시뮬 → 분석)
+
+시뮬(`--str-conf`/`--sim-conf`)과 분석(`--anal-conf`)을 한 명령으로 연달아 실행한다.
+`run_simulation` → (각 케이스 output 자동 탐색) → `run_postprocess` 순으로 돈다.
+
+```bash
+# 단일 케이스: 시뮬 후 분석까지
+python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py \
+    --n-gpus-per-worker 1 --n-threads 8
+
+# sweep: 다중 케이스 시뮬 후 각 케이스 분석
+python master.py --sweep-conf sweep.yaml --anal-conf A.py
+
+# 기존 출력 재분석만 (시뮬 skip) / 시뮬만 (분석 skip)
+python master.py --skip-sim --sim-conf M.py --anal-conf A.py
+python master.py --str-conf S.py --sim-conf M.py --skip-analysis
+```
+
+sigma(표면전하 σ / 표면전류) 캐시는 시뮬 중 자동 저장(`simulation.save_sigma_cache`, 기본 `true`)되어
+분석이 BEM 재-solve 없이 이걸 재사용한다. sim/postprocess 로 그대로 넘길 추가 플래그는
+`--sim-extra "..."` / `--anal-extra "..."`.
+
 자세한 CLI 옵션은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md)
 또는 `python run_simulation.py --help` 참조.
 
@@ -122,9 +168,16 @@ pymnpbem_simulation/
 
 ## Status
 
-- Phase 1 (cleanup + 분석): 완료 (2026-05-02)
-- Phase 2 Wave 1 (foundation): 진행 중 — skeleton + dimer baseline
-- Phase 2 Wave 2-4 (feature 확장 + 회귀): 계획됨
+프로덕션 사용 중. Python MNPBEM 포트(`/home/yoojk20/workspace/MNPBEM`)를 직접 호출하는
+end-to-end 파이프라인이 안정 동작하며, Au/Au@Ag/core-shell dimer sweep 등 대규모 캠페인에 쓰이고 있다.
+
+- **시뮬레이션 모드**: planewave / dipole / EELS × quasistatic(stat) / retarded(ret), 진공 및 기판(layered Green/Sommerfeld)
+- **구조 빌더 12+**: sphere, dimer, core-shell, custom 유전체 셸(`refractive_index_paths`), monomer, advanced_dimer_cube(rounded-edge) 등
+- **3-축 병렬** (`n_workers × n_threads × n_gpus_per_worker`) + SLURM/PBS 자동 감지 + GPU pin 격리 sweep
+- **GPU 가속**(cupy) + **multi-GPU VRAM-share**(cuSolverMg 분산 dense LU) — 단일 GPU VRAM(48GB) 초과 mesh 지원
+- **sigma 캐시**: 표면전하(σ) 덤프/재로드로 BEM 재-solve 없이 스펙트럼·필드·관측량 재계산 + spectrum sweep RESUME
+- **postprocess**: Fano 분석(qs full-eig 기반 bright/dark + dipole 위상 + Lorentzian fit), 표면전하 시각화, eigenmode 분석
+- **검증**: MATLAB MNPBEM 대비 72-demo 회귀 (max rel err ~10⁻³·⁹, median ~10⁻¹³·⁵)
 
 ## License
 

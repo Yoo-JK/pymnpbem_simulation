@@ -10,6 +10,7 @@ import numpy as np
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    _apply_anal_conf(args)   # merge --anal-conf under CLI flags (CLI wins)
 
     from pymnpbem_simulation.util import (
             print_info, print_error, ensure_dir, save_json)
@@ -140,23 +141,34 @@ def _build_parser() -> argparse.ArgumentParser:
             prog = 'pymnpbem_postprocess',
             description = 'Run postprocess analyzers on existing simulation result (.npz).')
 
-    parser.add_argument('--result', type = str, required = True,
-            help = 'Path to result .npz file (with wavelength/ext/sca/abs).')
-    parser.add_argument('--analyzers', type = str,
-            default = 'spectrum',
-            help = 'Comma-separated: spectrum,fano,eigenmode,multipole,fano-analysis.')
+    # NOTE: analyzer hyperparameters default to None so we can tell "not given
+    # on the CLI" apart from an explicit value.  _apply_anal_conf() then fills
+    # each None from --anal-conf (if provided) or the built-in default.
+    # Precedence: explicit CLI flag > --anal-conf > built-in default.
+    # (분석 하이퍼파라미터를 --anal-conf 로도 줄 수 있게; CLI 플래그가 최우선.)
+    parser.add_argument('--result', type = str, default = None,
+            help = 'Path to result .npz file (with wavelength/ext/sca/abs). '
+                   'Required unless provided via --anal-conf (result=).')
+    parser.add_argument('--anal-conf', type = str, default = None,
+            help = 'Analysis config .py that defines args = {...} with analyzer '
+                   'hyperparameters (same style as --str-conf/--sim-conf). '
+                   'Explicit CLI flags override it. '
+                   '(분석 하이퍼파라미터 config; --str-conf/--sim-conf 와 동일 스타일.)')
+    parser.add_argument('--analyzers', type = str, default = None,
+            help = 'Comma-separated: spectrum,fano,eigenmode,multipole,fano-analysis. '
+                   '(default: spectrum)')
     parser.add_argument('--output', type = str, default = None,
             help = 'Output directory (default: alongside result).')
 
-    parser.add_argument('--fano-peaks', type = int, default = 1,
-            help = 'Number of Fano peaks (>=2 uses multi_fano_fit).')
+    parser.add_argument('--fano-peaks', type = int, default = None,
+            help = 'Number of Fano peaks (>=2 uses multi_fano_fit). (default: 1)')
 
     parser.add_argument('--config', type = str, default = None,
             help = 'YAML config (needed for eigenmode/multipole — rebuilds particle).')
-    parser.add_argument('--n-modes', type = int, default = 10,
-            help = 'Number of eigenmodes (qs_eigenmodes).')
-    parser.add_argument('--max-l', type = int, default = 4,
-            help = 'Multipole expansion order.')
+    parser.add_argument('--n-modes', type = int, default = None,
+            help = 'Number of eigenmodes (qs_eigenmodes). (default: 10)')
+    parser.add_argument('--max-l', type = int, default = None,
+            help = 'Multipole expansion order. (default: 4)')
 
     parser.add_argument('--export-formats', type = str, default = None,
             help = 'Comma-separated formats: npz,h5,csv,json,txt.')
@@ -167,25 +179,71 @@ def _build_parser() -> argparse.ArgumentParser:
                    'Defaults to the directory containing --result.')
     parser.add_argument('--fano-features', type = str, default = None,
             help = 'Comma-separated Fano dip energies in eV (e.g. 1.43,1.79,1.91).')
-    parser.add_argument('--fano-pol', type = int, default = 0,
-            help = 'Polarization index for fano-analysis sigma.')
+    parser.add_argument('--fano-pol', type = int, default = None,
+            help = 'Polarization index for fano-analysis sigma. (default: 0)')
     parser.add_argument('--eig-cache', type = str, default = None,
             help = 'Path to the quasistatic full-eig .npz cache (keys: ene,vr,dvec). '
                    'Loaded if present, else computed and saved here (HEAVY).')
 
     parser.add_argument('--xaxis', type = str,
             choices = ['wavelength', 'energy'],
-            default = 'wavelength',
+            default = None,
             help = 'Spectrum x-axis: wavelength(nm) (default) or energy(eV).')
     parser.add_argument('--polarizations', type = str, default = None,
             help = 'JSON list of polarization vectors '
                    '(e.g. \'[[1,0,0],[0,1,0]]\') for unpolarized comparison.')
     parser.add_argument('--excitation', type = str,
             choices = ['planewave', 'dipole', 'eels'],
-            default = 'planewave',
-            help = 'Excitation type for unpolarized check.')
+            default = None,
+            help = 'Excitation type for unpolarized check. (default: planewave)')
 
     return parser
+
+
+# Analyzer hyperparameters that --anal-conf can set, with their built-in
+# defaults.  Keys match the argparse dest names (underscored).
+_ANAL_CONF_DEFAULTS = {
+    'result': None, 'analyzers': 'spectrum', 'output': None,
+    'fano_peaks': 1, 'config': None, 'n_modes': 10, 'max_l': 4,
+    'export_formats': None, 'case_dir': None, 'fano_features': None,
+    'fano_pol': 0, 'eig_cache': None, 'xaxis': 'wavelength',
+    'polarizations': None, 'excitation': 'planewave',
+}
+
+
+def _apply_anal_conf(args: argparse.Namespace) -> None:
+    """Merge --anal-conf (.py with args={...}) under the CLI flags.
+
+    Precedence: explicit CLI flag > --anal-conf value > built-in default.
+    A None on the namespace means the flag was not given on the CLI, so the
+    config (or the built-in default) fills it in — this keeps the analyzer
+    hyperparameters config-driven and reproducible, mirroring the
+    --str-conf/--sim-conf pattern of run_simulation.py.
+    (분석 하이퍼파라미터를 config 로 받아 재현 가능하게. 우선순위: CLI > anal-conf > 기본값.)
+    """
+    conf = {}
+    if getattr(args, 'anal_conf', None):
+        from pymnpbem_simulation.config import load_py_config
+        conf = load_py_config(args.anal_conf)
+        print('[info] loading anal-conf <{}> ({} keys)'.format(args.anal_conf, len(conf)))
+        unknown = set(conf) - set(_ANAL_CONF_DEFAULTS)
+        if unknown:
+            print('[warn] anal-conf: unknown keys ignored: {}'.format(sorted(unknown)))
+    for key, hard in _ANAL_CONF_DEFAULTS.items():
+        if getattr(args, key, None) is not None:
+            continue                      # explicit CLI flag wins
+        setattr(args, key, conf.get(key, hard))
+    # Allow natural Python types in the config: lists for the comma-string
+    # options, and a nested list for polarizations (JSON string downstream).
+    for key in ('analyzers', 'export_formats', 'fano_features'):
+        val = getattr(args, key, None)
+        if isinstance(val, (list, tuple)):
+            setattr(args, key, ','.join(str(x) for x in val))
+    if isinstance(getattr(args, 'polarizations', None), (list, tuple)):
+        import json as _json
+        args.polarizations = _json.dumps(args.polarizations)
+    if not args.result:
+        raise SystemExit('[error] --result (or result= in --anal-conf) is required.')
 
 
 def _load_result(path: str) -> Dict[str, Any]:
