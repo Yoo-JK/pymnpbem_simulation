@@ -13,7 +13,7 @@ from ..util import print_info
 class PlaneWaveRetLayerIterRunner(SimulationRunner):
     """Iterative retarded plane-wave with substrate (BEMRetLayerIter, GMRES + ACA).
 
-    YAML config 예시::
+    YAML config example (예시)::
 
         structure:
           type: with_substrate
@@ -21,7 +21,7 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
           substrate: { eps: glass, gap: 0.001 }
 
         simulation:
-          type: planewave_ret_layer_iter   # 또는 ret_layer_iter
+          type: planewave_ret_layer_iter   # or ret_layer_iter (또는 ret_layer_iter)
           excitation: planewave
           enei_min: 500
           enei_max: 800
@@ -38,9 +38,10 @@ class PlaneWaveRetLayerIterRunner(SimulationRunner):
             htol: 1.0e-6
             kmax: [4, 100]
 
-    BEMRetLayerIter 는 layer Green function 을 ACA 로 압축하므로 substrate 가 있는
-    매우 큰 mesh 에서 메모리/시간을 모두 절약. 작은 mesh 에서는 dense BEMRetLayer
-    가 더 빠를 수 있다.
+    BEMRetLayerIter compresses the layer Green function with ACA, saving both
+    memory and time for very large meshes on a substrate; for small meshes the
+    dense BEMRetLayer may be faster.
+    (layer Green 을 ACA 로 압축 → substrate 대형 mesh 에서 메모리/시간 절약. 작은 mesh 는 dense 가 빠를 수 있음.)
     """
 
     def build_layer(self) -> Any:

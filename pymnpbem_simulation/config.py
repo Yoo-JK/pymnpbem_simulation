@@ -245,8 +245,9 @@ def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
     material_name = sub_spec.get('material', 'glass') if isinstance(sub_spec, dict) else 'glass'
 
     if isinstance(sub_spec, dict) and ('position' in sub_spec or 'z_shift' in sub_spec):
-        print('[warn] substrate spec 에 <position>/<z_shift> 발견 — 무시됨. '
-                '<gap> 만 지원.')
+        # bilingual warning (영/한 병기)
+        print('[warn] substrate spec has <position>/<z_shift> — ignored; only <gap> is supported. '
+                '(substrate spec 에 <position>/<z_shift> 발견 — 무시됨. <gap> 만 지원.)')
 
     gap = float(sub_spec.get('gap', 0.001)) if isinstance(sub_spec, dict) else 0.001
 

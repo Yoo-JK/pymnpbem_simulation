@@ -10,7 +10,8 @@ _VALID_MIRROR_KEYS = {'x', 'y', 'xy'}
 
 
 class WithMirrorBuilder(StructureBuilder):
-    """기존 구조에 mirror symmetry 를 적용해 절반 mesh 만 BEM 으로 푼다.
+    """Apply mirror symmetry to an existing structure so only half the mesh is solved by BEM.
+    (기존 구조에 mirror symmetry 를 적용해 절반 mesh 만 BEM 으로 푼다.)
 
     YAML config::
 
@@ -21,18 +22,23 @@ class WithMirrorBuilder(StructureBuilder):
             diameter: 30
             mesh_density: 60
           mirror:
-            sym: xy           # 'x' / 'y' / 'xy' (MNPBEM ComParticleMirror 와 동일)
+            sym: xy           # 'x' / 'y' / 'xy' (same as MNPBEM ComParticleMirror / 와 동일)
 
-    동작 흐름:
-      1. ``base`` 구조를 기존 REGISTRY 로 빌드 (``p_base, epstab, _``)
-      2. ``ComParticle`` 의 inout/particles 정보를 추출해 ``ComParticleMirror`` 로 재구성
-      3. mirror 입자를 그대로 반환. 다운스트림 simulation runner 는 일반 BEMRet/BEMStat 대신
-         자동 dispatch 로 BEM*Mirror solver 를 골라야 한다.
+    Flow (동작 흐름):
+      1. Build the ``base`` structure via the existing REGISTRY (``p_base, epstab, _``).
+         (``base`` 구조를 기존 REGISTRY 로 빌드.)
+      2. Extract ``ComParticle`` inout/particles info and rebuild as ``ComParticleMirror``.
+         (``ComParticle`` 의 inout/particles 를 추출해 ``ComParticleMirror`` 로 재구성.)
+      3. Return the mirror particle as-is; the downstream simulation runner must auto-dispatch
+         to a BEM*Mirror solver instead of the plain BEMRet/BEMStat.
+         (mirror 입자를 반환. 다운스트림 runner 는 자동 dispatch 로 BEM*Mirror solver 선택.)
 
-    sym 의 의미 (MATLAB 동등):
-      - 'x'  : x=0 mirror plane → 전체 입자 수 2 배. base mesh 는 원본 그대로.
-      - 'y'  : y=0 mirror plane → 동일.
-      - 'xy' : x=0, y=0 두 plane → 전체 입자 수 4 배. 4× 가속.
+    Meaning of sym (MATLAB equivalent / MATLAB 동등):
+      - 'x'  : x=0 mirror plane → 2x total particle count; base mesh stays the original.
+               (x=0 mirror plane → 전체 입자 수 2 배. base mesh 는 원본 그대로.)
+      - 'y'  : y=0 mirror plane → same. (동일.)
+      - 'xy' : x=0, y=0 two planes → 4x total particle count; 4x speedup.
+               (두 plane → 전체 입자 수 4 배. 4× 가속.)
     """
 
     def build(self) -> Tuple[Any, Any, int]:

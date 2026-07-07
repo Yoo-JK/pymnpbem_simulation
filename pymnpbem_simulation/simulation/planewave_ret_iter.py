@@ -11,10 +11,10 @@ from ..util import print_info
 class PlaneWaveRetIterRunner(SimulationRunner):
     """Iterative retarded plane-wave BEM (BEMRetIter, GMRES + ACA H-matrix).
 
-    YAML config 예시::
+    YAML config example (예시)::
 
         simulation:
-          type: planewave_ret_iter      # 또는 ret_iter
+          type: planewave_ret_iter      # or ret_iter (또는 ret_iter)
           excitation: planewave
           enei_min: 500
           enei_max: 800
@@ -32,26 +32,31 @@ class PlaneWaveRetIterRunner(SimulationRunner):
             htol: 1.0e-6
             kmax: [4, 100]
             cleaf: 200
-            # v1.5.0 신규
+            # new in v1.5.0 (v1.5.0 신규)
             preconditioner: auto        # auto | none | hlu_dense | hlu_tree
             htol_precond: 1.0e-4
-            schur: auto                 # auto | true | false (cover-layer 자동)
+            schur: auto                 # auto | true | false (cover-layer auto / 자동)
             schur_g_ss_solver: auto     # auto | lu_dense | gmres
             schur_inner_tol: 1.0e-8
 
-    ``hmatrix: auto`` (default) -> mesh face count 가 5000 을 초과할 때만
-    ACA H-matrix Green function 을 활성화한다. 작은 mesh 에서는 dense
-    G/H 가 더 빠르므로 auto 가 합리적인 기본값.
+    ``hmatrix: auto`` (default) -> enable the ACA H-matrix Green function only
+    when the mesh face count exceeds 5000; dense G/H is faster for small meshes,
+    so auto is a sensible default.
+    (mesh face 가 5000 을 초과할 때만 ACA H-matrix Green 을 켠다. 작은 mesh 는 dense 가 빠름.)
 
-    ``preconditioner: auto`` (v1.5.0) -> H-matrix LU preconditioner 를
-    auto-dispatch (작은 트리 → dense, 큰 트리 → tree-Schur). hmatrix=False
-    인 경우에도 BEM solver 가 알아서 처리.
+    ``preconditioner: auto`` (v1.5.0) -> auto-dispatch the H-matrix LU
+    preconditioner (small tree -> dense, large tree -> tree-Schur); handled by
+    the BEM solver even when hmatrix=False.
+    (H-matrix LU preconditioner 를 auto-dispatch. hmatrix=False 여도 solver 가 처리.)
 
-    ``schur: auto`` (v1.5.0) -> nonlocal cover-layer 가 감지되면 iter-path
-    Schur reduction 자동 활성화 (β branch).
+    ``schur: auto`` (v1.5.0) -> auto-enable iter-path Schur reduction when a
+    nonlocal cover-layer is detected (β branch).
+    (nonlocal cover-layer 감지 시 iter-path Schur reduction 자동 활성화.)
 
-    BEMRetIter 와 BEMRet 의 결과 차이는 GMRES tolerance (기본 1e-6) 만큼.
-    매우 큰 mesh (수천 face 이상) 에서는 메모리/시간 모두 dense 보다 효율적.
+    The BEMRetIter vs BEMRet difference is within the GMRES tolerance
+    (default 1e-6); for very large meshes (thousands of faces+) it is more
+    memory- and time-efficient than dense.
+    (두 solver 결과 차이는 GMRES tolerance 만큼. 매우 큰 mesh 에선 dense 보다 효율적.)
     """
 
     def build_excitation(self) -> Any:

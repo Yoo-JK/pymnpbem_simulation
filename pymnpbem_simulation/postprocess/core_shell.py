@@ -59,7 +59,7 @@ class CoreShellSeparator(object):
         # via core_shell_cube / dimer_core_shell_cube type.
         shell_layers = self.config.get('shell_layers', None)
         if shell_layers is None and 'shell' in stype:
-            # Allow legacy fields (core_size + shell_thickness 단일 layer).
+            # Allow legacy fields (core_size + shell_thickness, single layer / 단일 layer).
             thickness = self.config.get('shell_thickness', None)
             if thickness is not None:
                 shell_layers = [float(thickness)]

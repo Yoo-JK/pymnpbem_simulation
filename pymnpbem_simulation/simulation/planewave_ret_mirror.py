@@ -11,7 +11,7 @@ from ..util import print_info
 class PlaneWaveRetMirrorRunner(SimulationRunner):
     """Retarded plane-wave on a mirror-symmetric particle (BEMRetMirror).
 
-    YAML config 예시::
+    YAML config example (예시)::
 
         structure:
           type: with_mirror
@@ -24,12 +24,14 @@ class PlaneWaveRetMirrorRunner(SimulationRunner):
           enei_min: 500
           enei_max: 800
           n_wavelengths: 11
-          polarizations: [[1, 0, 0], [0, 1, 0]]    # z-pol 금지 (mirror 제약)
+          polarizations: [[1, 0, 0], [0, 1, 0]]    # z-pol forbidden (mirror constraint) / z-pol 금지 (mirror 제약)
           propagation_dirs: [[0, 0, 1], [0, 0, 1]]
 
-    제약:
-      - PlaneWaveRetMirror 는 pol[:, 2] == 0 만 지원 (in-plane polarization)
-      - dir 는 [0, 0, ±1] 형태만 의미. 다른 방향은 mirror 대칭 깨뜨림.
+    Constraints (제약):
+      - PlaneWaveRetMirror only supports pol[:, 2] == 0 (in-plane polarization)
+        (PlaneWaveRetMirror 는 pol[:, 2] == 0 만 지원 — in-plane polarization)
+      - dir is only meaningful as [0, 0, ±1]; other directions break the mirror symmetry.
+        (dir 는 [0, 0, ±1] 형태만 의미 — 다른 방향은 mirror 대칭을 깨뜨림.)
     """
 
     def build_excitation(self) -> Any:

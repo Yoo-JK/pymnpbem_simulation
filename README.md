@@ -2,6 +2,8 @@
 
 Python wrapper for MNPBEM (Metal Nanoparticle Boundary Element Method) simulations.
 
+> English README: [README.en.md](./README.en.md).
+
 기존 MATLAB-기반 `mnpbem_simulation` wrapper 를 폐기하고 Python MNPBEM port (`/home/yoojk20/workspace/MNPBEM`) 를 직접 호출하도록 재작성한 것이다.
 
 핵심 변경:

@@ -64,8 +64,9 @@ class WithSubstrateBuilder(StructureBuilder):
 
         if 'z_position' in cfg_sub or 'z_shift' in cfg_sub:
             print_info(
-                '[warn] WithSubstrate: <z_position>/<z_shift> 무시됨 — '
-                '<gap> 만 지원 (default 0.001 nm = touching).')
+                '[warn] WithSubstrate: <z_position>/<z_shift> ignored — only <gap> is '
+                'supported (default 0.001 nm = touching). '
+                '(<z_position>/<z_shift> 무시됨 — <gap> 만 지원.)')
 
         gap = float(cfg_sub.get('gap', 0.001))
         eps_sub_spec = cfg_sub.get('eps', 'glass')
