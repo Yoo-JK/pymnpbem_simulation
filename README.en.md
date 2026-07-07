@@ -100,6 +100,29 @@ python -m pymnpbem_simulation.migration.yaml_to_str_sim \
     input.yaml out_str.py out_sim.py
 ```
 
+### Postprocess analysis config: `--anal-conf` (reproducible analysis)
+
+Just as the simulation is config-driven via `--str-conf`/`--sim-conf`, the postprocess
+analyses (Fano phase, eigenmode, multipole, spectrum) can be made reproducible by putting
+their hyperparameters in an `--anal-conf <.py>` file. Precedence:
+**explicit CLI flag > `--anal-conf` > built-in default**.
+
+```bash
+# Analyzer hyperparameters via config (see examples/fano_anal.py)
+python run_postprocess.py \
+    --anal-conf examples/fano_anal.py \
+    --result /path/to/case/spectrum.npz          # result may also live in the config
+
+# Override individual options on the CLI (wins over the config)
+python run_postprocess.py --anal-conf examples/fano_anal.py \
+    --result .../spectrum.npz --analyzers spectrum,fano-analysis --xaxis energy
+```
+
+An `anal-conf` .py defines `args = {...}` with argparse dest keys (`analyzers`,
+`fano_features`, `fano_pol`, `n_modes`, `max_l`, `export_formats`, `xaxis`, `eig_cache`,
+`case_dir`, `result`, `output`, ...). Comma-string options also accept a Python list, and
+`polarizations` accepts a nested list.
+
 For all CLI options see [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md),
 or `python run_simulation.py --help`.
 

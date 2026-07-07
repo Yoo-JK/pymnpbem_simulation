@@ -98,6 +98,28 @@ python -m pymnpbem_simulation.migration.yaml_to_str_sim \
     input.yaml out_str.py out_sim.py
 ```
 
+### Postprocess 분석 config: `--anal-conf` (재현 가능한 분석)
+
+시뮬레이션이 `--str-conf`/`--sim-conf` 로 config-driven 이듯, 후처리 분석
+(Fano 위상차·eigenmode·multipole·spectrum)도 `--anal-conf <.py>` 로 하이퍼파라미터를
+config 에 담아 재현 가능하게 돌린다. 우선순위: **명시적 CLI 플래그 > `--anal-conf` > 기본값**.
+
+```bash
+# 분석 하이퍼파라미터를 config 로 (examples/fano_anal.py 참고)
+python run_postprocess.py \
+    --anal-conf examples/fano_anal.py \
+    --result /path/to/case/spectrum.npz          # result 는 config 에 넣어도 됨
+
+# CLI 로 개별 override (config 값보다 우선)
+python run_postprocess.py --anal-conf examples/fano_anal.py \
+    --result .../spectrum.npz --analyzers spectrum,fano-analysis --xaxis energy
+```
+
+`anal-conf` .py 는 `args = {...}` dict 로 argparse dest 키(`analyzers`, `fano_features`,
+`fano_pol`, `n_modes`, `max_l`, `export_formats`, `xaxis`, `eig_cache`, `case_dir`,
+`result`, `output` 등)를 담는다. 콤마-문자열 옵션은 Python list 로도, `polarizations`
+는 중첩 list 로도 쓸 수 있다.
+
 자세한 CLI 옵션은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md)
 또는 `python run_simulation.py --help` 참조.
 
