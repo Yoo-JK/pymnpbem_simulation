@@ -122,9 +122,16 @@ pymnpbem_simulation/
 
 ## Status
 
-- Phase 1 (cleanup + 분석): 완료 (2026-05-02)
-- Phase 2 Wave 1 (foundation): 진행 중 — skeleton + dimer baseline
-- Phase 2 Wave 2-4 (feature 확장 + 회귀): 계획됨
+프로덕션 사용 중. Python MNPBEM 포트(`/home/yoojk20/workspace/MNPBEM`)를 직접 호출하는
+end-to-end 파이프라인이 안정 동작하며, Au/Au@Ag/core-shell dimer sweep 등 대규모 캠페인에 쓰이고 있다.
+
+- **시뮬레이션 모드**: planewave / dipole / EELS × quasistatic(stat) / retarded(ret), 진공 및 기판(layered Green/Sommerfeld)
+- **구조 빌더 12+**: sphere, dimer, core-shell, custom 유전체 셸(`refractive_index_paths`), monomer, advanced_dimer_cube(rounded-edge) 등
+- **3-축 병렬** (`n_workers × n_threads × n_gpus_per_worker`) + SLURM/PBS 자동 감지 + GPU pin 격리 sweep
+- **GPU 가속**(cupy) + **multi-GPU VRAM-share**(cuSolverMg 분산 dense LU) — 단일 GPU VRAM(48GB) 초과 mesh 지원
+- **sigma 캐시**: 표면전하(σ) 덤프/재로드로 BEM 재-solve 없이 스펙트럼·필드·관측량 재계산 + spectrum sweep RESUME
+- **postprocess**: Fano 분석(qs full-eig 기반 bright/dark + dipole 위상 + Lorentzian fit), 표면전하 시각화, eigenmode 분석
+- **검증**: MATLAB MNPBEM 대비 72-demo 회귀 (max rel err ~10⁻³·⁹, median ~10⁻¹³·⁵)
 
 ## License
 
