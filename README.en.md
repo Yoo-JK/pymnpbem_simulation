@@ -123,6 +123,28 @@ An `anal-conf` .py defines `args = {...}` with argparse dest keys (`analyzers`,
 `case_dir`, `result`, `output`, ...). Comma-string options also accept a Python list, and
 `polarizations` accepts a nested list.
 
+### Whole pipeline in one command: `master.py` (simulate → analyze)
+
+Runs the simulation (`--str-conf`/`--sim-conf`) and the analysis (`--anal-conf`) back-to-back
+in a single command: `run_simulation` → (auto-locate each case output) → `run_postprocess`.
+
+```bash
+# Single case: simulate then analyze
+python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py \
+    --n-gpus-per-worker 1 --n-threads 8
+
+# Sweep: simulate all cases then analyze each
+python master.py --sweep-conf sweep.yaml --anal-conf A.py
+
+# Re-analyze existing output only (skip sim) / simulate only (skip analysis)
+python master.py --skip-sim --sim-conf M.py --anal-conf A.py
+python master.py --str-conf S.py --sim-conf M.py --skip-analysis
+```
+
+The sigma (surface charge σ / surface current) cache is written during the simulation
+(`simulation.save_sigma_cache`, default `true`), so the analysis reuses it without re-solving
+the BEM system. Pass extra flags straight through with `--sim-extra "..."` / `--anal-extra "..."`.
+
 For all CLI options see [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md),
 or `python run_simulation.py --help`.
 

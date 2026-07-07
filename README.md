@@ -120,6 +120,28 @@ python run_postprocess.py --anal-conf examples/fano_anal.py \
 `result`, `output` 등)를 담는다. 콤마-문자열 옵션은 Python list 로도, `polarizations`
 는 중첩 list 로도 쓸 수 있다.
 
+### 전체 파이프라인 한번에: `master.py` (시뮬 → 분석)
+
+시뮬(`--str-conf`/`--sim-conf`)과 분석(`--anal-conf`)을 한 명령으로 연달아 실행한다.
+`run_simulation` → (각 케이스 output 자동 탐색) → `run_postprocess` 순으로 돈다.
+
+```bash
+# 단일 케이스: 시뮬 후 분석까지
+python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py \
+    --n-gpus-per-worker 1 --n-threads 8
+
+# sweep: 다중 케이스 시뮬 후 각 케이스 분석
+python master.py --sweep-conf sweep.yaml --anal-conf A.py
+
+# 기존 출력 재분석만 (시뮬 skip) / 시뮬만 (분석 skip)
+python master.py --skip-sim --sim-conf M.py --anal-conf A.py
+python master.py --str-conf S.py --sim-conf M.py --skip-analysis
+```
+
+sigma(표면전하 σ / 표면전류) 캐시는 시뮬 중 자동 저장(`simulation.save_sigma_cache`, 기본 `true`)되어
+분석이 BEM 재-solve 없이 이걸 재사용한다. sim/postprocess 로 그대로 넘길 추가 플래그는
+`--sim-extra "..."` / `--anal-extra "..."`.
+
 자세한 CLI 옵션은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md)
 또는 `python run_simulation.py --help` 참조.
 
