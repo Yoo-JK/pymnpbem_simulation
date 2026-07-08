@@ -1,19 +1,25 @@
 #!/usr/bin/env python
-"""master.py — simulation -> postprocess 를 한 번에 (config-driven end-to-end).
-Run the full pipeline (simulate then analyze) from configs in a single command.
+"""master.py — one command; action is inferred from which configs you pass.
 
-single case (단일 케이스):
-  python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py \
-      [--n-workers N --n-threads N --n-gpus-per-worker N --auto]
+  # simulate only  (str + sim are a set)
+  python master.py --str-conf S.py --sim-conf M.py [--verbose]
 
-sweep (다중 케이스):
-  python master.py --sweep-conf sweep.yaml --anal-conf A.py [옵션]
+  # simulate then analyze + save  (add --anal-conf)
+  python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py
 
-내부적으로 run_simulation.py 를 돌려 spectrum.npz + sigma 캐시를 만들고, 각 케이스의
-출력(output_dir/simulation_name)을 찾아 run_postprocess.py --anal-conf 로 분석까지 이어 실행한다.
-(Wraps run_simulation.py then run_postprocess.py; locates each case output from its sim
-config and feeds --result/--case-dir to postprocess. --anal-conf hyperparameters are
-config-driven, mirroring --str-conf/--sim-conf.)
+  # analyze only, no compute  (sim-conf just locates the existing output)
+  python master.py --sim-conf M.py --anal-conf A.py
+
+  # sweep (multi-case); analyze each if --anal-conf given
+  python master.py --sweep-conf sweep.yaml [--anal-conf A.py]
+
+Rules (규칙):
+  - --str-conf + --sim-conf  -> run the simulation (they are a set; str needs sim).
+  - --anal-conf              -> run the postprocess/analysis (optional; most runs skip it).
+  - --sim-conf + --anal-conf without --str-conf -> postprocess ONLY the existing output
+    (the sim-conf supplies output_dir/simulation_name so we can find spectrum.npz + sigma/).
+Wraps run_simulation.py and run_postprocess.py; no --skip-* flags — presence of the
+configs decides what runs. (분석은 --anal-conf 가 있을 때만; 대부분은 str+sim 만.)
 """
 import argparse
 import os
@@ -29,8 +35,8 @@ RUN_POST = os.path.join(HERE, 'run_postprocess.py')
 def _resolve_case_dir(sim_conf_path):
     """Return <output_dir>/<simulation_name> for a sim-conf, or None.
 
-    Accepts the flat sim-conf keys (output_dir / simulation_name) or the nested
-    output.{dir,name} form. (sim-conf 에서 출력 케이스 폴더를 계산.)
+    Accepts flat sim-conf keys (output_dir / simulation_name) or nested
+    output.{dir,name}. (sim-conf 에서 출력 케이스 폴더를 계산 — 분석-only 에서 결과 위치 파악용.)
     """
     sys.path.insert(0, HERE)
     from pymnpbem_simulation.config import load_py_config
@@ -64,6 +70,8 @@ def _sim_cmd(args, str_conf = None, sim_conf = None, sweep_conf = None):
             cmd += [flag, str(val)]
     if args.auto:
         cmd += ['--auto']
+    if args.verbose:
+        cmd += ['--verbose']
     if args.sim_extra:
         cmd += args.sim_extra.split()
     return cmd
@@ -80,7 +88,7 @@ def _anal_cmd(args, case_dir):
 
 
 def _enumerate_sim_confs(args):
-    """List of sim-conf paths to postprocess (one per case)."""
+    """sim-conf paths to postprocess (one per case)."""
     if not args.sweep_conf:
         return [args.sim_conf]
     sys.path.insert(0, HERE)
@@ -92,40 +100,49 @@ def _enumerate_sim_confs(args):
 def main(argv = None):
     p = argparse.ArgumentParser(
             prog = 'pymnpbem_master',
-            description = 'Run simulation then postprocess in one command (config-driven).')
-    p.add_argument('--str-conf', default = None)
-    p.add_argument('--sim-conf', default = None)
+            description = 'Simulate and/or analyze; the action is inferred from the configs given.')
+    p.add_argument('--str-conf', default = None,
+            help = 'Structure config .py. With --sim-conf -> run the simulation.')
+    p.add_argument('--sim-conf', default = None,
+            help = 'Simulation config .py. Required for both simulate and analyze-only '
+                   '(it supplies the output location).')
+    p.add_argument('--anal-conf', default = None,
+            help = 'Analysis config .py. Given -> run postprocess. Omit -> no analysis '
+                   '(대부분의 실행은 생략).')
     p.add_argument('--sweep-conf', default = None,
             help = 'Sweep YAML (multi-case). Mutually exclusive with --str-conf/--sim-conf.')
-    p.add_argument('--anal-conf', default = None,
-            help = 'Analysis config .py (run_postprocess --anal-conf). Omit to skip analysis.')
     # simulation compute passthrough
     p.add_argument('--n-workers', type = int, default = None)
     p.add_argument('--n-threads', type = int, default = None)
     p.add_argument('--n-gpus-per-worker', type = int, default = None)
     p.add_argument('--auto', action = 'store_true')
-    # phase toggles
-    p.add_argument('--skip-sim', action = 'store_true',
-            help = '시뮬 건너뛰고 기존 출력만 분석 (analyze existing output).')
-    p.add_argument('--skip-analysis', action = 'store_true',
-            help = '시뮬만 하고 분석 생략 (simulate only).')
+    p.add_argument('--verbose', action = 'store_true',
+            help = 'Forwarded to run_simulation.py.')
     # raw passthrough
     p.add_argument('--sim-extra', default = None,
-            help = 'run_simulation.py 로 그대로 넘길 추가 플래그 (한 문자열).')
+            help = 'Extra flags forwarded verbatim to run_simulation.py (one string).')
     p.add_argument('--anal-extra', default = None,
-            help = 'run_postprocess.py 로 그대로 넘길 추가 플래그 (한 문자열).')
+            help = 'Extra flags forwarded verbatim to run_postprocess.py (one string).')
     args = p.parse_args(argv)
 
-    if not args.sweep_conf and not (args.sim_conf and (args.str_conf or args.skip_sim)):
-        p.error('either --sweep-conf, or --str-conf + --sim-conf '
-                '(--str-conf optional with --skip-sim) is required')
-    if args.sweep_conf and (args.str_conf or args.sim_conf):
-        p.error('--sweep-conf is mutually exclusive with --str-conf/--sim-conf')
-    if not args.skip_analysis and not args.anal_conf:
-        p.error('--anal-conf is required unless --skip-analysis')
+    # ---- validate + infer action from the configs present -------------
+    if args.sweep_conf:
+        if args.str_conf or args.sim_conf:
+            p.error('--sweep-conf is mutually exclusive with --str-conf/--sim-conf')
+    else:
+        if args.str_conf and not args.sim_conf:
+            p.error('--str-conf requires --sim-conf (they are a set)')
+        if not args.sim_conf:
+            p.error('need --sim-conf (with --str-conf to simulate, and/or '
+                    '--anal-conf to analyze)')
+        if not args.str_conf and not args.anal_conf:
+            p.error('nothing to do — pass --str-conf to simulate and/or --anal-conf to analyze')
+
+    do_sim = bool(args.sweep_conf) or (bool(args.str_conf) and bool(args.sim_conf))
+    do_anal = bool(args.anal_conf)
 
     # ---- 1) simulation ------------------------------------------------
-    if not args.skip_sim:
+    if do_sim:
         if args.sweep_conf:
             rc = _run(_sim_cmd(args, sweep_conf = args.sweep_conf), 'SIMULATION (sweep)')
         else:
@@ -135,11 +152,12 @@ def main(argv = None):
             print('[master] simulation failed — aborting.', flush = True)
             return rc
     else:
-        print('[master] --skip-sim: 기존 출력 사용 (skip simulation).', flush = True)
+        print('[master] no --str-conf/--sweep-conf: analyze-only (using existing output).',
+              flush = True)
 
-    # ---- 2) postprocess per case -------------------------------------
-    if args.skip_analysis:
-        print('[master] --skip-analysis: 분석 생략, done.', flush = True)
+    # ---- 2) postprocess per case (only when --anal-conf given) --------
+    if not do_anal:
+        print('[master] no --anal-conf: simulation only, done.', flush = True)
         return 0
 
     sim_confs = _enumerate_sim_confs(args)
@@ -147,12 +165,13 @@ def main(argv = None):
     for sc in sim_confs:
         case_dir = _resolve_case_dir(sc)
         if not case_dir:
-            print('[master] WARN: <{}> 에서 output 경로 못 찾음 — 분석 skip.'.format(sc), flush = True)
+            print('[master] WARN: cannot resolve output dir from <{}> — skip analysis.'.format(sc),
+                  flush = True)
             n_fail += 1
             continue
         spec = os.path.join(case_dir, 'spectrum.npz')
         if not os.path.exists(spec):
-            print('[master] WARN: <{}> 없음 — 분석 skip.'.format(spec), flush = True)
+            print('[master] WARN: <{}> not found — skip analysis.'.format(spec), flush = True)
             n_fail += 1
             continue
         rc = _run(_anal_cmd(args, case_dir),
