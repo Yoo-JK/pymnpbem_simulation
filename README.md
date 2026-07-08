@@ -122,25 +122,26 @@ python run_postprocess.py --anal-conf examples/fano_anal.py \
 
 ### 전체 파이프라인 한번에: `master.py` (시뮬 → 분석)
 
-시뮬(`--str-conf`/`--sim-conf`)과 분석(`--anal-conf`)을 한 명령으로 연달아 실행한다.
-`run_simulation` → (각 케이스 output 자동 탐색) → `run_postprocess` 순으로 돈다.
+**넘긴 config 로 동작이 자동 결정된다** (`--skip-*` 플래그 없음): `--str-conf`+`--sim-conf`(세트)면
+시뮬, `--anal-conf` 가 있으면 분석. 분석은 특정 후처리(위상차 등) 할 때만 붙이고 대부분은 str+sim 만.
 
 ```bash
-# 단일 케이스: 시뮬 후 분석까지
-python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py \
-    --n-gpus-per-worker 1 --n-threads 8
+# 시뮬만  (str + sim 은 세트)
+python master.py --str-conf S.py --sim-conf M.py --verbose
 
-# sweep: 다중 케이스 시뮬 후 각 케이스 분석
-python master.py --sweep-conf sweep.yaml --anal-conf A.py
+# 시뮬 + 분석/저장  (--anal-conf 추가; 특정 후처리 할 때만)
+python master.py --str-conf S.py --sim-conf M.py --anal-conf A.py
 
-# 기존 출력 재분석만 (시뮬 skip) / 시뮬만 (분석 skip)
-python master.py --skip-sim --sim-conf M.py --anal-conf A.py
-python master.py --str-conf S.py --sim-conf M.py --skip-analysis
+# 계산 안 하고 후처리만  (str 없이; sim-conf 가 결과 위치를 알려줌)
+python master.py --sim-conf M.py --anal-conf A.py
+
+# sweep(다중); --anal-conf 있으면 각 케이스 분석
+python master.py --sweep-conf sweep.yaml [--anal-conf A.py]
 ```
 
-sigma(표면전하 σ / 표면전류) 캐시는 시뮬 중 자동 저장(`simulation.save_sigma_cache`, 기본 `true`)되어
-분석이 BEM 재-solve 없이 이걸 재사용한다. sim/postprocess 로 그대로 넘길 추가 플래그는
-`--sim-extra "..."` / `--anal-extra "..."`.
+`--str-conf` 는 `--sim-conf` 와 세트다(str 단독 불가). sigma(표면전하 σ / 표면전류) 캐시는 시뮬 중
+자동 저장(`simulation.save_sigma_cache`, 기본 `true`)되어 후처리가 BEM 재-solve 없이 재사용한다.
+sim/postprocess 로 그대로 넘길 추가 플래그는 `--sim-extra "..."` / `--anal-extra "..."`.
 
 자세한 CLI 옵션은 [docs/CLI_GUIDE.md](./docs/CLI_GUIDE.md), [HELP.md](./HELP.md)
 또는 `python run_simulation.py --help` 참조.
