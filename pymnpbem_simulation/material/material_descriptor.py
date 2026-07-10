@@ -15,7 +15,7 @@ def resolve_refractive_index_paths(ri_paths: Dict[str, Any]) -> Dict[str, Any]:
             - {"type": "python_module", "module_path": "...py", "factory": "generate_eps_func"} -> callable
     """
     if not isinstance(ri_paths, dict):
-        return ri_paths
+        raise TypeError("ri_paths must be a dict of material descriptors")
 
     resolved: Dict[str, Any] = {}
 
