@@ -4,7 +4,7 @@ import numpy as np
 
 from .base import StructureBuilder
 from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
-        _resolve_materials_list, _resolve_rip)
+        _resolve_materials_list, _resolve_rip, _resolve_sphere_n)
 from ..util import print_info
 
 
@@ -15,8 +15,8 @@ class DimerSphereBuilder(StructureBuilder):
 
         diameter = float(self.cfg_struct.get('diameter', 50.0))
         gap = float(self.cfg_struct.get('gap', 5.0))
-        n_verts = int(self.cfg_struct.get('n_verts',
-                self.cfg_struct.get('mesh_density', 256)))
+        # Legacy nphi or explicit n_verts/mesh_density — unified via _resolve_sphere_n
+        n_verts = _resolve_sphere_n(self.cfg_struct)
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')
 

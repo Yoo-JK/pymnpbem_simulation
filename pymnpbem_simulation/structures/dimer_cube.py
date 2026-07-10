@@ -1,9 +1,11 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
+from .adaptive_cube_mesh import build_adaptive_cube
 from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
+from .cube import _resolve_face_densities, _resolve_edge_profile_kwargs
 from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
         _resolve_materials_list, _resolve_rip)
 from ..util import print_info
@@ -37,17 +39,32 @@ class DimerCubeBuilder(StructureBuilder):
 
         half = edge / 2 + gap / 2
 
-        cube1 = tricube(n_per_edge, edge, e = e, refine = refine)
-        cube1.shift([-half, 0, 0])
+        face_densities = _resolve_face_densities(self.cfg_struct)
+        edge_profile_kw = _resolve_edge_profile_kwargs(self.cfg_struct)
+        use_adaptive = face_densities is not None or edge_profile_kw is not None
 
-        cube2 = tricube(n_per_edge, edge, e = e, refine = refine)
+        if use_adaptive:
+            cube1 = build_adaptive_cube(
+                size = edge, n_default = n_per_edge,
+                face_densities = face_densities, e = e,
+                edge_profile_kwargs = edge_profile_kw, interp = interp)
+            cube2 = build_adaptive_cube(
+                size = edge, n_default = n_per_edge,
+                face_densities = face_densities, e = e,
+                edge_profile_kwargs = edge_profile_kw, interp = interp)
+        else:
+            cube1 = tricube(n_per_edge, edge, e = e, refine = refine)
+            cube2 = tricube(n_per_edge, edge, e = e, refine = refine)
+
+        cube1.shift([-half, 0, 0])
         cube2.shift([+half, 0, 0])
 
         p = ComParticle(epstab, [cube1, cube2], [[2, 1], [2, 1]],
                 interp = interp, refine = refine)
 
         nfaces = _count_faces(p)
-        print_info('DimerCubeBuilder: edge={}, gap={}, n={}, e={}, refine={}, nfaces={}'.format(
-            edge, gap, n_per_edge, e, refine, nfaces))
+        print_info('DimerCubeBuilder: edge={}, gap={}, n={}, e={}, refine={}, '
+                   'adaptive={}, nfaces={}'.format(
+                       edge, gap, n_per_edge, e, refine, use_adaptive, nfaces))
 
         return p, epstab, nfaces

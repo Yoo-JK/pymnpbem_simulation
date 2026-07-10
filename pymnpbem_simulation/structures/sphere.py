@@ -12,6 +12,35 @@ _MATERIAL_DEFAULTS = {
     'air': 1.0,
     'glass': 1.5 ** 2}
 
+# Available trisphere vertex counts (same list used by MATLAB trisphere.m)
+_TRISPHERE_AVAILABLE = [
+    32, 60, 144, 169, 225, 256, 289, 324, 361, 400,
+    441, 484, 529, 576, 625, 676, 729, 784, 841, 900,
+    961, 1024, 1225, 1444]
+
+
+def _resolve_sphere_n(cfg: Dict) -> int:
+    """Resolve trisphere vertex count from config.
+
+    Priority:
+    1. ``nphi`` (legacy): ``n = round(((diameter+1)*pi/nphi)^2 / 2)``
+       snapped to nearest available count — mirrors OLD geometry_generator.py.
+    2. ``n_verts`` / ``mesh_density`` (existing NEW key): used directly.
+    3. Default: 256.
+    """
+    diameter = float(cfg.get('diameter', 50.0))
+
+    if 'nphi' in cfg:
+        nphi = float(cfg['nphi'])
+        target = int(round(((diameter + 1) * np.pi / nphi) ** 2 / 2))
+        n = min(_TRISPHERE_AVAILABLE,
+                key = lambda x: abs(x - target))
+        return n
+
+    # existing keys: n_verts or mesh_density (float → treated as n directly)
+    n = cfg.get('n_verts', cfg.get('mesh_density', 256))
+    return int(n)
+
 
 class SphereBuilder(StructureBuilder):
 
@@ -20,7 +49,7 @@ class SphereBuilder(StructureBuilder):
         from mnpbem.geometry import trisphere, ComParticle
 
         diameter = float(self.cfg_struct.get('diameter', 50.0))
-        n = int(self.cfg_struct.get('mesh_density', 256))
+        n = _resolve_sphere_n(self.cfg_struct)
         refine = int(self.cfg_struct.get('refine', 2))
         interp = self.cfg_struct.get('interp', 'curv')
 

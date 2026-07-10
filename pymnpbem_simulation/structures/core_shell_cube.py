@@ -1,12 +1,14 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
+from .adaptive_cube_mesh import build_adaptive_cube
 from .advanced_monomer_cube import _resolve_n_per_edge
 from .base import StructureBuilder
 from .sphere import (_build_eps_medium, _build_eps_particle, _count_faces,
         _resolve_materials_list, _resolve_rip)
 from .core_shell_sphere import _normalize_shells, _build_inout_table
+from .cube import _resolve_face_densities, _resolve_edge_profile_kwargs
 from ..util import print_info
 
 
@@ -73,12 +75,28 @@ class CoreShellCubeBuilder(StructureBuilder):
         for sh in shells:
             epstab.append(_build_eps_particle(sh['material'], rip))
 
+        face_densities = _resolve_face_densities(self.cfg_struct)
+        edge_profile_kw = _resolve_edge_profile_kwargs(self.cfg_struct)
+        use_adaptive = face_densities is not None or edge_profile_kw is not None
+
         cum_size = core_size
-        particles = [tricube(n_per_edge, core_size, e = e)]
+        if use_adaptive:
+            particles = [build_adaptive_cube(
+                size = core_size, n_default = n_per_edge,
+                face_densities = face_densities, e = e,
+                edge_profile_kwargs = edge_profile_kw, interp = interp)]
+        else:
+            particles = [tricube(n_per_edge, core_size, e = e)]
         for sh in shells:
             cum_size = cum_size + 2.0 * float(sh['thickness'])
             n_edge = int(sh.get('n_per_edge', sh['n']))
-            particles.append(tricube(n_edge, cum_size, e = e))
+            if use_adaptive:
+                particles.append(build_adaptive_cube(
+                    size = cum_size, n_default = n_edge,
+                    face_densities = face_densities, e = e,
+                    edge_profile_kwargs = edge_profile_kw, interp = interp))
+            else:
+                particles.append(tricube(n_edge, cum_size, e = e))
 
         inout = _build_inout_table(len(shells))
 
