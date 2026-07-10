@@ -1,4 +1,6 @@
 from typing import Any, Dict, Tuple
+from ..material.material_descriptor import resolve_refractive_index_paths
+import copy
 
 from .base import StructureBuilder
 from .sphere import SphereBuilder
@@ -54,7 +56,12 @@ def build_structure(cfg_struct: Dict[str, Any],
                 'available: {}'.format(stype, sorted(REGISTRY.keys())))
 
     cls = REGISTRY[stype]
-    builder = cls(cfg_struct, cfg_materials)
+    cfg_materials_local = copy.deepcopy(cfg_materials) if isinstance(cfg_materials, dict) else {}
+    ri_paths = cfg_materials_local.get("refractive_index_paths", {})
+    if isinstance(ri_paths, dict) and ri_paths:
+        cfg_materials_local["refractive_index_paths"] = resolve_refractive_index_paths(ri_paths)
+    builder = cls(cfg_struct, cfg_materials_local)
+    # builder = cls(cfg_struct, cfg_materials)
     return builder.build()
 
 
