@@ -120,5 +120,32 @@ def _build_bem_kwargs(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 def _strip_unpicklable(cfg: Dict[str, Any]) -> Dict[str, Any]:
     import copy
+    out = copy.deepcopy(cfg)
+    _assert_no_callables(out)
+    return out
 
-    return copy.deepcopy(cfg)
+
+def _assert_no_callables(obj: Any,
+        path: str = 'cfg') -> None:
+    """Fail fast on raw callables in config structures sent to worker ranks.
+
+    MPI worker factories are serialized; direct callable objects in cfg can
+    fail with opaque serialization errors. Prefer descriptor dicts so each
+    rank resolves callables from python modules locally.
+    """
+    if callable(obj):
+        raise TypeError(
+                '[error] Unpicklable callable found at <{}> in config. '
+                'For multi-worker/multi-node runs, use '
+                '<materials.refractive_index_paths> descriptors '
+                '(type=constant/table/python_module) instead of embedding '
+                'raw callables in cfg.'.format(path))
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            _assert_no_callables(v, '{}.{}'.format(path, k))
+        return
+
+    if isinstance(obj, (list, tuple, set)):
+        for i, v in enumerate(obj):
+            _assert_no_callables(v, '{}[{}]'.format(path, i))
