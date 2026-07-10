@@ -10,8 +10,9 @@ def resolve_refractive_index_paths(ri_paths: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert serializable descriptor specs into runtime objects.
     Supported:
-      - {"type": "table", "file": "/abs/path/file.dat"} -> "/abs/path/file.dat"
-      - {"type": "python_module", "module_path": "...py", "factory": "generate_eps_func"} -> callable
+            - {"type": "constant", "epsilon": 2.02} -> {"type": "constant", "epsilon": 2.02}
+            - {"type": "table", "file": "/abs/path/file.dat"} -> "/abs/path/file.dat"
+            - {"type": "python_module", "module_path": "...py", "factory": "generate_eps_func"} -> callable
     """
     if not isinstance(ri_paths, dict):
         return ri_paths
@@ -24,6 +25,12 @@ def resolve_refractive_index_paths(ri_paths: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         stype = str(spec.get("type", "")).lower()
+
+        if stype == "constant":
+            if "epsilon" not in spec:
+                raise ValueError(f"Material '{name}' constant spec missing 'epsilon'")
+            resolved[name] = {"type": "constant", "epsilon": float(spec["epsilon"])}
+            continue
 
         if stype == "table":
             file_path = spec.get("file")
