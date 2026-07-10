@@ -57,6 +57,15 @@ def build_structure(cfg_struct: Dict[str, Any],
 
     cls = REGISTRY[stype]
     cfg_materials_local = copy.deepcopy(cfg_materials) if isinstance(cfg_materials, dict) else {}
+
+    # Legacy/new migration path stores particles under `particle_list`.
+    # Single-particle builders expect `materials.particle`, so promote the
+    # first list entry when explicit `particle` is absent.
+    if 'particle' not in cfg_materials_local:
+        particle_list = cfg_materials_local.get('particle_list', None)
+        if isinstance(particle_list, (list, tuple)) and len(particle_list) > 0:
+            cfg_materials_local['particle'] = particle_list[0]
+
     ri_paths = cfg_materials_local.get("refractive_index_paths", {})
     if isinstance(ri_paths, dict) and ri_paths:
         cfg_materials_local["refractive_index_paths"] = resolve_refractive_index_paths(ri_paths)

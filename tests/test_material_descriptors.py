@@ -1,13 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
+import importlib
+import importlib.util
+import runpy
 import sys
 import types
 
 import pytest
 
 from pymnpbem_simulation.config import _resolve_substrate_eps
+from pymnpbem_simulation.config import merge_str_sim_args
 from pymnpbem_simulation.material.material_descriptor import resolve_refractive_index_paths
+from pymnpbem_simulation.structures import build_structure
 from pymnpbem_simulation.structures.sphere import _build_eps_particle
+
+
+def _has_real_mnpbem() -> bool:
+    return importlib.util.find_spec('mnpbem.materials') is not None \
+        and importlib.util.find_spec('mnpbem.geometry') is not None
 
 
 def test_resolve_refractive_index_paths_constant_and_table() -> None:
@@ -80,7 +91,12 @@ def test_build_eps_particle_supports_resolved_runtime_values(monkeypatch,
             self.path = str(path)
 
     class EpsDrude:
-        pass
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def __call__(self, enei):
+            return 1.0 + 0j
 
     fake_materials.EpsConst = EpsConst
     fake_materials.EpsTable = EpsTable
@@ -120,3 +136,91 @@ def test_build_eps_particle_supports_resolved_runtime_values(monkeypatch,
     eps_from_file = _build_eps_particle('from_file', resolved)
     assert callable(eps_from_file)
     assert eps_from_file(2.0) == (2.5 + 0j)
+
+
+def test_demo_sphere_structure_with_python_descriptor(monkeypatch) -> None:
+    fake_pkg = types.ModuleType('mnpbem')
+    fake_materials = types.ModuleType('mnpbem.materials')
+    fake_geometry = types.ModuleType('mnpbem.geometry')
+
+    class EpsConst:
+        def __init__(self, value):
+            self.value = float(value)
+
+    class EpsTable:
+        def __init__(self, path):
+            self.path = str(path)
+
+    class EpsDrude:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def __call__(self, enei):
+            return 1.0 + 0j
+
+    def trisphere(n, diameter):
+        return {'n': int(n), 'diameter': float(diameter)}
+
+    class ComParticle:
+        def __init__(self, epstab, meshes, inout, interp = 'curv', refine = 2):
+            self.eps = list(epstab)
+            self.meshes = list(meshes)
+            self.inout = list(inout)
+            self.pfull = types.SimpleNamespace(nfaces = 123)
+
+    fake_materials.EpsConst = EpsConst
+    fake_materials.EpsTable = EpsTable
+    fake_materials.EpsDrude = EpsDrude
+
+    fake_geometry.trisphere = trisphere
+    fake_geometry.ComParticle = ComParticle
+
+    monkeypatch.setitem(sys.modules, 'mnpbem', fake_pkg)
+    monkeypatch.setitem(sys.modules, 'mnpbem.materials', fake_materials)
+    monkeypatch.setitem(sys.modules, 'mnpbem.geometry', fake_geometry)
+
+    ex_path = Path(__file__).resolve().parents[1] / 'examples' / 'sphere_str_descriptor.py'
+    str_args = runpy.run_path(str(ex_path))['args']
+
+    sim_args = {
+        'simulation_type': 'ret',
+        'excitation_type': 'planewave',
+        'wavelength_range': [500.0, 600.0, 3],
+        'output_dir': './_tmp_test_out'}
+
+    cfg = merge_str_sim_args(str_args, sim_args)
+    p, epstab, nfaces = build_structure(cfg['structure'], cfg.get('materials', dict()))
+
+    assert isinstance(epstab[0], EpsConst)
+    assert isinstance(epstab[1], EpsDrude)
+    assert callable(epstab[1])
+    assert epstab[1](2.0) != 0.0
+    assert nfaces == 123
+    assert len(p.meshes) == 1
+
+
+@pytest.mark.skipif(not _has_real_mnpbem(),
+        reason = 'requires real mnpbem installation')
+def test_demo_sphere_structure_with_python_descriptor_real_mnpbem() -> None:
+    EpsDrude = getattr(importlib.import_module('mnpbem.materials'), 'EpsDrude')
+
+    ex_path = Path(__file__).resolve().parents[1] / 'examples' / 'sphere_str_descriptor.py'
+    str_args = runpy.run_path(str(ex_path))['args']
+
+    sim_args = {
+        'simulation_type': 'ret',
+        'excitation_type': 'planewave',
+        'wavelength_range': [500.0, 600.0, 3],
+        'output_dir': './_tmp_test_out'}
+
+    cfg = merge_str_sim_args(str_args, sim_args)
+    p, epstab, nfaces = build_structure(cfg['structure'], cfg.get('materials', dict()))
+
+    assert p is not None
+    assert len(epstab) == 2
+    assert isinstance(epstab[1], EpsDrude)
+    assert callable(epstab[1])
+    val = epstab[1](200.0)
+    assert val is not None
+    assert nfaces > 0
