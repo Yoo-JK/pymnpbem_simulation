@@ -1,7 +1,7 @@
 import os
 import sys
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import matplotlib
@@ -375,3 +375,344 @@ def plot_near_field_decay(
     plt.close(fig)
 
     return save if save is not None else ''
+
+
+# ---------------------------------------------------------------------------
+# Internal/external field separation maps  (ported from OLD visualizer)
+# ---------------------------------------------------------------------------
+
+def _determine_plane(x_grid: np.ndarray,
+        y_grid: np.ndarray,
+        z_grid: np.ndarray):
+    """Return (plane_type, extent, x_label, y_label) for a 2-D field grid."""
+    x_grid = np.atleast_2d(np.asarray(x_grid, dtype=float))
+    y_grid = np.atleast_2d(np.asarray(y_grid, dtype=float))
+    z_grid = np.atleast_2d(np.asarray(z_grid, dtype=float))
+
+    x_const = (np.unique(x_grid).size == 1)
+    y_const = (np.unique(y_grid).size == 1)
+    z_const = (np.unique(z_grid).size == 1)
+
+    def _ext(arr_min, arr_max):
+        if arr_min == arr_max:
+            return arr_min - 0.5, arr_max + 0.5
+        return arr_min, arr_max
+
+    if y_const:
+        xmin, xmax = _ext(float(x_grid.min()), float(x_grid.max()))
+        zmin, zmax = _ext(float(z_grid.min()), float(z_grid.max()))
+        return 'xz', [xmin, xmax, zmin, zmax], 'x (nm)', 'z (nm)'
+    elif z_const:
+        xmin, xmax = _ext(float(x_grid.min()), float(x_grid.max()))
+        ymin, ymax = _ext(float(y_grid.min()), float(y_grid.max()))
+        return 'xy', [xmin, xmax, ymin, ymax], 'x (nm)', 'y (nm)'
+    elif x_const:
+        ymin, ymax = _ext(float(y_grid.min()), float(y_grid.max()))
+        zmin, zmax = _ext(float(z_grid.min()), float(z_grid.max()))
+        return 'yz', [ymin, ymax, zmin, zmax], 'y (nm)', 'z (nm)'
+    else:
+        xmin, xmax = _ext(float(x_grid.min()), float(x_grid.max()))
+        ymin, ymax = _ext(float(y_grid.min()), float(y_grid.max()))
+        return 'xy', [xmin, xmax, ymin, ymax], 'x (nm)', 'y (nm)'
+
+
+def _draw_material_boundary(ax, section: Dict) -> None:
+    """Draw a circle or rectangle boundary on *ax*."""
+    if section['type'] == 'circle':
+        cx, cy = section['center']
+        r = section['radius']
+        theta = np.linspace(0, 2 * np.pi, 360)
+        ax.plot(cx + r * np.cos(theta), cy + r * np.sin(theta),
+                'w--', linewidth=1.2, alpha=0.8)
+    elif section['type'] == 'rectangle':
+        xmin, xmax, ymin, ymax = section['bounds']
+        ax.plot([xmin, xmax, xmax, xmin, xmin],
+                [ymin, ymin, ymax, ymax, ymin],
+                'w--', linewidth=1.2, alpha=0.8)
+
+
+def plot_field_separate(field_data: Dict[str, Any],
+        geometry=None,
+        save: Optional[str] = None,
+        title: str = '',
+        dpi: int = 150) -> str:
+    """2-panel plot: external field | internal field with boundary overlays.
+
+    Parameters
+    ----------
+    field_data : dict
+        Must contain ``'enhancement_ext'``, ``'enhancement_int'``, ``'x_grid'``,
+        ``'y_grid'``, ``'z_grid'``, ``'wavelength'``, optionally
+        ``'polarization_idx'``.
+    geometry : GeometryCrossSection, optional
+        For material-boundary overlays.
+    save : str, optional
+    title : str
+    dpi : int
+
+    Returns
+    -------
+    str  saved path (or '' if *save* is None)
+    """
+    enh_ext = np.abs(np.asarray(field_data['enhancement_ext'], dtype=complex)).real
+    enh_int = np.abs(np.asarray(field_data['enhancement_int'], dtype=complex)).real
+    x_grid = np.asarray(field_data['x_grid'])
+    y_grid = np.asarray(field_data['y_grid'])
+    z_grid = np.asarray(field_data['z_grid'])
+    wavelength = float(field_data.get('wavelength', 0))
+    pol_idx = field_data.get('polarization_idx')
+    pol_label = 'pol {}'.format(pol_idx + 1) if pol_idx is not None else ''
+
+    plane_type, extent, xlabel, ylabel = _determine_plane(x_grid, y_grid, z_grid)
+
+    valid = np.concatenate([
+        enh_ext[np.isfinite(enh_ext)].ravel(),
+        enh_int[np.isfinite(enh_int)].ravel()])
+    vmin = float(np.percentile(valid, 1)) if valid.size else 0.0
+    vmax = float(np.percentile(valid, 99)) if valid.size else 1.0
+
+    fig, axes = plt.subplots(1, 2, figsize = (16, 6))
+    labels = ['External Field', 'Internal Field']
+    arrays = [np.ma.masked_invalid(enh_ext), np.ma.masked_invalid(enh_int)]
+
+    z_plane = float(z_grid.flat[0])
+    sections = geometry.get_cross_section(z_plane) if geometry is not None else []
+
+    for ax, lbl, arr in zip(axes, labels, arrays):
+        im = ax.imshow(arr, extent = extent, origin = 'lower', cmap = 'hot',
+                       aspect = 'auto', vmin = vmin, vmax = vmax)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title('{}\nlambda={:.1f} nm {}'.format(
+            title or lbl, wavelength, pol_label))
+        cb = fig.colorbar(im, ax = ax)
+        cb.set_label('|E|^2/|E0|^2')
+        for sec in sections:
+            _draw_material_boundary(ax, sec)
+
+    fig.tight_layout()
+    path = ''
+    if save is not None:
+        ensure_dir(os.path.dirname(save) or '.')
+        fig.savefig(save, dpi = dpi)
+        print_info('saved <{}>'.format(save))
+        path = save
+    plt.close(fig)
+    return path
+
+
+def plot_field_comparison(field_data: Dict[str, Any],
+        geometry=None,
+        save: Optional[str] = None,
+        title: str = '',
+        dpi: int = 150) -> str:
+    """3-panel plot: external | internal | merged with boundary overlays.
+
+    Parameters
+    ----------
+    field_data : dict
+        As for :func:`plot_field_separate`, plus ``'enhancement'`` (merged).
+    geometry, save, title, dpi : same as :func:`plot_field_separate`.
+    """
+    enh_ext = np.abs(np.asarray(field_data['enhancement_ext'], dtype=complex)).real
+    enh_int = np.abs(np.asarray(field_data['enhancement_int'], dtype=complex)).real
+    enh_mrg = np.abs(np.asarray(field_data['enhancement'], dtype=complex)).real
+    x_grid = np.asarray(field_data['x_grid'])
+    y_grid = np.asarray(field_data['y_grid'])
+    z_grid = np.asarray(field_data['z_grid'])
+    wavelength = float(field_data.get('wavelength', 0))
+    pol_idx = field_data.get('polarization_idx')
+    pol_label = 'pol {}'.format(pol_idx + 1) if pol_idx is not None else ''
+
+    plane_type, extent, xlabel, ylabel = _determine_plane(x_grid, y_grid, z_grid)
+
+    arrays = [np.ma.masked_invalid(enh_ext),
+              np.ma.masked_invalid(enh_int),
+              np.ma.masked_invalid(enh_mrg)]
+    all_valid = np.concatenate([a.compressed() for a in arrays])
+    vmin = float(np.percentile(all_valid, 1)) if all_valid.size else 0.0
+    vmax = float(np.percentile(all_valid, 99)) if all_valid.size else 1.0
+
+    z_plane = float(z_grid.flat[0])
+    sections = geometry.get_cross_section(z_plane) if geometry is not None else []
+
+    fig, axes = plt.subplots(1, 3, figsize = (22, 6))
+    panel_titles = ['External', 'Internal', 'Merged']
+
+    for ax, lbl, arr in zip(axes, panel_titles, arrays):
+        im = ax.imshow(arr, extent = extent, origin = 'lower', cmap = 'hot',
+                       aspect = 'auto', vmin = vmin, vmax = vmax)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title('{}\nlambda={:.1f} nm {}'.format(lbl, wavelength, pol_label))
+        cb = fig.colorbar(im, ax = ax)
+        cb.set_label('|E|^2/|E0|^2')
+        for sec in sections:
+            _draw_material_boundary(ax, sec)
+
+    if title:
+        fig.suptitle(title, fontweight = 'bold')
+    fig.tight_layout()
+    path = ''
+    if save is not None:
+        ensure_dir(os.path.dirname(save) or '.')
+        fig.savefig(save, dpi = dpi)
+        print_info('saved <{}>'.format(save))
+        path = save
+    plt.close(fig)
+    return path
+
+
+def plot_field_overlay(field_data: Dict[str, Any],
+        geometry=None,
+        save: Optional[str] = None,
+        title: str = '',
+        dpi: int = 150) -> str:
+    """External field heatmap + internal field scatter overlay.
+
+    Parameters
+    ----------
+    field_data : dict
+        As for :func:`plot_field_separate`.
+    geometry, save, title, dpi : same as :func:`plot_field_separate`.
+    """
+    enh_ext = np.abs(np.asarray(field_data['enhancement_ext'], dtype=complex)).real
+    enh_int = np.abs(np.asarray(field_data['enhancement_int'], dtype=complex)).real
+    x_grid = np.asarray(field_data['x_grid'])
+    y_grid = np.asarray(field_data['y_grid'])
+    z_grid = np.asarray(field_data['z_grid'])
+    wavelength = float(field_data.get('wavelength', 0))
+    pol_idx = field_data.get('polarization_idx')
+    pol_label = 'pol {}'.format(pol_idx + 1) if pol_idx is not None else ''
+
+    plane_type, extent, xlabel, ylabel = _determine_plane(x_grid, y_grid, z_grid)
+
+    enh_ext_m = np.ma.masked_invalid(enh_ext)
+    valid_ext = enh_ext_m.compressed()
+    vmin_ext = float(np.percentile(valid_ext, 1)) if valid_ext.size else 0.0
+    vmax_ext = float(np.percentile(valid_ext, 99)) if valid_ext.size else 1.0
+
+    fig, ax = plt.subplots(figsize = (12, 9))
+    im = ax.imshow(enh_ext_m, extent = extent, origin = 'lower', cmap = 'hot',
+                   aspect = 'auto', vmin = vmin_ext, vmax = vmax_ext, alpha = 0.7)
+    cb_ext = fig.colorbar(im, ax = ax)
+    cb_ext.set_label('|E|^2/|E0|^2 (External)')
+
+    int_mask = np.isfinite(enh_int) & (enh_int > 0)
+    if int_mask.any():
+        if plane_type == 'xz':
+            xu = x_grid[int_mask]
+            yu = z_grid[int_mask]
+        elif plane_type == 'yz':
+            xu = y_grid[int_mask]
+            yu = z_grid[int_mask]
+        else:
+            xu = x_grid[int_mask]
+            yu = y_grid[int_mask]
+        vals = enh_int[int_mask]
+        sc = ax.scatter(xu, yu, c = vals, cmap = 'viridis',
+                        s = 18, edgecolors = 'black', linewidth = 0.3, alpha = 0.9)
+        cb_int = fig.colorbar(sc, ax = ax, pad = 0.12)
+        cb_int.set_label('|E|^2/|E0|^2 (Internal)')
+
+    z_plane = float(z_grid.flat[0])
+    sections = geometry.get_cross_section(z_plane) if geometry is not None else []
+    for sec in sections:
+        _draw_material_boundary(ax, sec)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title or 'Internal (scatter) + External (heatmap)\nlambda={:.1f} nm {}'.format(
+        wavelength, pol_label))
+    fig.tight_layout()
+
+    path = ''
+    if save is not None:
+        ensure_dir(os.path.dirname(save) or '.')
+        fig.savefig(save, dpi = dpi)
+        print_info('saved <{}>'.format(save))
+        path = save
+    plt.close(fig)
+    return path
+
+
+def plot_unpolarized_fields(fields_by_pol: List[Dict[str, Any]],
+        save: Optional[str] = None,
+        title: str = '',
+        dpi: int = 150) -> str:
+    """Linear + log panels of incoherently averaged (unpolarised) field map.
+
+    Averages ``enhancement`` across all polarisations using arithmetic mean
+    (FDTD-style incoherent average for intensity enhancement).
+
+    Parameters
+    ----------
+    fields_by_pol : list of dict
+        One dict per polarisation, each with ``'enhancement'``, ``'x_grid'``,
+        ``'y_grid'``, ``'z_grid'``, ``'wavelength'``.
+    save : str, optional
+    title : str
+    dpi : int
+
+    Returns
+    -------
+    str  saved path (or '' if *save* is None)
+    """
+    if not fields_by_pol:
+        return ''
+
+    enhs = [np.abs(np.asarray(fd['enhancement'], dtype=complex)).real for fd in fields_by_pol]
+    unpol_enh = np.mean(enhs, axis = 0)
+    ref = fields_by_pol[0]
+    x_grid = np.asarray(ref['x_grid'])
+    y_grid = np.asarray(ref['y_grid'])
+    z_grid = np.asarray(ref['z_grid'])
+    wavelength = float(ref.get('wavelength', 0))
+    n_pol = len(fields_by_pol)
+
+    plane_type, extent, xlabel, ylabel = _determine_plane(x_grid, y_grid, z_grid)
+    enh_m = np.ma.masked_invalid(unpol_enh)
+    valid = enh_m.compressed()
+    vmin_lin = float(np.percentile(valid, 1)) if valid.size else 0.0
+    vmax_lin = float(np.percentile(valid, 99)) if valid.size else 1.0
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize = (14, 5))
+
+    im1 = ax1.imshow(enh_m, extent = extent, origin = 'lower', cmap = 'hot',
+                     aspect = 'auto', vmin = vmin_lin, vmax = vmax_lin)
+    ax1.set_xlabel(xlabel)
+    ax1.set_ylabel(ylabel)
+    ax1.set_title('Unpolarised (linear)\nlambda={:.1f} nm  n_pol={}'.format(wavelength, n_pol))
+    cb1 = fig.colorbar(im1, ax = ax1)
+    cb1.set_label('|E|^2/|E0|^2')
+
+    from matplotlib.colors import LogNorm
+    pos_vals = valid[valid > 0]
+    if pos_vals.size > 0:
+        vmin_log = max(float(np.percentile(pos_vals, 1)), 1e-12)
+        vmax_log = float(np.percentile(pos_vals, 99))
+        if vmin_log >= vmax_log:
+            vmin_log = vmax_log / 1000
+        norm = LogNorm(vmin = vmin_log, vmax = vmax_log)
+        im2 = ax2.imshow(enh_m, extent = extent, origin = 'lower', cmap = 'hot',
+                         aspect = 'auto', norm = norm)
+    else:
+        im2 = ax2.imshow(enh_m, extent = extent, origin = 'lower', cmap = 'hot', aspect = 'auto')
+    ax2.set_xlabel(xlabel)
+    ax2.set_ylabel(ylabel)
+    ax2.set_title('Unpolarised (log)\nlambda={:.1f} nm  n_pol={}'.format(wavelength, n_pol))
+    cb2 = fig.colorbar(im2, ax = ax2)
+    cb2.set_label('|E|^2/|E0|^2 (log)')
+
+    if title:
+        fig.suptitle(title, fontweight = 'bold')
+    fig.tight_layout()
+
+    path = ''
+    if save is not None:
+        ensure_dir(os.path.dirname(save) or '.')
+        fig.savefig(save, dpi = dpi)
+        print_info('saved <{}>'.format(save))
+        path = save
+    plt.close(fig)
+    return path

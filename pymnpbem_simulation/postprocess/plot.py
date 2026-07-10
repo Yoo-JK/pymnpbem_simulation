@@ -456,3 +456,200 @@ def plot_fano_fit(out_dir: str,
 
     plt.close(fig)
     return saved_files
+
+
+# ---------------------------------------------------------------------------
+# Multipole character table  (ported from OLD visualizer._plot_multipole_character_table)
+# ---------------------------------------------------------------------------
+
+def plot_multipole_character_table(analyzer_outputs: Dict[str, Any],
+        out_dir: str,
+        top_k: int = 5,
+        fname: str = 'multipole_character',
+        plot_format: Optional[List[str]] = None,
+        dpi: int = 150) -> List[str]:
+    """Bar-chart table of dipole vs quadrupole character for top-k eigenmodes.
+
+    Parameters
+    ----------
+    analyzer_outputs : dict
+        Keyed by method name (``'qs'``, ``'svd'``, ``'retarded'``).  Each value
+        must contain ``'multipole'`` (with keys ``'dipole_mag'``,
+        ``'quadrupole_trace'``, ``'character'``) and ``'projection'`` (with key
+        ``'magnitudes'``).
+    out_dir : str
+    top_k : int
+    fname : str
+    plot_format : list of str, optional (default ['png'])
+    dpi : int
+
+    Returns
+    -------
+    list of str  saved file paths.
+    """
+    if plot_format is None:
+        plot_format = ['png']
+
+    ensure_dir(out_dir)
+
+    method_data = []
+    for method_name in ('qs', 'svd', 'retarded'):
+        method_out = analyzer_outputs.get(method_name)
+        if method_out is None:
+            continue
+        multipole = method_out.get('multipole')
+        projection = method_out.get('projection')
+        if multipole is None or projection is None:
+            continue
+
+        dipole_mag = np.asarray(multipole['dipole_mag'])
+        quad_trace = np.asarray(multipole['quadrupole_trace'])
+        character = list(multipole['character'])
+        magnitudes = np.asarray(projection['magnitudes'])
+
+        flat = magnitudes.ravel()
+        k = min(top_k, flat.size)
+        indices = np.argsort(flat)[::-1][:k]
+        method_data.append((method_name, dipole_mag, quad_trace, character, indices))
+
+    if not method_data:
+        return []
+
+    n_methods = len(method_data)
+    fig, axes = plt.subplots(n_methods, 1,
+                             figsize = (10, 3.5 * n_methods),
+                             squeeze = False)
+
+    for row_i, (method_name, dipole_mag, quad_trace, character, indices) in enumerate(method_data):
+        ax = axes[row_i, 0]
+        n_show = len(indices)
+        x_pos = np.arange(n_show)
+        p_vals = np.array([float(dipole_mag[int(k)]) for k in indices])
+        q_vals = np.array([float(np.abs(quad_trace[int(k)])) for k in indices])
+        bar_w = 0.35
+
+        ax.bar(x_pos - bar_w / 2, p_vals, bar_w, label = '|p|',
+               color = 'tab:blue', alpha = 0.85)
+        ax.bar(x_pos + bar_w / 2, q_vals, bar_w, label = '|Q_tr|',
+               color = 'tab:orange', alpha = 0.85)
+
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(['mode {}\n({})'.format(int(k), character[int(k)])
+                             for k in indices], fontsize = 10)
+        ax.set_ylabel('moment magnitude', fontsize = 11)
+        ax.set_title('{} -- multipole character'.format(method_name), fontsize = 12,
+                     fontweight = 'bold')
+        ax.grid(True, axis = 'y', alpha = 0.3)
+        ax.legend(fontsize = 10, loc = 'upper right')
+
+    plt.tight_layout()
+
+    saved_files = []
+    for fmt in plot_format:
+        path = os.path.join(out_dir, '{}.{}'.format(fname, fmt))
+        fig.savefig(path, dpi = dpi)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+    plt.close(fig)
+    return saved_files
+
+
+# ---------------------------------------------------------------------------
+# Cross-validation summary  (ported from OLD visualizer._plot_cross_validation_summary)
+# ---------------------------------------------------------------------------
+
+def plot_cross_validation_summary(comparator_report: Dict[str, Any],
+        out_dir: str,
+        fname: str = 'cross_validation_summary',
+        plot_format: Optional[List[str]] = None,
+        dpi: int = 150) -> List[str]:
+    """Bar chart + text summary of cross-method mode cross-validation.
+
+    Parameters
+    ----------
+    comparator_report : dict
+        Expected keys: ``'max_similarity'`` (dict), ``'delta_phi_agreement'``,
+        ``'bright_dark_by_method'``, ``'summary_message'``,
+        ``'character_consistency'``.
+    out_dir : str
+    fname : str
+    plot_format : list of str, optional (default ['png'])
+    dpi : int
+
+    Returns
+    -------
+    list of str  saved file paths.
+    """
+    if plot_format is None:
+        plot_format = ['png']
+
+    ensure_dir(out_dir)
+
+    max_similarity = comparator_report.get('max_similarity') or {}
+    delta_phi_agreement = comparator_report.get('delta_phi_agreement') or {}
+    bright_dark = comparator_report.get('bright_dark_by_method') or {}
+    summary_message = comparator_report.get('summary_message', '')
+
+    fig = plt.figure(figsize = (12, 6))
+    gs = fig.add_gridspec(1, 2, width_ratios = [1.2, 1.0])
+
+    ax_l = fig.add_subplot(gs[0, 0])
+    if max_similarity:
+        pair_labels = list(max_similarity.keys())
+        pair_vals = [float(max_similarity[k]) for k in pair_labels]
+        x_pos = np.arange(len(pair_labels))
+        ax_l.bar(x_pos, pair_vals, color = 'tab:purple', alpha = 0.8)
+        ax_l.set_xticks(x_pos)
+        ax_l.set_xticklabels(pair_labels, fontsize = 10, rotation = 10)
+        ax_l.set_ylabel('max similarity', fontsize = 11)
+        ax_l.set_ylim(0.0, 1.05)
+        ax_l.axhline(y = 1.0, color = 'gray', linestyle = ':', alpha = 0.5)
+        ax_l.grid(True, axis = 'y', alpha = 0.3)
+    else:
+        ax_l.text(0.5, 0.5, 'no method pairs', ha = 'center', va = 'center',
+                  transform = ax_l.transAxes, fontsize = 12)
+    ax_l.set_title('Cross-method Mode Similarity', fontsize = 13, fontweight = 'bold')
+
+    ax_r = fig.add_subplot(gs[0, 1])
+    ax_r.axis('off')
+
+    lines = ['Cross-validation summary', '-' * 36]
+    max_dev = delta_phi_agreement.get('max_deviation', float('nan'))
+    mean_dev = delta_phi_agreement.get('mean_deviation', float('nan'))
+    is_cons = delta_phi_agreement.get('is_consistent', False)
+    lines.append('delta_phi max dev:    {:.4f} rad'.format(max_dev))
+    lines.append('delta_phi mean dev:   {:.4f} rad'.format(mean_dev))
+    lines.append('delta_phi consistent: {}'.format(is_cons))
+    lines.append('char consistent: {}'.format(
+        comparator_report.get('character_consistency', False)))
+    lines.append('')
+    lines.append('Bright / Dark per method:')
+    for m, bd in bright_dark.items():
+        lines.append('  {}: bright={} dark={} ratio={:.3f}'.format(
+            m,
+            bd.get('bright_idx', '?'),
+            bd.get('dark_idx', '?'),
+            float(bd.get('coupling_strength_ratio', float('nan')))))
+    if summary_message:
+        lines.append('')
+        lines.append(summary_message)
+
+    ax_r.text(0.02, 0.98, '\n'.join(lines),
+              transform = ax_r.transAxes,
+              fontsize = 10,
+              family = 'monospace',
+              verticalalignment = 'top',
+              bbox = dict(boxstyle = 'round', facecolor = 'whitesmoke',
+                          edgecolor = 'gray', alpha = 0.9))
+
+    fig.suptitle('Cross-validation Report', fontsize = 14, fontweight = 'bold')
+    plt.tight_layout(rect = [0, 0, 1, 0.95])
+
+    saved_files = []
+    for fmt in plot_format:
+        path = os.path.join(out_dir, '{}.{}'.format(fname, fmt))
+        fig.savefig(path, dpi = dpi)
+        saved_files.append(path)
+        print_info('saved <{}>'.format(path))
+    plt.close(fig)
+    return saved_files
