@@ -464,31 +464,6 @@ def _infer_n_pol(cfg: Dict[str, Any]) -> int:
 def _strip_unpicklable(cfg: Dict[str, Any]) -> Dict[str, Any]:
     import copy
     out = copy.deepcopy(cfg)
-    _assert_no_callables(out)
+    from pymnpbem_simulation.util import assert_no_callables
+    assert_no_callables(out)
     return out
-
-
-def _assert_no_callables(obj: Any,
-        path: str = 'cfg') -> None:
-    """Fail fast on raw callables in config structures sent to workers.
-
-    Multiprocessing with spawn pickles target args; direct callable objects in
-    cfg can crash with opaque pickling errors. Users should provide descriptor
-    dicts (e.g. type=python_module) so each worker resolves callables locally.
-    """
-    if callable(obj):
-        raise TypeError(
-                '[error] Unpicklable callable found at <{}> in config. '
-                'For multi-worker/multi-node runs, use '
-                '<materials.refractive_index_paths> descriptors '
-                '(type=constant/table/python_module) instead of embedding '
-                'raw callables in cfg.'.format(path))
-
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            _assert_no_callables(v, '{}.{}'.format(path, k))
-        return
-
-    if isinstance(obj, (list, tuple, set)):
-        for i, v in enumerate(obj):
-            _assert_no_callables(v, '{}[{}]'.format(path, i))
