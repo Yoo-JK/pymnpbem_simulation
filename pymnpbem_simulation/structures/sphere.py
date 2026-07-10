@@ -123,8 +123,10 @@ def _build_eps_particle(name: str, custom: Any = None) -> Any:
             if isinstance(m, str):
                 if m.endswith('.dat'):
                     return EpsTable(m)
-                return EpsConst(float(m))
-
+                try:
+                    return EpsConst(float(m))
+                except ValueError:
+                    return EpsTable(m)
             if isinstance(m, dict):
                 mtype = str(m.get('type', 'constant')).lower()
                 if mtype == 'constant':
