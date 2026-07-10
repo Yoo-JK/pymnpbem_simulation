@@ -202,12 +202,35 @@ def _build_parser() -> argparse.ArgumentParser:
 
 # Analyzer hyperparameters that --anal-conf can set, with their built-in
 # defaults.  Keys match the argparse dest names (underscored).
+# Keys prefixed with 'anal_' are analysis-section keys from config/analysis/
+# config_analysis.py that are accepted but consumed separately (not mapped to
+# argparse); they are silently accepted to avoid "unknown keys" warnings.
 _ANAL_CONF_DEFAULTS = {
     'result': None, 'analyzers': 'spectrum', 'output': None,
     'fano_peaks': 1, 'config': None, 'n_modes': 10, 'max_l': 4,
     'export_formats': None, 'case_dir': None, 'fano_features': None,
     'fano_pol': 0, 'eig_cache': None, 'xaxis': 'wavelength',
     'polarizations': None, 'excitation': 'planewave',
+    # analysis-section keys (from config/analysis/config_analysis.py)
+    'calculate_cross_sections': True,
+    'calculate_fields': False,
+    'field_region': None,
+    'field_mindist': 0.5,
+    'field_nmax': 2000,
+    'field_wavelength_idx': 'peak',
+    'export_field_arrays': False,
+    'field_hotspot_count': 10,
+    'field_hotspot_min_distance': 3,
+    'spectrum_xaxis': 'wavelength',
+    'save_plots': True,
+    'plot_format': None,
+    'plot_dpi': 300,
+    'run_eigenmode_analysis': False,
+    'eigenmode_n': 10,
+    'eigenmode_top_k': 5,
+    'retarded_eigen_wavelength': None,
+    'fano_target_wavelengths': None,
+    'svd_rank_threshold': 1.0e-3,
 }
 
 
@@ -242,6 +265,18 @@ def _apply_anal_conf(args: argparse.Namespace) -> None:
     if isinstance(getattr(args, 'polarizations', None), (list, tuple)):
         import json as _json
         args.polarizations = _json.dumps(args.polarizations)
+    # Bridge analysis-section aliases: spectrum_xaxis -> xaxis,
+    # eigenmode_n -> n_modes, so downstream code reading args.xaxis /
+    # args.n_modes sees the value from config/analysis/config_analysis.py.
+    if getattr(args, 'xaxis', None) is None:
+        setattr(args, 'xaxis', getattr(args, 'spectrum_xaxis', 'wavelength'))
+    if getattr(args, 'n_modes', None) is None:
+        setattr(args, 'n_modes', getattr(args, 'eigenmode_n', 10))
+    # run_eigenmode_analysis -> ensure 'eigenmode' is in analyzers when True.
+    if getattr(args, 'run_eigenmode_analysis', False):
+        ana_str = getattr(args, 'analyzers', '') or ''
+        if 'eigenmode' not in ana_str:
+            setattr(args, 'analyzers', ana_str + ',eigenmode' if ana_str else 'eigenmode')
     if not args.result:
         raise SystemExit('[error] --result (or result= in --anal-conf) is required.')
 
