@@ -792,8 +792,9 @@ class FieldCalculator(SimulationRunner):
         pol = sim.get('polarizations', [[1, 0, 0]])
         prop = sim.get('propagation_dirs', [[0, 0, 1]] * len(pol))
 
+        cache_enabled = self._sigma_cache_enabled()
         cached = None
-        if output_dir and self._cache_manifest_compatible():
+        if cache_enabled and output_dir and self._cache_manifest_compatible():
             try:
                 cached = _sc.load_sigma(output_dir, wavelength_nm, pol, prop)
             except Exception as e:
@@ -804,10 +805,24 @@ class FieldCalculator(SimulationRunner):
         if cached is not None:
             from mnpbem.greenfun import CompStruct
             if cached['solver_type'] == 'retarded':
-                return CompStruct(self.p, wavelength_nm,
-                        sig1 = cached['sig1'], sig2 = cached['sig2'],
-                        h1 = cached['h1'], h2 = cached['h2'])
-            return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
+                required = ('sig1', 'sig2', 'h1', 'h2')
+                if not all(k in cached and cached[k] is not None for k in required):
+                    print_info(
+                            'sigma cache at {:.2f} nm is incomplete for retarded field '
+                            '(needs sig1/sig2/h1/h2). Recomputing.'.format(wavelength_nm))
+                    cached = None
+                else:
+                    return CompStruct(self.p, wavelength_nm,
+                            sig1 = cached['sig1'], sig2 = cached['sig2'],
+                            h1 = cached['h1'], h2 = cached['h2'])
+            if cached is not None:
+                if 'sig' not in cached or cached['sig'] is None:
+                    print_info(
+                            'sigma cache at {:.2f} nm is incomplete (missing sig). Recomputing.'.format(
+                                    wavelength_nm))
+                    cached = None
+                else:
+                    return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
 
         # Cache miss: lazy-build solver and run BEM solve. Save sigma
         # afterwards so subsequent field passes can reuse it.
