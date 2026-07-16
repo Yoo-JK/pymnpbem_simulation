@@ -851,8 +851,29 @@ class FieldCalculator(SimulationRunner):
         if a.ndim == 2 and a.shape == (n_pts, 3):
             return a
 
+        if a.ndim == 3:
+            pos_axes = [ax for ax, size in enumerate(a.shape) if size == n_pts]
+            comp_axes = [ax for ax, size in enumerate(a.shape) if size == 3]
+
+            pos_axis = pos_axes[0] if pos_axes else 0
+            comp_axis = next((ax for ax in comp_axes if ax != pos_axis), None)
+
+            if comp_axis is not None:
+                pol_axis = next(
+                        (ax for ax in range(a.ndim) if ax not in (pos_axis, comp_axis)),
+                        None)
+                if pol_axis is not None:
+                    normalized = np.moveaxis(a, (pos_axis, comp_axis, pol_axis), (0, 1, 2))
+                    if normalized.shape[1] == 3:
+                        return normalized
+                    if normalized.shape[2] == 3:
+                        return np.moveaxis(normalized, 2, 1)
+
         if a.size == n_pts * 3:
             return a.reshape(n_pts, 3)
+
+        if a.size % (n_pts * 3) == 0:
+            return a.reshape(n_pts, 3, -1)
 
         return a.reshape(-1, 3)[:n_pts]
 
