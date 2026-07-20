@@ -88,7 +88,7 @@ def _build_eps_medium(name: str) -> Any:
 
 
 def _build_eps_particle(name: str, custom: Any = None) -> Any:
-    from mnpbem.materials import EpsTable, EpsDrude
+    from mnpbem.materials import EpsConst, EpsTable, EpsDrude
 
     name_l = name.lower()
 
@@ -101,18 +101,59 @@ def _build_eps_particle(name: str, custom: Any = None) -> Any:
     if name.endswith('.dat'):
         return EpsTable(name)
 
-    # custom material from refractive_index_paths (e.g. agcl, ito):
-    #   {'agcl': {'type': 'constant', 'epsilon': 2.02}}  ->  EpsConst(2.02)
-    #   {'foo':  {'type': 'table', 'path': 'foo.dat'}}   ->  EpsTable('foo.dat')
-    if custom:
+    # custom material from refractive_index_paths (e.g. agcl, ito).
+    # Supports both descriptor dicts and runtime-resolved values:
+    #   {'agcl': {'type': 'constant', 'epsilon': 2.02}} -> EpsConst(2.02)
+    #   {'foo':  {'type': 'table', 'file': 'foo.dat'}}  -> EpsTable('foo.dat')
+    #   {'foo': 'foo.dat'}                               -> EpsTable('foo.dat')
+    #   {'foo': 2.02}                                    -> EpsConst(2.02)
+    #   {'foo': <callable>}                              -> <callable>
+    if isinstance(custom, dict) and custom:
         cmap = {str(k).lower(): v for k, v in custom.items()}
         if name_l in cmap:
-            from mnpbem.materials import EpsConst
             m = cmap[name_l]
-            mtype = str(m.get('type', 'constant')).lower()
-            if mtype == 'constant':
-                return EpsConst(float(m['epsilon']))
-            return EpsTable(m.get('path', m.get('file', name)))
+
+            # Runtime value resolved by material_descriptor.py.
+            if callable(m):
+                return m
+
+            if isinstance(m, (int, float)):
+                return EpsConst(float(m))
+
+            if isinstance(m, str):
+                if m.endswith('.dat'):
+                    return EpsTable(m)
+                try:
+                    return EpsConst(float(m))
+                except ValueError:
+                    return EpsTable(m)
+            if isinstance(m, dict):
+                mtype = str(m.get('type', 'constant')).lower()
+                if mtype == 'constant':
+                    if 'epsilon' not in m:
+                        raise ValueError('[error] Missing <epsilon> for custom '
+                                         'material <{}>!'.format(name))
+                    return EpsConst(float(m['epsilon']))
+
+                if mtype == 'table':
+                    path = m.get('path', m.get('file', name))
+                    return EpsTable(str(path))
+
+                if mtype == 'python_module':
+                    # If resolver is bypassed, allow direct callable injection.
+                    fn = m.get('callable', None)
+                    if callable(fn):
+                        return fn
+                    raise ValueError('[error] Unsupported unresolved '
+                                     '<python_module> descriptor for material '
+                                     '<{}>; run descriptor resolver first!'.format(name))
+
+                # Legacy path-like dicts without explicit type.
+                if 'path' in m or 'file' in m:
+                    return EpsTable(str(m.get('path', m.get('file'))))
+
+            raise ValueError('[error] Unsupported custom material spec for '
+                             '<{}>: <{}>!'.format(name, type(m).__name__))
 
     raise ValueError('[error] Unsupported <particle> = <{}>!'.format(name))
 

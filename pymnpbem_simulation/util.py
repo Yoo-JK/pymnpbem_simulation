@@ -72,3 +72,28 @@ def print_info(msg: str) -> None:
 
 def print_error(msg: str) -> None:
     print('[error] {}'.format(msg), flush = True)
+
+def assert_no_callables(obj: Any,
+        path: str = 'cfg') -> None:
+    """Fail fast on raw callables in config structures sent to workers.
+
+    Multiprocessing with spawn pickles target args; direct callable objects in
+    cfg can crash with opaque pickling errors. Users should provide descriptor
+    dicts (e.g. type=python_module) so each worker resolves callables locally.
+    """
+    if callable(obj):
+        raise TypeError(
+                '[error] Unpicklable callable found at <{}> in config. '
+                'For multi-worker/multi-node runs, use '
+                '<materials.refractive_index_paths> descriptors '
+                '(type=constant/table/python_module) instead of embedding '
+                'raw callables in cfg.'.format(path))
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            assert_no_callables(v, '{}.{}'.format(path, k))
+        return
+
+    if isinstance(obj, (list, tuple, set)):
+        for i, v in enumerate(obj):
+            assert_no_callables(v, '{}[{}]'.format(path, i))
