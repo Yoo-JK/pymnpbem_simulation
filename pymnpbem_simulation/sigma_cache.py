@@ -54,7 +54,9 @@ import json
 import glob
 import hashlib
 import datetime
+import time
 
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -62,6 +64,8 @@ import yaml
 
 
 SIGMA_VERSION = '1.0'
+_MANIFEST_LOCK_TIMEOUT_S = 10.0
+_MANIFEST_LOCK_POLL_S = 0.05
 
 
 def _encode_axis_component(v: float) -> str:
@@ -126,6 +130,26 @@ def ensure_sigma_dir(output_dir: str) -> str:
     d = sigma_dir(output_dir)
     os.makedirs(d, exist_ok = True)
     return d
+
+
+def _decode_axis_component(token: str) -> int:
+    """Decode one filename axis token back to -1/0/+1."""
+
+    if token == '1':
+        return 1
+    if token == 'n':
+        return -1
+    if token == '0':
+        return 0
+    raise ValueError('[error] Unknown sigma axis token <{}>'.format(token))
+
+
+def _decode_vec3(token: str) -> List[int]:
+    """Decode a 3-char filename vector token."""
+
+    if len(token) != 3:
+        raise ValueError('[error] Sigma vec token must be 3 chars, got <{}>'.format(token))
+    return [_decode_axis_component(ch) for ch in token]
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +355,121 @@ def manifest_path(output_dir: str) -> str:
     return os.path.join(sigma_dir(output_dir), 'manifest.json')
 
 
+def _manifest_lock_path(output_dir: str) -> str:
+    return os.path.join(sigma_dir(output_dir), 'manifest.lock')
+
+
+@contextmanager
+def _manifest_lock(output_dir: str,
+        timeout_s: float = _MANIFEST_LOCK_TIMEOUT_S,
+        poll_s: float = _MANIFEST_LOCK_POLL_S):
+    """Serialize manifest updates across workers with a lock file."""
+
+    ensure_sigma_dir(output_dir)
+    lock_path = _manifest_lock_path(output_dir)
+    deadline = time.monotonic() + max(0.1, float(timeout_s))
+    fd = None
+
+    while fd is None:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode('ascii', errors = 'ignore'))
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                        '[error] Timed out waiting for sigma manifest lock <{}>'.format(
+                                lock_path))
+            time.sleep(max(0.001, float(poll_s)))
+
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+        try:
+            os.unlink(lock_path)
+        except FileNotFoundError:
+            pass
+
+
+def _write_manifest_payload(path: str, payload: Dict[str, Any]) -> None:
+    """Atomically replace manifest.json so readers never see partial JSON."""
+
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok = True)
+    tmp_path = os.path.join(d, 'manifest.{}.tmp'.format(os.getpid()))
+    try:
+        with open(tmp_path, 'w') as f:
+            json.dump(payload, f, indent = 2, sort_keys = False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def _scan_cached_manifest_entries(output_dir: str) -> Tuple[List[Dict[str, List[int]]], List[float]]:
+    """Recover manifest metadata from cached per-wavelength sigma files."""
+
+    d = sigma_dir(output_dir)
+    excitations: List[Dict[str, List[int]]] = []
+    wavelengths_nm = set()
+
+    for fpath in sorted(glob.glob(os.path.join(d, 'wl_*.npz'))):
+        base = os.path.basename(fpath)
+        stem, ext = os.path.splitext(base)
+        if ext.lower() != '.npz':
+            continue
+
+        parts = stem.split('_')
+        if len(parts) != 4:
+            continue
+
+        try:
+            wl_nm = round(float(parts[1]), 4)
+            pol = _decode_vec3(parts[2][1:])
+            prop_dir = _decode_vec3(parts[3][1:])
+        except (IndexError, ValueError):
+            continue
+
+        item = {'pol': pol, 'prop_dir': prop_dir}
+        if item not in excitations:
+            excitations.append(item)
+        wavelengths_nm.add(wl_nm)
+
+    return excitations, sorted(wavelengths_nm)
+
+
+def _recover_manifest_from_disk(output_dir: str,
+        n_faces: int,
+        solver_type: str,
+        structure_hash: str,
+        eps_hash: str) -> Dict[str, Any]:
+    """Rebuild manifest metadata from on-disk sigma files after corruption."""
+
+    excitations, wavelengths_nm = _scan_cached_manifest_entries(output_dir)
+    write_manifest(
+            output_dir,
+            n_faces = n_faces,
+            solver_type = solver_type,
+            structure_hash = structure_hash,
+            eps_hash = eps_hash,
+            excitations = excitations,
+            wavelengths_nm = wavelengths_nm)
+    return read_manifest(output_dir) or {
+            'version': SIGMA_VERSION,
+            'n_faces': int(n_faces),
+            'solver_type': str(solver_type),
+            'structure_hash': str(structure_hash),
+            'eps_hash': str(eps_hash),
+            'excitations': excitations,
+            'wavelengths_nm': wavelengths_nm}
+
+
 def write_manifest(output_dir: str,
         n_faces: int,
         solver_type: str,
@@ -349,8 +488,7 @@ def write_manifest(output_dir: str,
             'wavelengths_nm': sorted({round(float(w), 4) for w in wavelengths_nm}),
             'last_updated': datetime.datetime.now().isoformat(timespec = 'seconds')}
     path = manifest_path(output_dir)
-    with open(path, 'w') as f:
-        json.dump(payload, f, indent = 2, sort_keys = False)
+    _write_manifest_payload(path, payload)
     return path
 
 
@@ -376,44 +514,56 @@ def update_manifest_append(output_dir: str,
     manifest in a consistent state.
     """
 
-    existing = read_manifest(output_dir) or {
-            'version': SIGMA_VERSION,
-            'n_faces': int(n_faces),
-            'solver_type': str(solver_type),
-            'structure_hash': str(structure_hash),
-            'eps_hash': str(eps_hash),
-            'excitations': [],
-            'wavelengths_nm': []}
+    with _manifest_lock(output_dir):
+        try:
+            existing = read_manifest(output_dir)
+        except json.JSONDecodeError:
+            existing = _recover_manifest_from_disk(
+                    output_dir,
+                    n_faces = n_faces,
+                    solver_type = solver_type,
+                    structure_hash = structure_hash,
+                    eps_hash = eps_hash)
 
-    # Hash mismatch: refuse to corrupt — bail out, caller decides recovery.
-    if existing.get('structure_hash') and existing['structure_hash'] != structure_hash:
-        raise ValueError(
-                '[error] sigma manifest structure_hash mismatch — refuse to append. '
-                'Existing dir <{}>'.format(sigma_dir(output_dir)))
-    if existing.get('eps_hash') and existing['eps_hash'] != eps_hash:
-        raise ValueError(
-                '[error] sigma manifest eps_hash mismatch — refuse to append. '
-                'Existing dir <{}>'.format(sigma_dir(output_dir)))
+        if existing is None:
+            existing = {
+                    'version': SIGMA_VERSION,
+                    'n_faces': int(n_faces),
+                    'solver_type': str(solver_type),
+                    'structure_hash': str(structure_hash),
+                    'eps_hash': str(eps_hash),
+                    'excitations': [],
+                    'wavelengths_nm': []}
 
-    excs = list(existing.get('excitations', []))
-    for pol, prop in zip(polarizations, propagation_dirs):
-        item = {
-                'pol': _sanitize_int_vec(pol),
-                'prop_dir': _sanitize_int_vec(prop)}
-        if item not in excs:
-            excs.append(item)
+        # Hash mismatch: refuse to corrupt — bail out, caller decides recovery.
+        if existing.get('structure_hash') and existing['structure_hash'] != structure_hash:
+            raise ValueError(
+                    '[error] sigma manifest structure_hash mismatch — refuse to append. '
+                    'Existing dir <{}>'.format(sigma_dir(output_dir)))
+        if existing.get('eps_hash') and existing['eps_hash'] != eps_hash:
+            raise ValueError(
+                    '[error] sigma manifest eps_hash mismatch — refuse to append. '
+                    'Existing dir <{}>'.format(sigma_dir(output_dir)))
 
-    wls = set(round(float(w), 4) for w in existing.get('wavelengths_nm', []))
-    wls.add(round(float(wavelength_nm), 4))
+        excs = list(existing.get('excitations', []))
+        for pol, prop in zip(polarizations, propagation_dirs):
+            item = {
+                    'pol': _sanitize_int_vec(pol),
+                    'prop_dir': _sanitize_int_vec(prop)}
+            if item not in excs:
+                excs.append(item)
 
-    return write_manifest(
-            output_dir,
-            n_faces = n_faces,
-            solver_type = solver_type,
-            structure_hash = structure_hash,
-            eps_hash = eps_hash,
-            excitations = excs,
-            wavelengths_nm = sorted(wls))
+        wls = set(round(float(w), 4) for w in existing.get('wavelengths_nm', []))
+        wls.add(round(float(wavelength_nm), 4))
+
+        return write_manifest(
+                output_dir,
+                n_faces = n_faces,
+                solver_type = solver_type,
+                structure_hash = structure_hash,
+                eps_hash = eps_hash,
+                excitations = excs,
+                wavelengths_nm = sorted(wls))
 
 
 # ---------------------------------------------------------------------------
