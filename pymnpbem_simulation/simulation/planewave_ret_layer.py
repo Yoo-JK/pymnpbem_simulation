@@ -123,8 +123,13 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
                         'PlaneWaveRetLayer: warming up at enei={:.1f} nm'.format(wl))
                     t_warm = time.time()
                     greentab = self.build_greentab(layer, enei)
+                    print_info('PlaneWaveRetLayer: building BEMRetLayer solver')
                     bem = self.build_solver(layer, greentab)
+                    print_info('PlaneWaveRetLayer: starting first BEM solve at enei={:.1f} nm'.format(wl))
+                    t_first_solve = time.time()
                     sig, bem = bem.solve(exc(self.p, wl))
+                    print_info('PlaneWaveRetLayer: first BEM solve finished in {:.1f}s'.format(
+                        time.time() - t_first_solve))
                     warm_s = time.time() - t_warm
                     print_info('warmup done in {:.1f}s'.format(warm_s))
                     t_loop = time.time()

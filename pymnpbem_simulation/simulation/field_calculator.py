@@ -825,6 +825,16 @@ class FieldCalculator(SimulationRunner):
                 cached = None
 
         if cached is not None:
+            sim_type = str(sim.get('type', 'ret')).lower()
+            expected_solver_type = 'quasistatic' if 'stat' in sim_type else 'retarded'
+            cached_solver_type = str(cached.get('solver_type', ''))
+            if cached_solver_type != expected_solver_type:
+                print_info(
+                        'sigma cache at {:.2f} nm has solver_type <{}> but this run expects <{}>. Recomputing.'.format(
+                                wavelength_nm, cached_solver_type, expected_solver_type))
+                cached = None
+
+        if cached is not None:
             from mnpbem.greenfun import CompStruct
             if cached['solver_type'] == 'retarded':
                 required = ('sig1', 'sig2', 'h1', 'h2')

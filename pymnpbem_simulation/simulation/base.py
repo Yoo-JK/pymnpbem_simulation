@@ -478,6 +478,11 @@ class SimulationRunner(object):
         if cached is None:
             return None
 
+        expected_solver_type = self._sigma_solver_type()
+        cached_solver_type = str(cached.get('solver_type', ''))
+        if cached_solver_type != expected_solver_type:
+            return None
+
         try:
             from mnpbem.greenfun import CompStruct
             if cached.get('solver_type') == 'retarded':
