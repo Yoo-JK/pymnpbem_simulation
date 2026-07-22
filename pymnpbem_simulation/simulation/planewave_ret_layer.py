@@ -1,8 +1,14 @@
 import time
+import warnings
 
 from typing import Any, Dict, List, Tuple, Optional
 
 import numpy as np
+
+try:
+    from scipy.linalg import LinAlgWarning as _ScipyLinAlgWarning
+except Exception:
+    _ScipyLinAlgWarning = RuntimeWarning
 
 from .base import SimulationRunner
 from ..util import print_info
@@ -137,14 +143,36 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
                     bem = self.build_solver(layer, greentab)
                     print_info('PlaneWaveRetLayer: starting first BEM solve at enei={:.1f} nm'.format(wl))
                     t_first_solve = time.time()
-                    sig, bem = bem.solve(exc(self.p, wl))
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('error', category = _ScipyLinAlgWarning)
+                            sig, bem = bem.solve(exc(self.p, wl))
+                    except _ScipyLinAlgWarning as e:
+                        raise RuntimeError(
+                            'BEMRetLayer solve singular/ill-conditioned at {:.2f} nm: {}'.format(
+                                wl, e))
+
+                    if not self._sigma_compstruct_finite(sig):
+                        raise RuntimeError(
+                            'BEMRetLayer solve produced non-finite sigma at {:.2f} nm'.format(wl))
                     print_info('PlaneWaveRetLayer: first BEM solve finished in {:.1f}s'.format(
                         time.time() - t_first_solve))
                     warm_s = time.time() - t_warm
                     print_info('warmup done in {:.1f}s'.format(warm_s))
                     t_loop = time.time()
                 else:
-                    sig, bem = bem.solve(exc(self.p, wl))
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('error', category = _ScipyLinAlgWarning)
+                            sig, bem = bem.solve(exc(self.p, wl))
+                    except _ScipyLinAlgWarning as e:
+                        raise RuntimeError(
+                            'BEMRetLayer solve singular/ill-conditioned at {:.2f} nm: {}'.format(
+                                wl, e))
+
+                    if not self._sigma_compstruct_finite(sig):
+                        raise RuntimeError(
+                            'BEMRetLayer solve produced non-finite sigma at {:.2f} nm'.format(wl))
                 self.save_sigma_for_wavelength(sig, wl)
                 n_solved += 1
 

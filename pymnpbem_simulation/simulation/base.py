@@ -387,6 +387,36 @@ class SimulationRunner(object):
         name = output.get('name', 'simulation')
         return _os.path.join(root, name)
 
+    @staticmethod
+    def _array_is_finite(arr: Any) -> bool:
+        try:
+            a = np.asarray(arr)
+        except Exception:
+            return False
+        if a.size == 0:
+            return True
+        return bool(np.all(np.isfinite(a)))
+
+    def _sigma_compstruct_finite(self,
+            sig: Any) -> bool:
+        """Return True when all present sigma/current payload arrays are finite."""
+        if sig is None:
+            return False
+
+        # Retarded payload
+        has_ret = all(hasattr(sig, k) for k in ('sig1', 'sig2', 'h1', 'h2'))
+        if has_ret:
+            return (self._array_is_finite(sig.sig1)
+                    and self._array_is_finite(sig.sig2)
+                    and self._array_is_finite(sig.h1)
+                    and self._array_is_finite(sig.h2))
+
+        # Quasistatic payload
+        if hasattr(sig, 'sig'):
+            return self._array_is_finite(sig.sig)
+
+        return False
+
     def save_sigma_for_wavelength(self,
             sig: Any,
             wavelength_nm: float) -> None:
@@ -402,6 +432,11 @@ class SimulationRunner(object):
 
         output_dir = self._sigma_output_dir()
         if not output_dir:
+            return
+
+        if not self._sigma_compstruct_finite(sig):
+            print('[warn] skip sigma cache save at wl={:.2f} nm: non-finite sigma/h'.format(
+                    float(wavelength_nm)))
             return
 
         pol, prop = self._sigma_excitations()
@@ -496,10 +531,13 @@ class SimulationRunner(object):
         try:
             from mnpbem.greenfun import CompStruct
             if cached.get('solver_type') == 'retarded':
-                return CompStruct(self.p, float(wavelength_nm),
+                out = CompStruct(self.p, float(wavelength_nm),
                         sig1 = cached['sig1'], sig2 = cached['sig2'],
                         h1 = cached['h1'], h2 = cached['h2'])
-            return CompStruct(self.p, float(wavelength_nm), sig = cached['sig'])
+                return out if self._sigma_compstruct_finite(out) else None
+
+            out = CompStruct(self.p, float(wavelength_nm), sig = cached['sig'])
+            return out if self._sigma_compstruct_finite(out) else None
         except Exception:
             return None
 

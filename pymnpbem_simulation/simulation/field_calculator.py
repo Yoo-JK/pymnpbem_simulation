@@ -1,10 +1,16 @@
 import os
 import sys
+import warnings
 
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from box import Box
+
+try:
+    from scipy.linalg import LinAlgWarning as _ScipyLinAlgWarning
+except Exception:
+    _ScipyLinAlgWarning = RuntimeWarning
 
 from .base import SimulationRunner
 from . import grid_builder
@@ -906,9 +912,16 @@ class FieldCalculator(SimulationRunner):
                             '(needs sig1/sig2/h1/h2). Recomputing.'.format(wavelength_nm))
                     cached = None
                 else:
-                    return CompStruct(self.p, wavelength_nm,
+                    out = CompStruct(self.p, wavelength_nm,
                             sig1 = cached['sig1'], sig2 = cached['sig2'],
                             h1 = cached['h1'], h2 = cached['h2'])
+                    if not self._sigma_compstruct_finite(out):
+                        print_info(
+                                'sigma cache at {:.2f} nm is non-finite. Recomputing.'.format(
+                                        wavelength_nm))
+                        cached = None
+                    else:
+                        return out
             if cached is not None:
                 if 'sig' not in cached or cached['sig'] is None:
                     print_info(
@@ -916,7 +929,14 @@ class FieldCalculator(SimulationRunner):
                                     wavelength_nm))
                     cached = None
                 else:
-                    return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
+                    out = CompStruct(self.p, wavelength_nm, sig = cached['sig'])
+                    if not self._sigma_compstruct_finite(out):
+                        print_info(
+                                'sigma cache at {:.2f} nm is non-finite. Recomputing.'.format(
+                                        wavelength_nm))
+                        cached = None
+                    else:
+                        return out
 
         # Cache miss: lazy-build solver and run BEM solve. Save sigma
         # afterwards so subsequent field passes can reuse it.
@@ -925,7 +945,20 @@ class FieldCalculator(SimulationRunner):
         if exc is None:
             exc = self.build_excitation()
 
-        sig, bem = bem.solve(exc(self.p, wavelength_nm))
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error', category = _ScipyLinAlgWarning)
+                sig, bem = bem.solve(exc(self.p, wavelength_nm))
+        except _ScipyLinAlgWarning as e:
+            raise RuntimeError(
+                    'BEM solve singular/ill-conditioned at {:.2f} nm: {}'.format(
+                            wavelength_nm, e))
+
+        if not self._sigma_compstruct_finite(sig):
+            raise RuntimeError(
+                    'BEM solve produced non-finite sigma at {:.2f} nm; '
+                    'check geometry/materials/wavelength range.'.format(wavelength_nm))
+
         try:
             self.save_sigma_for_wavelength(sig, wavelength_nm)
         except Exception as e:
