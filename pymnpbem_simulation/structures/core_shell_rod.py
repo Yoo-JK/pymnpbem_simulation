@@ -71,11 +71,13 @@ class CoreShellRodBuilder(StructureBuilder):
         # height) by `thickness`. We grow both diameter and height; height
         # never shrinks below core_diameter.
         cum_d = core_diameter
-        cum_h = max(core_diameter, height)
         # Base rod is shrunken so that final outermost rod equals the
         # legacy (height, core_diameter + 2 * total_shell_thickness).
         total_shell_thickness = sum(float(sh['thickness']) for sh in shells)
         core_height_eff = max(core_diameter, height - 2.0 * total_shell_thickness)
+        # Grow height from the shrunken core so the outermost shell equals
+        # `height` (each shell adds 2*thickness on both radius and axis).
+        cum_h = core_height_eff
 
         p_core = trirod(core_diameter, core_height_eff,
                 _resolve_rod_mesh(self.cfg_struct, core_diameter, core_height_eff),
