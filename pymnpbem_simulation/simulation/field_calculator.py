@@ -593,6 +593,7 @@ class FieldCalculator(SimulationRunner):
         e_total: Optional[np.ndarray] = None
         h_total: Optional[np.ndarray] = None
         has_h: bool = False
+        n_fallback_select = 0
 
         for ci in range(n_chunks):
             c_start = ci * chunk_size
@@ -604,20 +605,59 @@ class FieldCalculator(SimulationRunner):
             dev_idx = device_ids[ci % len(device_ids)] if device_ids else ci
 
             def _eval_chunk() -> Tuple[np.ndarray, Optional[np.ndarray]]:
-                # Build a sub-ComPoint that down-selects ``ind`` (in
-                # ``pt._pc.pos`` order) but *preserves* the parent's
-                # group structure — empty groups stay so the Green
-                # function's ``con`` table keeps its row indices aligned
-                # with the parent (so ``p1_region`` clamp picks the
-                # same medium as the single-shot evaluation).
+                expected_n = int(c_stop - c_start)
+
+                def _is_valid_chunk_field(arr: Any,
+                        n_expect: int) -> bool:
+                    if arr is None:
+                        return False
+                    if np.isscalar(arr):
+                        return False
+                    a = np.asarray(arr)
+                    if a.ndim == 0:
+                        return False
+                    if a.shape[0] != n_expect:
+                        return False
+                    return True
+
+                def _eval_with_pt(pt_sub: Any) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+                    g_sub = mf_full._make_green(pt_sub, self.p, sim_type)
+                    f_sub = g_sub.field(sig, self.inout)
+                    e_sub_local = self._to_host(f_sub.e)
+                    h_sub_local = None
+                    if hasattr(f_sub, 'val') and 'h' in f_sub.val:
+                        h_sub_local = self._to_host(f_sub.h)
+                    return e_sub_local, h_sub_local
+
+                # Attempt 1: preserve parent group layout (keeps region-table
+                # row alignment for layered media).
                 pt_sub = _select_preserve_groups(pt, ind)
-                g_sub = mf_full._make_green(pt_sub, self.p, sim_type)
-                f_sub = g_sub.field(sig, self.inout)
-                e_sub = self._to_host(f_sub.e)
-                h_sub = None
-                if hasattr(f_sub, 'val') and 'h' in f_sub.val:
-                    h_sub = self._to_host(f_sub.h)
-                return e_sub, h_sub
+                e_sub, h_sub = _eval_with_pt(pt_sub)
+                if _is_valid_chunk_field(e_sub, expected_n):
+                    return e_sub, h_sub
+
+                # Attempt 2: canonical MeshField chunk path used by
+                # mnpbem.meshfield._field2 (drops empty groups). This is a
+                # correctness fallback when preserve-groups returns a scalar
+                # or wrong-sized payload from Green-function assembly.
+                pt_sub_std = pt.select(index = ind)
+                e_sub2, h_sub2 = _eval_with_pt(pt_sub_std)
+                if _is_valid_chunk_field(e_sub2, expected_n):
+                    nonlocal n_fallback_select
+                    n_fallback_select += 1
+                    print_info(
+                            'FieldCalculator: chunk {} used canonical select fallback '
+                            '(preserve-groups produced shape={})'.format(
+                                    ci, np.asarray(e_sub).shape if not np.isscalar(e_sub) else 'scalar'))
+                    return e_sub2, h_sub2
+
+                # Both selectors failed: raise with actionable shape details.
+                shape1 = 'scalar' if np.isscalar(e_sub) else str(np.asarray(e_sub).shape)
+                shape2 = 'scalar' if np.isscalar(e_sub2) else str(np.asarray(e_sub2).shape)
+                raise RuntimeError(
+                        'Distributed field chunk {} invalid E payloads '
+                        '(preserve={}, canonical={}), expected first dim={}'.format(
+                                ci, shape1, shape2, expected_n))
 
             if cp is not None:
                 local_idx = dev_idx if 0 <= dev_idx < n_gpus else (ci % n_gpus)
@@ -682,6 +722,11 @@ class FieldCalculator(SimulationRunner):
         # ``_flatten_field`` (which mis-reshapes multi-pol back to (n,3)),
         # mirror that here so downstream consumers see an identical tensor
         # shape. ``run()`` later re-broadcasts to (n_pts, 3, n_pol).
+        if n_fallback_select > 0:
+            print_info(
+                'FieldCalculator: distributed fallback used on {}/{} chunks'.format(
+                    n_fallback_select, n_chunks))
+
         e_grid = self._flatten_field(e_grid)
         h_grid = self._flatten_field(h_grid) if h_grid is not None else None
 
