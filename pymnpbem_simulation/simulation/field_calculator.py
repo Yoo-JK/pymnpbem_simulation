@@ -880,6 +880,11 @@ class FieldCalculator(SimulationRunner):
         a = np.asarray(arr)
         n_pts = self.grid_points.shape[0]
 
+        if a.ndim == 1 and a.size == n_pts:
+            out = np.zeros((n_pts, 3), dtype = a.dtype)
+            out[:, 0] = a
+            return out
+
         if a.ndim == 2 and a.shape == (n_pts, 3):
             return a
 
@@ -906,6 +911,21 @@ class FieldCalculator(SimulationRunner):
 
         if a.size % (n_pts * 3) == 0:
             return a.reshape(n_pts, 3, -1)
+
+        # Scalar-per-point payload (or scalar-per-point-per-pol) can appear
+        # on some fallback paths; promote it to a 3-component field with
+        # values on x and zeros on y/z so downstream shape logic remains
+        # stable.
+        if a.size % n_pts == 0:
+            tail = int(a.size // n_pts)
+            scalar = a.reshape(n_pts, tail)
+            if tail == 1:
+                out = np.zeros((n_pts, 3), dtype = a.dtype)
+                out[:, 0] = scalar[:, 0]
+                return out
+            out = np.zeros((n_pts, 3, tail), dtype = a.dtype)
+            out[:, 0, :] = scalar
+            return out
 
         return a.reshape(-1, 3)[:n_pts]
 
