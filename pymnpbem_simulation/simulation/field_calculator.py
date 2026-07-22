@@ -495,6 +495,23 @@ class FieldCalculator(SimulationRunner):
             e_flat = self._flatten_field(e)
             h_flat = self._flatten_field(h) if h is not None else None
 
+            try:
+                e_abs = np.abs(np.asarray(e_flat))
+                n_tot = int(e_abs.size)
+                n_fin = int(np.isfinite(e_abs).sum())
+                if n_tot > 0 and n_fin == 0:
+                    print_info(
+                            'FieldCalculator: warning — all E values are non-finite '
+                            '(inout={}, mindist={:.3f})'.format(self.inout, self.mindist))
+                elif n_fin > 0:
+                    fin_vals = e_abs[np.isfinite(e_abs)]
+                    if fin_vals.size > 0 and float(np.nanmax(fin_vals)) < 1e-300:
+                        print_info(
+                                'FieldCalculator: warning — E field is near-zero everywhere '
+                                '(max|E|<1e-300)')
+            except Exception:
+                pass
+
             return Box({
                     'e': e_flat,
                     'h': h_flat,
@@ -882,11 +899,25 @@ class FieldCalculator(SimulationRunner):
 
         if a.ndim == 1 and a.size == n_pts:
             out = np.zeros((n_pts, 3), dtype = a.dtype)
-            out[:, 0] = a
+            out[:, :] = a[:, None]
             return out
 
         if a.ndim == 2 and a.shape == (n_pts, 3):
             return a
+
+        # Common grid-shaped layout from MeshField._reshape_field:
+        # (...grid..., 3[, n_pol]). Flatten leading grid dims to n_pts.
+        if a.ndim >= 2 and a.shape[-1] == 3:
+            return a.reshape(-1, 3)[:n_pts]
+
+        if a.ndim >= 3 and a.shape[-2] == 3:
+            tail = a.shape[-1]
+            return a.reshape(-1, 3, tail)[:n_pts]
+
+        if a.ndim >= 2 and a.shape[0] == n_pts and a.shape[1] == 3:
+            if a.ndim == 2:
+                return a
+            return a.reshape(n_pts, 3, -1)
 
         if a.ndim == 3:
             pos_axes = [ax for ax, size in enumerate(a.shape) if size == n_pts]
@@ -914,17 +945,17 @@ class FieldCalculator(SimulationRunner):
 
         # Scalar-per-point payload (or scalar-per-point-per-pol) can appear
         # on some fallback paths; promote it to a 3-component field with
-        # values on x and zeros on y/z so downstream shape logic remains
-        # stable.
+        # replicated values on x/y/z so component selection in downstream
+        # visualization does not collapse to all-zero artifact channels.
         if a.size % n_pts == 0:
             tail = int(a.size // n_pts)
             scalar = a.reshape(n_pts, tail)
             if tail == 1:
                 out = np.zeros((n_pts, 3), dtype = a.dtype)
-                out[:, 0] = scalar[:, 0]
+                out[:, :] = scalar[:, 0][:, None]
                 return out
             out = np.zeros((n_pts, 3, tail), dtype = a.dtype)
-            out[:, 0, :] = scalar
+            out[:, :, :] = scalar[:, None, :]
             return out
 
         return a.reshape(-1, 3)[:n_pts]
