@@ -102,6 +102,16 @@ class PlaneWaveRetLayerRunner(SimulationRunner):
         # solver (the expensive ~warmup) build lazily on the first cache miss,
         # so a fully-cached re-run skips them entirely.  A killed run thus
         # resumes near where it stopped rather than restarting from wl 0.
+        output_dir = self._sigma_output_dir()
+        cache_load_enabled = self._sigma_cache_load_enabled()
+        cache_save_enabled = self._sigma_cache_enabled()
+        cache_manifest_ok = self._cache_manifest_compatible() if output_dir else False
+
+        print_info(
+            'PlaneWaveRetLayer cache: load={} save={} manifest_ok={} out={}'.format(
+                int(cache_load_enabled), int(cache_save_enabled),
+                int(cache_manifest_ok), output_dir if output_dir else '<none>'))
+
         n_cached0 = self.count_cached_wavelengths(enei)
         n_to_solve = n_wl - n_cached0
         if n_cached0 > 0:
