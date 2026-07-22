@@ -342,6 +342,16 @@ class SimulationRunner(object):
         sim = self.cfg.get('simulation', dict()) if isinstance(self.cfg, dict) else dict()
         return bool(sim.get('save_sigma_cache', True))
 
+    def _sigma_cache_load_enabled(self) -> bool:
+        """Sigma cache read flag — defaults to True.
+
+        Read and write controls are intentionally separate: callers may
+        want to reuse existing cache files while disabling new writes
+        (for example in follow-up field passes).
+        """
+        sim = self.cfg.get('simulation', dict()) if isinstance(self.cfg, dict) else dict()
+        return bool(sim.get('load_sigma_cache', True))
+
     def _sigma_solver_type(self) -> str:
         sim_type = str(self.cfg.get('simulation', dict()).get('type', '')).lower()
         if 'stat' in sim_type:
@@ -461,7 +471,7 @@ class SimulationRunner(object):
         match the current structure/eps, and all polarizations are present
         for this wavelength.
         """
-        if not self._sigma_cache_enabled():
+        if not self._sigma_cache_load_enabled():
             return None
 
         output_dir = self._sigma_output_dir()
@@ -495,24 +505,19 @@ class SimulationRunner(object):
 
     def count_cached_wavelengths(self,
             enei: Any) -> int:
-        """Number of sweep wavelengths already fully cached (all pols).
+        """Number of sweep wavelengths that can be loaded from cache.
 
-        Used only for progress/ETA reporting; the authoritative per-wl
-        decision is made by :meth:`load_sigma_for_wavelength`.
+        Uses :meth:`load_sigma_for_wavelength` so progress reporting
+        matches the exact per-wavelength resume decision (including
+        load flag, manifest hash compatibility, and solver-type checks).
         """
-        if not self._sigma_cache_enabled():
+        if not self._sigma_cache_load_enabled():
             return 0
-        output_dir = self._sigma_output_dir()
-        if not output_dir or not self._cache_manifest_compatible():
-            return 0
-        pol, prop = self._sigma_excitations()
-        try:
-            from .. import sigma_cache as _sc
-            cached = set(round(float(w), 2)
-                    for w in _sc.find_cached_wavelengths(output_dir, pol, prop))
-        except Exception:
-            return 0
-        return sum(1 for w in enei if round(float(w), 2) in cached)
+        n_cached = 0
+        for w in np.atleast_1d(np.asarray(enei, dtype = float)):
+            if self.load_sigma_for_wavelength(float(w)) is not None:
+                n_cached += 1
+        return n_cached
 
     def _resolve_schur(self,
             has_cover_layer: bool) -> Any:
