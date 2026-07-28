@@ -439,6 +439,31 @@ def _resolve_substrate_eps(name: Any, ri_paths: Any) -> Any:
             if stype == 'table':
                 return str(spec.get('file', name))
 
+            # tolerate shorthand descriptor dicts without explicit type
+            if 'epsilon' in spec:
+                return float(spec['epsilon'])
+
+            if 'file' in spec or 'path' in spec:
+                return str(spec.get('file', spec.get('path', name)))
+
+        if isinstance(spec, (int, float)):
+            return float(spec)
+
+        if isinstance(spec, str):
+            if spec.endswith('.dat'):
+                return spec
+            # allow numeric strings as direct constant eps overrides
+            try:
+                return float(spec)
+            except ValueError:
+                # preserve symbolic names so WithSubstrate presets can resolve
+                return spec
+
+        if callable(spec):
+            raise ValueError(
+                '[error] Unsupported callable substrate descriptor for <{}>; '
+                'use constant/table instead.'.format(name))
+
     return name
 
 

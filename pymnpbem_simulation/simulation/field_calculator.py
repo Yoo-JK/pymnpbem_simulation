@@ -160,6 +160,11 @@ class FieldCalculator(SimulationRunner):
         self._field_vram_share_env_saved: Optional[Dict[str, str]] = None
         self._maybe_seed_vram_share_env_from_cfg()
 
+        # Reuse MeshField across wavelengths. Rebuilding layer-aware Green
+        # objects each wavelength is expensive and can trigger allocator
+        # thrash in substrate runs.
+        self._meshfield_cache: Optional[Any] = None
+
     def _maybe_seed_vram_share_env_from_cfg(self) -> None:
         """Cache a deferred env snapshot derived from cfg so
         ``evaluate()`` can flip ``MNPBEM_VRAM_SHARE*`` on for the
@@ -438,6 +443,16 @@ class FieldCalculator(SimulationRunner):
                 sim = sim_type,
                 **self._layer_field_kwargs())
 
+    def _is_layer_field_sim(self) -> bool:
+        sim_type = str(self.cfg.get('simulation', dict()).get('type', 'ret'))
+        base = sim_type.replace('_iter', '')
+        return base in ('ret_layer', 'stat_layer')
+
+    def _get_meshfield(self) -> Any:
+        if self._meshfield_cache is None:
+            self._meshfield_cache = self._make_meshfield()
+        return self._meshfield_cache
+
     def _make_meshfield_chunk(self,
             x_chunk: np.ndarray,
             y_chunk: np.ndarray,
@@ -473,7 +488,7 @@ class FieldCalculator(SimulationRunner):
             if _field_vram_share_active():
                 return self._evaluate_distributed(sig)
 
-            mf = self._make_meshfield()
+            mf = self._get_meshfield()
             e, h = mf(sig, inout = self.inout,
                     fmm = self.fmm, fmm_eps = self.fmm_eps)
 
@@ -522,7 +537,7 @@ class FieldCalculator(SimulationRunner):
 
         # Build the full MeshField once so the ComPoint group structure
         # matches the single-GPU path exactly.
-        mf_full = self._make_meshfield()
+        mf_full = self._get_meshfield()
 
         # Fast path: FMM (sparse free-space O(N) eval) and the
         # ``sig.val['e']`` shortcut both bypass the Green-function
@@ -743,6 +758,9 @@ class FieldCalculator(SimulationRunner):
                 'n_pol': n_pol,
                 'inout': self.inout}
 
+        # Drop heavy caches eagerly at end of run.
+        self._meshfield_cache = None
+
         return out
 
     def _cache_manifest_compatible(self) -> bool:
@@ -792,8 +810,13 @@ class FieldCalculator(SimulationRunner):
         pol = sim.get('polarizations', [[1, 0, 0]])
         prop = sim.get('propagation_dirs', [[0, 0, 1]] * len(pol))
 
+        # Read and write cache controls are intentionally separate.
+        # save_sigma_cache gates writes (handled in save_sigma_for_wavelength),
+        # while load_sigma_cache gates reads. This avoids accidental full
+        # recomputation when callers disable writes during field follow-up.
+        cache_load_enabled = bool(sim.get('load_sigma_cache', True))
         cached = None
-        if output_dir and self._cache_manifest_compatible():
+        if cache_load_enabled and output_dir and self._cache_manifest_compatible():
             try:
                 cached = _sc.load_sigma(output_dir, wavelength_nm, pol, prop)
             except Exception as e:
@@ -804,10 +827,24 @@ class FieldCalculator(SimulationRunner):
         if cached is not None:
             from mnpbem.greenfun import CompStruct
             if cached['solver_type'] == 'retarded':
-                return CompStruct(self.p, wavelength_nm,
-                        sig1 = cached['sig1'], sig2 = cached['sig2'],
-                        h1 = cached['h1'], h2 = cached['h2'])
-            return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
+                required = ('sig1', 'sig2', 'h1', 'h2')
+                if not all(k in cached and cached[k] is not None for k in required):
+                    print_info(
+                            'sigma cache at {:.2f} nm is incomplete for retarded field '
+                            '(needs sig1/sig2/h1/h2). Recomputing.'.format(wavelength_nm))
+                    cached = None
+                else:
+                    return CompStruct(self.p, wavelength_nm,
+                            sig1 = cached['sig1'], sig2 = cached['sig2'],
+                            h1 = cached['h1'], h2 = cached['h2'])
+            if cached is not None:
+                if 'sig' not in cached or cached['sig'] is None:
+                    print_info(
+                            'sigma cache at {:.2f} nm is incomplete (missing sig). Recomputing.'.format(
+                                    wavelength_nm))
+                    cached = None
+                else:
+                    return CompStruct(self.p, wavelength_nm, sig = cached['sig'])
 
         # Cache miss: lazy-build solver and run BEM solve. Save sigma
         # afterwards so subsequent field passes can reuse it.
@@ -836,8 +873,29 @@ class FieldCalculator(SimulationRunner):
         if a.ndim == 2 and a.shape == (n_pts, 3):
             return a
 
+        if a.ndim == 3:
+            pos_axes = [ax for ax, size in enumerate(a.shape) if size == n_pts]
+            comp_axes = [ax for ax, size in enumerate(a.shape) if size == 3]
+
+            pos_axis = pos_axes[0] if pos_axes else 0
+            comp_axis = next((ax for ax in comp_axes if ax != pos_axis), None)
+
+            if comp_axis is not None:
+                pol_axis = next(
+                        (ax for ax in range(a.ndim) if ax not in (pos_axis, comp_axis)),
+                        None)
+                if pol_axis is not None:
+                    normalized = np.moveaxis(a, (pos_axis, comp_axis, pol_axis), (0, 1, 2))
+                    if normalized.shape[1] == 3:
+                        return normalized
+                    if normalized.shape[2] == 3:
+                        return np.moveaxis(normalized, 2, 1)
+
         if a.size == n_pts * 3:
             return a.reshape(n_pts, 3)
+
+        if a.size % (n_pts * 3) == 0:
+            return a.reshape(n_pts, 3, -1)
 
         return a.reshape(-1, 3)[:n_pts]
 
