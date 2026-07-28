@@ -114,6 +114,38 @@ def make_filename(wavelength_nm: float,
             _encode_vec3(prop_dir))
 
 
+def resolve_filename(sigma_folder: str,
+        wavelength_nm: float,
+        pol: Sequence[float],
+        prop_dir: Sequence[float]) -> Optional[str]:
+    """Locate an existing sigma file, tolerating wavelength rounding drift.
+
+    Filenames carry 2 decimals while the manifest stores 4, so a value sitting
+    exactly on a rounding boundary (e.g. 601.0050) formats to a different name
+    than the file written at full precision. Fall back to a nearest match.
+    """
+
+    fpath = os.path.join(sigma_folder, make_filename(wavelength_nm, pol, prop_dir))
+    if os.path.exists(fpath):
+        return fpath
+
+    suffix = '_p{}_d{}.npz'.format(_encode_vec3(pol), _encode_vec3(prop_dir))
+    best = None
+    best_delta = 0.011
+    for name in os.listdir(sigma_folder):
+        if not name.startswith('wl_') or not name.endswith(suffix):
+            continue
+        try:
+            wl = float(name[3:len(name) - len(suffix)])
+        except ValueError:
+            continue
+        delta = abs(wl - float(wavelength_nm))
+        if delta < best_delta:
+            best = os.path.join(sigma_folder, name)
+            best_delta = delta
+    return best
+
+
 def sigma_dir(output_dir: str) -> str:
     """Return the sigma subfolder path (does NOT create)."""
 
@@ -287,10 +319,9 @@ def load_sigma(output_dir: str,
     for k in range(npol):
         pol_k = _sanitize_int_vec(polarizations[k])
         dir_k = _sanitize_int_vec(propagation_dirs[k])
-        fname = make_filename(wavelength_nm, pol_k, dir_k)
-        fpath = os.path.join(d, fname)
+        fpath = resolve_filename(d, wavelength_nm, pol_k, dir_k)
 
-        if not os.path.exists(fpath):
+        if fpath is None:
             return None
 
         data = np.load(fpath)
