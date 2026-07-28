@@ -12,6 +12,7 @@ def resolve_refractive_index_paths(ri_paths: Dict[str, Any]) -> Dict[str, Any]:
     Supported:
             - {"type": "constant", "epsilon": 2.02} -> {"type": "constant", "epsilon": 2.02}
             - {"type": "table", "file": "/abs/path/file.dat"} -> "/abs/path/file.dat"
+              ("path" is accepted as an alias for "file")
             - {"type": "python_module", "module_path": "...py", "factory": "generate_eps_func"} -> callable
     """
     if not isinstance(ri_paths, dict):
@@ -33,7 +34,7 @@ def resolve_refractive_index_paths(ri_paths: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         if stype == "table":
-            file_path = spec.get("file")
+            file_path = spec.get("file") or spec.get("path")
             if not file_path:
                 raise ValueError(f"Material '{name}' table spec missing 'file'")
             resolved[name] = str(file_path)

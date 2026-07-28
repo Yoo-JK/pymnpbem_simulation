@@ -27,6 +27,10 @@ def grade_diff(rel: float) -> str:
     return 'BAD'
 
 
+REFERENCE_WL_NM = 636.3636363636364
+N_WAVELENGTHS = 12
+
+
 def test_dimer_baseline_10wl():
     out_root = REPO_ROOT / 'results'
     name = 'dimer_baseline_10wl_test'
@@ -40,7 +44,7 @@ def test_dimer_baseline_10wl():
         str(REPO_ROOT / 'run_simulation.py'),
         '--config', str(EXAMPLE_YAML),
         '--simulation-name', name,
-        '--n-wavelengths', '10',
+        '--n-wavelengths', str(N_WAVELENGTHS),
         '--n-workers', '1',
         '--n-threads', '4',
         '--n-gpus-per-worker', '0']
@@ -63,7 +67,7 @@ def test_dimer_baseline_10wl():
     with open(summary_path) as f:
         summary = json.load(f)
 
-    assert summary['n_wavelengths'] == 10
+    assert summary['n_wavelengths'] == N_WAVELENGTHS
     assert summary['n_pol'] == 2
     assert summary['peak_ext_x'] > 0
 
@@ -75,13 +79,21 @@ def test_dimer_baseline_10wl():
         with open(REFERENCE_JSON) as f:
             ref = json.load(f)
 
-        ref_peak = ref['peak_wl_636_36']['ext_x']
-        my_peak = summary['peak_ext_x']
+        spec = np.load(out_dir / 'spectrum.npz')
+        wl = spec['wavelength']
+        idx = int(np.argmin(np.abs(wl - REFERENCE_WL_NM)))
 
-        rel = abs(my_peak - ref_peak) / abs(ref_peak)
+        assert abs(wl[idx] - REFERENCE_WL_NM) < 1e-6, \
+            '[error] reference wavelength {} nm not on grid {}'.format(
+                REFERENCE_WL_NM, wl)
+
+        ref_ext = ref['peak_wl_636_36']['ext_x']
+        my_ext = float(spec['ext'][idx, 0])
+
+        rel = abs(my_ext - ref_ext) / abs(ref_ext)
         grade = grade_diff(rel)
-        print('[test] peak_ext_x: my={:.3f}  ref={:.3f}  rel={:.3e}  grade=<{}>'.format(
-            my_peak, ref_peak, rel, grade))
+        print('[test] ext_x @ {:.2f} nm: my={:.3f}  ref={:.3f}  rel={:.3e}  grade=<{}>'.format(
+            wl[idx], my_ext, ref_ext, rel, grade))
 
         assert grade in {'machine', 'OK', 'good', 'warn'}, \
             '[error] BAD precision: {}'.format(grade)
