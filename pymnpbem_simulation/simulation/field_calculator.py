@@ -897,7 +897,16 @@ class FieldCalculator(SimulationRunner):
         if a.size % (n_pts * 3) == 0:
             return a.reshape(n_pts, 3, -1)
 
-        return a.reshape(-1, 3)[:n_pts]
+        # Reaching here means the field buffer cannot be mapped onto the grid
+        # without discarding data. The previous ``a.reshape(-1, 3)[:n_pts]``
+        # fallback did so silently: it reinterpreted the (n_pts, 3, n_pol)
+        # buffer as (., 3), so grid point i received the values of true point
+        # i // 2 and half the grid was dropped. Fail loudly instead.
+        raise RuntimeError(
+                '[error] _flatten_field: field array of shape {} (size {}) is not '
+                'compatible with the {}-point grid — refusing to reshape, as any '
+                'mapping would silently scramble grid positions.'.format(
+                        a.shape, a.size, n_pts))
 
     def _broadcast_pol(self,
             arr: np.ndarray,
@@ -907,6 +916,16 @@ class FieldCalculator(SimulationRunner):
         n_pts = self.grid_points.shape[0]
 
         if a.ndim == 2 and a.shape == (n_pts, 3):
+            # A pol-less field with several requested polarizations means the
+            # pol axis was lost upstream; copying it into every slot would
+            # produce a physically impossible result (identical response for
+            # every polarization) that looks well-formed on disk.
+            if n_pol > 1:
+                raise RuntimeError(
+                        '[error] _broadcast_pol: field has no polarization axis '
+                        '(shape {}) but {} polarizations were requested — refusing '
+                        'to duplicate one polarization across all slots.'.format(
+                                a.shape, n_pol))
             out = np.zeros((n_pts, 3, n_pol), dtype = a.dtype)
             for j in range(n_pol):
                 out[..., j] = a
