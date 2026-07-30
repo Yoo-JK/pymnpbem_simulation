@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import copy
 import argparse
 import time
 
@@ -53,6 +54,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     except Exception as e:
         print_error('failed to load config: {}'.format(e))
         return 1
+
+    if args.fields:
+        try:
+            cfg = _force_field_pass(cfg)
+        except ValueError as e:
+            print_error('{}'.format(e))
+            return 1
 
     if args.verbose:
         _print_verbose_inputs(args, cfg)
@@ -224,6 +232,40 @@ def _load_initial_config(args: argparse.Namespace) -> Dict[str, Any]:
     return load_yaml(args.config)
 
 
+_FIELD_PASS_KEYS = ('field_region', 'field_mindist', 'field_nmax',
+        'field_wavelength_idx', 'field_wavelengths')
+
+
+def _force_field_pass(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Turn a spectrum config into the field-only pass over the same case.
+
+    The field grid keys live in the ``analysis`` section (they drive the
+    postprocess) but the field pass reads them from ``simulation``; this
+    lifts them across without touching the caller's config on disk.
+    """
+    from .util import print_info
+
+    out = copy.deepcopy(cfg)
+    sim = out.setdefault('simulation', dict())
+    anal = out.get('analysis', dict())
+
+    for key in _FIELD_PASS_KEYS:
+        if key not in sim and key in anal:
+            sim[key] = anal[key]
+
+    if 'field_region' not in sim and 'grid' not in sim:
+        raise ValueError(
+                '[error] --fields needs <field_region> (or a simulation.grid '
+                'block) in the config!')
+
+    sim['calculate_spectrum'] = False
+    sim['calculate_fields'] = True
+
+    print_info('--fields: field-only pass (spectrum disabled, sigma cache reused)')
+
+    return out
+
+
 def _print_verbose_inputs(args: argparse.Namespace,
         cfg: Dict[str, Any]) -> None:
     from .util import print_info
@@ -291,6 +333,10 @@ def _build_parser() -> argparse.ArgumentParser:
             help = 'Override simulation name (folder).')
     parser.add_argument('--n-wavelengths', type = int, default = None,
             help = 'Sub-sample wavelength count (for debugging).')
+    parser.add_argument('--fields', action = 'store_true',
+            help = 'Field-only pass over an already-computed case: disables the '
+                    'spectrum, lifts the field_region/field_* keys out of the '
+                    'analysis section and reuses the sigma cache.')
     parser.add_argument('--reanalyze', action = 'store_true',
             help = 'Skip simulation, only run postprocess on existing results.')
     parser.add_argument('--verbose', action = 'store_true',

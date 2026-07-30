@@ -154,6 +154,14 @@ def _build_parser() -> argparse.ArgumentParser:
                    'hyperparameters (same style as --str-conf/--sim-conf). '
                    'Explicit CLI flags override it. '
                    '(분석 하이퍼파라미터 config; --str-conf/--sim-conf 와 동일 스타일.)')
+    parser.add_argument('--str-conf', type = str, default = None,
+            help = 'Structure config .py (mnpbem_simulation-style invocation). '
+                   'Accepted for CLI parity; the analysis keys are read from '
+                   '--sim-conf.')
+    parser.add_argument('--sim-conf', type = str, default = None,
+            help = 'Simulation config .py holding the analysis keys inline '
+                   '(mnpbem_simulation style). Supplies --result / --case-dir '
+                   'from output_dir + simulation_name.')
     parser.add_argument('--analyzers', type = str, default = None,
             help = 'Comma-separated: spectrum,fano,eigenmode,multipole,fano-analysis. '
                    '(default: spectrum)')
@@ -234,6 +242,34 @@ _ANAL_CONF_DEFAULTS = {
 }
 
 
+def _anal_conf_from_sim_conf(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build the analysis args from an mnpbem_simulation-style sim-conf.
+
+    That flavour keeps the postprocess keys inline in the simulation config,
+    so we take the subset this CLI understands and derive result/case-dir
+    from output_dir + simulation_name. The remaining keys are the
+    simulation's own — not typos — so they are dropped without a warning.
+    """
+    from pymnpbem_simulation.config import load_py_config
+
+    sim_args = load_py_config(args.sim_conf)
+    conf = {k: v for k, v in sim_args.items() if k in _ANAL_CONF_DEFAULTS}
+
+    print('[info] loading sim-conf <{}> ({} analysis key(s))'.format(
+            args.sim_conf, len(conf)))
+
+    out_dir = sim_args.get('output_dir', None)
+    name = sim_args.get('simulation_name', None)
+
+    if out_dir and name:
+        case_dir = os.path.join(str(out_dir), str(name))
+        conf.setdefault('case_dir', case_dir)
+        conf.setdefault('result', os.path.join(case_dir, 'spectrum.npz'))
+        conf.setdefault('config', os.path.join(case_dir, 'config.yaml'))
+
+    return conf
+
+
 def _apply_anal_conf(args: argparse.Namespace) -> None:
     """Merge --anal-conf (.py with args={...}) under the CLI flags.
 
@@ -245,7 +281,9 @@ def _apply_anal_conf(args: argparse.Namespace) -> None:
     (분석 하이퍼파라미터를 config 로 받아 재현 가능하게. 우선순위: CLI > anal-conf > 기본값.)
     """
     conf = {}
-    if getattr(args, 'anal_conf', None):
+    if getattr(args, 'sim_conf', None) and not getattr(args, 'anal_conf', None):
+        conf = _anal_conf_from_sim_conf(args)
+    elif getattr(args, 'anal_conf', None):
         from pymnpbem_simulation.config import load_py_config
         conf = load_py_config(args.anal_conf)
         print('[info] loading anal-conf <{}> ({} keys)'.format(args.anal_conf, len(conf)))

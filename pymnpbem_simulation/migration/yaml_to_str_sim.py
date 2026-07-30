@@ -13,14 +13,24 @@ from .py_to_yaml import _KEY_TO_SECTION
 
 
 _SECTION_TO_KEY = dict()
-for _flat_key, (_section, _sub_key) in _KEY_TO_SECTION.items():
-    _SECTION_TO_KEY[(_section, _sub_key)] = _flat_key
+_NESTED_TO_KEY = dict()
+for _flat_key, _path in _KEY_TO_SECTION.items():
+
+    if len(_path) == 2:
+        # First writer wins: aliases (num_cores -> num_workers) must not
+        # rename the canonical key on the YAML -> py round trip.
+        _SECTION_TO_KEY.setdefault(tuple(_path), _flat_key)
+    else:
+        _NESTED_TO_KEY.setdefault(tuple(_path[:-1]), dict())[_path[-1]] = _flat_key
 
 
 _STR_FLAT_KEYS = {
         'structure', 'structure_name',
         'diameter', 'size', 'gap', 'rounding', 'roundings', 'mesh_density',
-        'core_size', 'shell_layers', 'offset',
+        'height', 'axes', 'side_length', 'thickness',
+        'rod_mesh', 'nphi', 'ntheta', 'nz',
+        'core_size', 'core_diameter', 'shell_thickness', 'shell_layers',
+        'offset',
         'tilt_angle', 'tilt_axis', 'rotation_angle',
         'n_spheres', 'shape_file', 'voxel_size', 'voxel_method',
         'refine',
@@ -36,13 +46,16 @@ _SIM_FLAT_KEYS = {
         'impact_parameter', 'beam_energy', 'beam_width',
         'interp', 'relcutoff', 'waitbar',
         'calculate_cross_sections', 'calculate_fields',
+        'calculate_surface_charges',
         'field_region', 'field_mindist', 'field_nmax',
         'field_wavelength_idx', 'export_field_arrays',
         'field_hotspot_count', 'field_hotspot_min_distance',
-        'use_parallel', 'num_workers', 'max_comp_threads',
+        'use_parallel', 'num_workers', 'num_cores', 'max_comp_threads',
         'wavelength_chunk_size',
         'use_mirror_symmetry', 'use_iterative_solver', 'use_nonlocality',
-        'use_h2_compression',
+        'nonlocal_model', 'nonlocal_drude_params', 'nonlocal_cover_thickness',
+        'use_h2_compression', 'h2_tolerance',
+        'iter_tolerance', 'iter_maxiter',
         'output_dir', 'output_formats',
         'save_plots', 'plot_format', 'plot_dpi',
         'spectrum_xaxis',
@@ -70,6 +83,19 @@ def yaml_to_flat_args(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
             if section == 'extras':
                 flat[sub_key] = value
+                continue
+
+            nested = _NESTED_TO_KEY.get((section, sub_key), None)
+
+            if nested is not None and isinstance(value, dict):
+                rest = dict()
+                for leaf, leaf_value in value.items():
+                    if leaf in nested:
+                        flat[nested[leaf]] = leaf_value
+                    else:
+                        rest[leaf] = leaf_value
+                if rest:
+                    flat['{}__{}'.format(section, sub_key)] = rest
                 continue
 
             flat['{}__{}'.format(section, sub_key)] = value
