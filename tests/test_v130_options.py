@@ -474,7 +474,7 @@ def test_large_mesh_hmatrix_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'large_mesh_hmatrix.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['simulation']['type'] == 'ret_iter'
@@ -488,7 +488,7 @@ def test_dimer_iter_hmatrix_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'dimer_iter_hmatrix.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['simulation']['type'] == 'ret_iter'
@@ -499,7 +499,7 @@ def test_dimer_iter_yaml_uses_auto() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'dimer_iter.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['simulation']['iter']['hmatrix'] == 'auto'

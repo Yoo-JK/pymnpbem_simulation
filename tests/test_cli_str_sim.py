@@ -28,7 +28,7 @@ from pymnpbem_simulation.migration.yaml_to_str_sim import (
 
 
 def _write_py(path, args_dict):
-    with open(str(path), 'w') as f:
+    with open(str(path), 'w', encoding = 'utf-8') as f:
         f.write('args = {}\n'.format(repr(args_dict)))
 
 
@@ -41,7 +41,7 @@ def test_load_py_config_roundtrip(tmp_path):
 
 def test_load_py_config_missing_args(tmp_path):
     p = tmp_path / 'cfg.py'
-    with open(str(p), 'w') as f:
+    with open(str(p), 'w', encoding = 'utf-8') as f:
         f.write('x = 5\n')
     with pytest.raises(ValueError, match = 'args'):
         load_py_config(str(p))
@@ -49,7 +49,7 @@ def test_load_py_config_missing_args(tmp_path):
 
 def test_load_py_config_not_dict(tmp_path):
     p = tmp_path / 'cfg.py'
-    with open(str(p), 'w') as f:
+    with open(str(p), 'w', encoding = 'utf-8') as f:
         f.write('args = [1, 2, 3]\n')
     with pytest.raises(ValueError, match = 'is not a dict'):
         load_py_config(str(p))
@@ -243,7 +243,7 @@ def test_yaml_to_str_sim_split(tmp_path):
             'interp': 'curv'}}
 
     yaml_path = tmp_path / 'in.yaml'
-    with open(str(yaml_path), 'w') as f:
+    with open(str(yaml_path), 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f)
 
     str_path = tmp_path / 'out_str.py'

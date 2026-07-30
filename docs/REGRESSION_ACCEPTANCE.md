@@ -93,7 +93,7 @@ GPU/multinode 항목은 self-hosted runner 한정.
 ## 5. 실행 방법
 
 ```bash
-PYBIN=/home/yoojk20/miniconda3/envs/mnpbem/bin/python
+PYBIN=$HOME/miniconda3/envs/mnpbem/bin/python
 
 # 매 commit (PR)
 $PYBIN -m pytest tests/regression/ -m fast --tb=short -q

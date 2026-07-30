@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "Yoo Jongkuk", email = "yoojk1025@gmail.com" }
+    { name = "Yoo Jaekak" }
 ]
 dependencies = [
     "numpy>=2.0",

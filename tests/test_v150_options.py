@@ -485,7 +485,7 @@ def test_dimer_iter_precond_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'dimer_iter_precond.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['simulation']['type'] == 'ret_iter'
@@ -499,7 +499,7 @@ def test_nonlocal_iter_schur_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'nonlocal_iter_schur.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['simulation']['type'] == 'ret_iter'

@@ -550,6 +550,13 @@ def _get_registry() -> Dict[str, Any]:
     from . import planewave_ret_layer, dipole_ret_layer, eels_ret_layer
     from . import planewave_ret_iter, planewave_stat_iter, planewave_ret_layer_iter
     from . import planewave_ret_mirror
+    # --- new runners ---
+    from . import planewave_stat_layer, dipole_stat_layer, eels_stat_layer
+    from . import planewave_stat_mirror, dipole_stat_mirror
+    from . import dipole_ret_mirror
+    from . import dipole_ret_iter, eels_ret_iter
+    from . import dipole_ret_layer_iter, eels_ret_layer_iter
+    from . import dipole_stat_iter, eels_stat_iter
 
     return {
             ('ret', 'planewave'): planewave_ret.PlaneWaveRetRunner,
@@ -565,6 +572,24 @@ def _get_registry() -> Dict[str, Any]:
             ('stat_iter', 'planewave'): planewave_stat_iter.PlaneWaveStatIterRunner,
             ('ret_layer_iter', 'planewave'): planewave_ret_layer_iter.PlaneWaveRetLayerIterRunner,
             ('ret_mirror', 'planewave'): planewave_ret_mirror.PlaneWaveRetMirrorRunner,
+            # stat_layer combos (also fixes crash when config auto-promotes stat+substrate)
+            ('stat_layer', 'planewave'): planewave_stat_layer.PlaneWaveStatLayerRunner,
+            ('stat_layer', 'dipole'): dipole_stat_layer.DipoleStatLayerRunner,
+            ('stat_layer', 'eels'): eels_stat_layer.EELSStatLayerRunner,
+            # stat_mirror combos
+            ('stat_mirror', 'planewave'): planewave_stat_mirror.PlaneWaveStatMirrorRunner,
+            ('stat_mirror', 'dipole'): dipole_stat_mirror.DipoleStatMirrorRunner,
+            # ret_mirror dipole (no EELS mirror excitation in MNPBEM)
+            ('ret_mirror', 'dipole'): dipole_ret_mirror.DipoleRetMirrorRunner,
+            # ret_iter dipole/eels
+            ('ret_iter', 'dipole'): dipole_ret_iter.DipoleRetIterRunner,
+            ('ret_iter', 'eels'): eels_ret_iter.EELSRetIterRunner,
+            # ret_layer_iter dipole/eels
+            ('ret_layer_iter', 'dipole'): dipole_ret_layer_iter.DipoleRetLayerIterRunner,
+            ('ret_layer_iter', 'eels'): eels_ret_layer_iter.EELSRetLayerIterRunner,
+            # stat_iter dipole/eels
+            ('stat_iter', 'dipole'): dipole_stat_iter.DipoleStatIterRunner,
+            ('stat_iter', 'eels'): eels_stat_iter.EELSStatIterRunner,
             'planewave_ret': planewave_ret.PlaneWaveRetRunner,
             'planewave_stat': planewave_stat.PlaneWaveStatRunner,
             'dipole_ret': dipole_ret.DipoleRetRunner,
@@ -578,7 +603,20 @@ def _get_registry() -> Dict[str, Any]:
             'planewave_ret_iter': planewave_ret_iter.PlaneWaveRetIterRunner,
             'planewave_stat_iter': planewave_stat_iter.PlaneWaveStatIterRunner,
             'planewave_ret_layer_iter': planewave_ret_layer_iter.PlaneWaveRetLayerIterRunner,
-            'planewave_ret_mirror': planewave_ret_mirror.PlaneWaveRetMirrorRunner}
+            'planewave_ret_mirror': planewave_ret_mirror.PlaneWaveRetMirrorRunner,
+            # string-key aliases for new runners
+            'planewave_stat_layer': planewave_stat_layer.PlaneWaveStatLayerRunner,
+            'dipole_stat_layer': dipole_stat_layer.DipoleStatLayerRunner,
+            'eels_stat_layer': eels_stat_layer.EELSStatLayerRunner,
+            'planewave_stat_mirror': planewave_stat_mirror.PlaneWaveStatMirrorRunner,
+            'dipole_stat_mirror': dipole_stat_mirror.DipoleStatMirrorRunner,
+            'dipole_ret_mirror': dipole_ret_mirror.DipoleRetMirrorRunner,
+            'dipole_ret_iter': dipole_ret_iter.DipoleRetIterRunner,
+            'eels_ret_iter': eels_ret_iter.EELSRetIterRunner,
+            'dipole_ret_layer_iter': dipole_ret_layer_iter.DipoleRetLayerIterRunner,
+            'eels_ret_layer_iter': eels_ret_layer_iter.EELSRetLayerIterRunner,
+            'dipole_stat_iter': dipole_stat_iter.DipoleStatIterRunner,
+            'eels_stat_iter': eels_stat_iter.EELSStatIterRunner}
 
 
 class _LazyRegistry(object):

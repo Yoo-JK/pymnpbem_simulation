@@ -1,19 +1,16 @@
 """
-config_simulation.py — pymnpbem 시뮬레이션 설정 REFERENCE 템플릿.
+MNPBEM Simulation Configuration - Complete Recipe Book
 
-이 파일은 pymnpbem 시뮬레이션의 simulation / compute / postprocess /
-output config 가 받을 수 있는 **모든 옵션**을 문서화한 reference 다.
-실제 케이스 config 를 만들 때 이 파일을 복사한 뒤 필요한 옵션만
-남기고 값을 채운다.
+This file contains all simulation parameters (excitation, wavelength,
+numerics, compute, materials, output). It does NOT contain postprocess/
+analysis parameters — put those in config/analysis/config_analysis.py.
 
-사용법:
+Usage:
   python run_simulation.py \
-      --str-conf config_str_<case>.py \
-      --sim-conf config_sim_<case>.py
+      --str-conf config/structure/config_structure.py \
+      --sim-conf config/simulation/config_simulation.py
 
-config 파일은 반드시 ``args`` 라는 dict 를 정의해야 한다.
-
-(MATLAB mnpbem_simulation 의 시뮬레이션 설정에 대응 — Migrated to pymnpbem.)
+The config file must define an 'args' dict.
 """
 
 import os
@@ -21,136 +18,251 @@ from pathlib import Path
 
 args = {}
 
-# ===================================================================
-# 1. SIMULATION IDENTITY
-# ===================================================================
-args['simulation_name'] = 'my_simulation'     # 출력 폴더/플롯 이름
+# ============================================================================
+# PARALLEL COMPUTING OPTIONS
+# ============================================================================
+# Enable parallel computing with multiple cores
+args['use_parallel'] = True  # Set to False to disable parallel computing
 
-# ===================================================================
-# 2. BEM SOLVER TYPE  (필수)
-# ===================================================================
-#   ret              — retarded, dense LU.  기본. 작은 mesh 에 빠름
-#   stat             — quasi-static, dense LU
-#   ret_layer        — retarded + substrate layer  (use_substrate 시 자동)
-#   stat_layer       — quasi-static + substrate
-#   ret_iter         — retarded + GMRES (대형 mesh / 메모리 절약)
-#   stat_iter        — quasi-static iterative
-#   ret_layer_iter   — retarded iterative + substrate
-#   ret_mirror       — retarded + mirror 대칭
-#   stat_mirror      — quasi-static + mirror
-# ※ compute.use_iterative_solver=True 면 ret→ret_iter 자동 승격.
-# ※ use_substrate=True 면 ret→ret_layer 자동 승격.
+# Number of workers (cores) to use
+# Options:
+#   - Integer (e.g., 10): Use exactly 10 workers
+#   - 'auto': Automatically detect available cores
+#   - 'env': Read from environment variable MNPBEM_NUM_WORKERS
+# args['num_workers'] = 'env'  # Recommended for Slurm clusters
+
+# Alternative: specify exact number
+args['num_workers'] = 2
+args['max_comp_threads'] = 64
+args['wavelength_chunk_size'] = 10
+
+# ============================================================================
+# SIMULATION NAME (IDENTIFIER)
+# ============================================================================
+# Give your simulation a descriptive name
+args['simulation_name'] = 'au_sphere_spectrum'
+
+# ============================================================================
+# SIMULATION TYPE
+# ============================================================================
+# Simulation method:
+#   - 'ret'  : Retarded/full Maxwell equations (accurate, for larger particles)
+#   - 'stat' : Quasistatic approximation (fast, suitable for small particles)
+
 args['simulation_type'] = 'ret'
 
-# ===================================================================
-# 3. EXCITATION  (필수)
-# ===================================================================
-#   planewave — 평면파 (모든 solver 지원)
-#   dipole    — 점 쌍극자 (ret/stat/ret_layer/stat_layer 만)
-#   eels      — 전자 에너지 손실 분광 (동일)
+# Interpolation method:
+#   - 'curv' : Curved boundary elements (more accurate, recommended)
+#   - 'flat' : Flat boundary elements (faster, less accurate)
+
+args['interp'] = 'curv'
+
+# Wait bar (progress indicator):
+#   - 0 : Off (recommended for batch jobs)
+#   - 1 : On
+
+args['waitbar'] = 0
+
+# ============================================================================
+# EXCITATION TYPE
+# ============================================================================
+# Type of excitation:
+#   - 'planewave' : Plane wave illumination (most common)
+#   - 'dipole'    : Point dipole excitation (for LDOS, decay rates)
+#   - 'eels'      : Electron energy loss spectroscopy
+
 args['excitation_type'] = 'planewave'
 
-# --- planewave 파라미터 ---
+# --- Plane Wave Configuration ---
+# Only used if excitation_type == 'planewave'
+
+# Polarization direction(s) - can specify multiple
+# Each polarization is a 3D vector [x, y, z]
+#
+# ============================================================================
+# UNPOLARIZED LIGHT CALCULATION (FDTD-style, automatic detection)
+# ============================================================================
+# To calculate unpolarized light response, specify TWO ORTHOGONAL polarizations.
+# The system will automatically detect orthogonal polarizations and calculate:
+#   - Unpolarized spectrum: sigma_unpol = (sigma_pol1 + sigma_pol2) / 2
+#   - Unpolarized field: I_unpol = (I_pol1 + I_pol2) / 2
+#
+# Example for unpolarized calculation (x and y polarizations are orthogonal):
+#   args['polarizations'] = [[1, 0, 0], [0, 1, 0]]
+#   args['propagation_dirs'] = [[0, 0, 1], [0, 0, 1]]
+# ============================================================================
+
 args['polarizations'] = [
-    [1, 0, 0],
-    [0, 1, 0]]
+    [1, 0, 0],  # x-polarization
+    [0, 1, 0],  # y-polarization
+]
+
+# Propagation direction(s) - can specify multiple
+# Each direction is a 3D unit vector [x, y, z]
 args['propagation_dirs'] = [
-    [0, 0, 1],
-    [0, 0, 1]]
+    [0, 0, 1],  # Propagating in +z direction
+    [0, 0, 1],  # Propagating in +z direction (for 2nd polarization)
+]
 
-# --- dipole 파라미터 (excitation_type='dipole' 일 때) ---
-# args['dipole_position'] = [0, 0, 20]    # [x,y,z] (nm)
-# args['dipole_moment']   = [1, 0, 0]     # [x,y,z] 쌍극자 모멘트
+# --- Dipole Configuration ---
+# Only used if excitation_type == 'dipole'
 
-# --- eels 파라미터 (excitation_type='eels' 일 때) ---
-# args['impact_parameter'] = 5.0          # 빔 충돌 매개변수 (nm)
-# args['beam_energy']      = 200e3        # 입사 전자 에너지 (eV)
-# args['beam_width']       = 0.5          # 빔 폭 (nm)
+# args['dipole_position'] = [0, 0, 15]  # Position in nm [x, y, z]
+# args['dipole_moment'] = [0, 0, 1]     # Dipole moment direction [x, y, z]
 
-# ===================================================================
-# 4. WAVELENGTH / 수치 정밀도
-# ===================================================================
-args['wavelength_range'] = [300, 1000, 140]   # [시작 nm, 끝 nm, 점 개수]
-                                              #   ※ 사용자 케이스에서
-                                              #     절대 변경 금지 항목
-args['relcutoff'] = 3           # int — BEM 수치 적분 정밀도 (높을수록 느림)
-args['interp']    = 'curv'      # str — mesh 보간: 'flat' / 'curv' / 'polar'
-# args['waitbar'] = False       # bool — 진행률 표시
+# --- EELS Configuration ---
+# Only used if excitation_type == 'eels'
 
-# ===================================================================
-# 5. 계산 TOGGLE
-# ===================================================================
-args['calculate_cross_sections'] = True   # 흡수/산란/소광 단면적 스펙트럼
-args['calculate_fields']         = False  # near-field 계산
-# args['calculate_spectrum']     = True   # False + calculate_fields=True
-#                                         #   = field-only 모드
+# args['impact_parameter'] = [10, 0]  # Impact parameter in nm [x, y]
+# args['beam_energy'] = 200e3         # Beam energy in eV
+# args['beam_width'] = 0.2            # Beam width in nm
 
-# ===================================================================
-# 6. FIELD 계산 옵션  (calculate_fields=True 일 때)
-# ===================================================================
-args['field_region'] = {        # 평가 grid (rectangular)
-    'x_range': [-80, 80, 161],  # [min, max, n_points]
-    'y_range': [0, 0, 1],
-    'z_range': [-80, 80, 161],
-}
-args['field_mindist'] = 0.5     # float — 입자 표면 최소 거리 (nm)
-args['field_nmax']    = 2000    # int — 최대 평가 점 수 (메모리 제한)
-args['field_wavelength_idx'] = [568, 666, 690]   # 평가할 파장 인덱스
-# args['field_wavelengths'] = [550, 600, 650]    # 파장값 직접 지정 (idx 보다 우선)
-args['export_field_arrays']        = False       # field 배열 .npz 저장
-args['field_hotspot_count']        = 10          # hotspot (강도 peak) 개수
-args['field_hotspot_min_distance'] = 3           # hotspot 간 최소 거리 (nm)
+# ============================================================================
+# WAVELENGTH RANGE
+# ============================================================================
+# Wavelength range for spectrum calculation
+# Format: [start_nm, end_nm, num_points]
 
-# ===================================================================
-# 7. COMPUTE — 병렬화 / GPU
-# ===================================================================
-args['use_parallel']         = True    # bool
-args['num_workers']          = 4       # int — 워커 프로세스 수 ('auto' 가능)
-args['max_comp_threads']     = 1       # int — 워커당 BLAS 스레드
-args['wavelength_chunk_size'] = 10     # int — 파장 청크 (메모리 분할)
+args['wavelength_range'] = [400, 800, 100]  # 400-800 nm, 100 points
 
-args['use_mirror_symmetry']  = False   # bool — mirror 대칭 (ret_mirror)
-args['use_iterative_solver'] = False   # bool — GMRES (ret→ret_iter 승격)
-args['use_nonlocality']      = False   # bool — 비로컬 cover-layer
-# args['use_h2_compression'] = False   # bool — H-matrix ACA-GPU (hmode)
+# Examples:
+# args['wavelength_range'] = [300, 1500, 240]  # Broad UV to NIR
+# args['wavelength_range'] = [550, 550, 1]     # Single wavelength
 
-# --- GPU 정밀도 ---
-#   gpu_precision = 'fp64' : complex128 dense LU (정확, 기본)
-#   gpu_precision = 'fp32' : complex64 dense LU. RTX A6000 에서 ~14x 빠름.
-#       검증 결과 (vs FP64): Au dimer spectrum worst 4.5e-4,
-#       surface charge worst 4.9e-4, Au@Ag spectrum worst 1.14e-3
-#       — 모두 BEM 표준 허용 (1e-3) 이내. 큰 dense LU 작업에 권장.
-#   (GPU 실행은 run_simulation.py 의 --n-gpus-per-worker 로 켠다)
-args['gpu_precision'] = 'fp64'
+# ============================================================================
+# NUMERICAL ACCURACY PARAMETERS
+# ============================================================================
 
-# ===================================================================
-# 8. ITERATIVE SOLVER 옵션  (use_iterative_solver=True 일 때)
-# ===================================================================
-# args['iter'] = {
-#     'solver':   'gmres',     # 'gmres' / 'bicgstab' / 'cgs'
-#     'tol':      1.0e-4,      # 수렴 허용오차
-#     'maxit':    200,         # 최대 반복
-#     'restart':  50,          # GMRES restart
-#     'hmatrix':  False,       # H-matrix ACA 가속
-#     'precond':  'hmat',      # 전조건화: 'hmat' / 'none'
+# Refinement level for numerical integration
+# Higher = more accurate but slower
+# Typical values: 1-3
+args['refine'] = 3
+
+# Relative cutoff for interaction matrices
+# Higher = more accurate but more memory
+# Typical values: 2-3, default is 3 for sufficient accuracy
+args['relcutoff'] = 3
+
+# ============================================================================
+# MATERIALS
+# ============================================================================
+
+# Medium (surrounding environment)
+args['medium'] = 'water'
+# Options: 'air', 'water', 'vacuum', 'glass'
+
+# Custom refractive index paths (optional)
+args['refractive_index_paths'] = {}
+# Override built-in material data with custom files
+# Example:
+# args['refractive_index_paths'] = {
+#     'gold': os.path.join(Path.home(), 'materials/gold_palik.dat'),
+#     'agcl': {'type': 'constant', 'epsilon': 2.02},
 # }
 
-# ===================================================================
-# 9. OUTPUT
-# ===================================================================
-args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/my_run')
-args['output_formats'] = ['npz', 'json', 'png']   # npz/json/csv/txt
-args['save_plots']  = True
-args['plot_format'] = ['png', 'pdf']
-args['plot_dpi']    = 300
+# ============================================================================
+# SUBSTRATE (Optional)
+# ============================================================================
 
-# ===================================================================
-# 10. POSTPROCESS
-# ===================================================================
-args['spectrum_xaxis']        = 'energy'   # 'wavelength' / 'energy'
-args['run_eigenmode_analysis'] = False     # quasi-static 고유모드 분석
-# args['eigenmode_n']     = 10             # 계산할 고유모드 개수
-# args['eigenmode_top_k'] = 5              # 시각화할 상위 k개
-# args['retarded_eigen_wavelength'] = 550  # retarded 고유모드 파장 (nm)
-# args['fano_target_wavelengths']   = [550, 600]   # Fano fit 목표 파장
-# args['svd_rank_threshold']        = 1.0e-3       # SVD 유효계수 임계값
+args['use_substrate'] = False
+# Uncomment to add substrate (half-space) below nanoparticle:
+# args['use_substrate'] = True
+# args['substrate'] = {
+#     'material': 'glass',  # or 'silicon', custom dict
+#     'gap': 0.001,  # distance from particle bottom to substrate surface (nm)
+# }
+
+# ============================================================================
+# ADVANCED OPTIONS
+# ============================================================================
+
+# Mirror symmetry (for reducing computation time)
+# Options:
+#   - False : Disabled (default)
+#   - 'xy'  : x=0 and y=0 plane symmetry (1/4 mesh, ~16x faster)
+#   - 'x'   : y=0 plane symmetry only (1/2 mesh, ~4x faster)
+#   - 'y'   : x=0 plane symmetry only (1/2 mesh, ~4x faster)
+args['use_mirror_symmetry'] = False
+
+# Iterative solver (for very large structures with >10,000 elements)
+# Uses less memory but may be slower
+# Enable if you encounter out-of-memory errors
+args['use_iterative_solver'] = False
+
+# Nonlocal effects (advanced, for very small particles <5nm)
+# Includes quantum effects at metal surfaces
+# Requires additional setup
+args['use_nonlocality'] = False
+
+# ============================================================================
+# GPU PRECISION
+# ============================================================================
+#   gpu_precision = 'fp64' : complex128 dense LU (accurate, default)
+#   gpu_precision = 'fp32' : complex64 dense LU (~14x faster on RTX A6000)
+#       Validation (vs FP64): Au dimer spectrum worst 4.5e-4 — within 1e-3 BEM tolerance.
+#   (GPU execution is enabled via run_simulation.py --n-gpus-per-worker)
+args['gpu_precision'] = 'fp64'
+
+# ============================================================================
+# OUTPUT SETTINGS
+# ============================================================================
+
+# Output directory for results
+args['output_dir'] = os.path.join(Path.home(), 'research/pymnpbem/my_run')
+
+# Data file save formats
+# Available: 'npz', 'json', 'csv', 'txt'
+args['output_formats'] = ['npz', 'json', 'png']
+
+# ============================================================================
+# ADDITIONAL SIMULATION EXAMPLES
+# ============================================================================
+
+# Example 1: Single wavelength field calculation
+# args['wavelength_range'] = [550, 550, 1]  # Single wavelength
+# args['calculate_fields'] = True
+# args['field_region'] = {
+#     'x_range': [-100, 100, 201],
+#     'y_range': [-100, 100, 201],
+#     'z_range': [0, 0, 1]
+# }
+
+# Example 2: Broadband spectrum (UV to NIR)
+# args['wavelength_range'] = [300, 1500, 240]
+# args['simulation_type'] = 'ret'  # Use retarded for broad range
+
+# Example 3: Angle-resolved measurements
+# args['polarizations'] = [[1, 0, 0]] * 37  # Same polarization
+# # Generate angles from 0 to 90 degrees
+# import numpy as np
+# angles = np.linspace(0, 90, 37)
+# args['propagation_dirs'] = [
+#     [0, np.sin(np.deg2rad(a)), np.cos(np.deg2rad(a))]
+#     for a in angles
+# ]
+
+# Example 4: Dipole emission study
+# args['excitation_type'] = 'dipole'
+# args['dipole_position'] = [0, 0, 10]
+# args['dipole_moment'] = [0, 0, 1]
+# args['wavelength_range'] = [400, 800, 80]
+
+# Example 5: EELS line scan
+# args['excitation_type'] = 'eels'
+# args['beam_energy'] = 200e3
+# args['beam_width'] = 0.2
+# # For line scan, vary impact_parameter in a loop (not shown here)
+# args['impact_parameter'] = [10, 0]
+
+# Example 6: Mirror symmetry for speed
+# args['use_mirror_symmetry'] = 'xy'
+# args['simulation_type'] = 'ret'  # auto-promoted to ret_mirror
+
+# Example 7: Iterative solver for large meshes
+# args['use_iterative_solver'] = True
+# args['simulation_type'] = 'ret'  # auto-promoted to ret_iter
+
+# Example 8: With substrate
+# args['use_substrate'] = True
+# args['substrate'] = {'material': 'glass', 'gap': 0.001}
+# args['simulation_type'] = 'ret'  # auto-promoted to ret_layer

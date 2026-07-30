@@ -115,8 +115,8 @@ def radiating_dipole_spectrum(case_dir: str,
     from ..structures import build_structure
 
     case_dir = str(case_dir)
-    cfg = yaml.safe_load(open(os.path.join(case_dir, 'config.yaml')))
-    man = json.load(open(os.path.join(case_dir, 'sigma', 'manifest.json')))
+    cfg = yaml.safe_load(open(os.path.join(case_dir, 'config.yaml'), encoding = 'utf-8'))
+    man = json.load(open(os.path.join(case_dir, 'sigma', 'manifest.json'), encoding = 'utf-8'))
 
     p, _epstab, _nf = build_structure(cfg['structure'], cfg.get('materials', dict()))
     gi = geom_info(p, cfg = cfg)
@@ -643,8 +643,8 @@ def analyze_fano(case_dir: str,
     case_dir = str(case_dir)
     os.makedirs(out_dir, exist_ok = True)
 
-    cfg = yaml.safe_load(open(os.path.join(case_dir, 'config.yaml')))
-    man = json.load(open(os.path.join(case_dir, 'sigma', 'manifest.json')))
+    cfg = yaml.safe_load(open(os.path.join(case_dir, 'config.yaml'), encoding = 'utf-8'))
+    man = json.load(open(os.path.join(case_dir, 'sigma', 'manifest.json'), encoding = 'utf-8'))
     p, _epstab, _nf = build_structure(cfg['structure'], cfg.get('materials', dict()))
     gi = geom_info(p, cfg = cfg)
     ga = int(gi['gap_axis'])
@@ -732,7 +732,7 @@ def analyze_fano(case_dir: str,
                     for (c, om, gam) in fit.lorentzians()],
             'features': feature_info})
 
-    with open(os.path.join(out_dir, 'fano_summary.json'), 'w') as fh:
+    with open(os.path.join(out_dir, 'fano_summary.json'), 'w', encoding = 'utf-8') as fh:
         json.dump(summary.to_dict(), fh, indent = 2)
 
     return summary

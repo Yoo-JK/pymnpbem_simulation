@@ -185,7 +185,7 @@ def test_export_roundtrip():
         assert np.allclose(csv_data[:, 0], data['wavelength']), '[error] csv wl'
 
         # JSON
-        with open(json_path) as f:
+        with open(json_path, encoding = 'utf-8') as f:
             j = json.load(f)
         assert np.allclose(np.asarray(j['wavelength']), data['wavelength']), '[error] json wl'
         assert j['meta_label'] == 'test', '[error] json meta_label'

@@ -393,7 +393,7 @@ def test_dimer_nonlocal_schur_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'dimer_nonlocal_schur.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['compute']['schur_complement'] in ('auto', True, False, 'true', 'false')
@@ -405,7 +405,7 @@ def test_large_mesh_vram_share_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'large_mesh_vram_share.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert int(cfg['compute']['n_gpus_per_worker']) > 1
@@ -418,7 +418,7 @@ def test_dimer_vram_share_yaml_loads() -> None:
     import yaml
 
     path = REPO_ROOT / 'examples' / 'dimer_vram_share.yaml'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert int(cfg['compute']['n_gpus_per_worker']) > 1

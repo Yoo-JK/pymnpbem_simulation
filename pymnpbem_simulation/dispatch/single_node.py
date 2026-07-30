@@ -463,5 +463,7 @@ def _infer_n_pol(cfg: Dict[str, Any]) -> int:
 
 def _strip_unpicklable(cfg: Dict[str, Any]) -> Dict[str, Any]:
     import copy
-
-    return copy.deepcopy(cfg)
+    out = copy.deepcopy(cfg)
+    from pymnpbem_simulation.util import assert_no_callables
+    assert_no_callables(out)
+    return out

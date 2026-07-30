@@ -11,7 +11,9 @@ from .plot import (
         plot_unpolarized_spectrum,
         plot_polarization_vs_unpolarized,
         plot_multipole_bar,
-        plot_fano_fit)
+        plot_fano_fit,
+        plot_multipole_character_table,
+        plot_cross_validation_summary)
 from .field_analyzer import (
         hotspot_location,
         field_enhancement,
@@ -19,13 +21,28 @@ from .field_analyzer import (
         integrated_field_intensity,
         hotspot_summary,
         field_statistics,
-        high_field_regions)
+        high_field_regions,
+        calculate_near_field_integration,
+        save_near_field_results)
 from .plot_field import (
         plot_field_2d_slice,
         plot_field_intensity_2d,
         plot_field_vectors_2d,
         plot_hotspots_3d,
-        plot_near_field_decay)
+        plot_near_field_decay,
+        plot_field_separate,
+        plot_field_comparison,
+        plot_field_overlay,
+        plot_unpolarized_fields)
+from .edge_filter import (
+        get_sphere_boundaries_from_config,
+        compute_min_surface_distance,
+        find_edge_artifacts)
+from .geometry_cross_section import (
+        GeometryCrossSection,
+        geometry_cross_section,
+        cluster_positions)
+from .manager import PostprocessManager
 from .plot_surface_charge import (
         plot_all_surface_charge,
         plot_surface_charge_3d,
@@ -92,6 +109,8 @@ __all__ = [
         'plot_polarization_vs_unpolarized',
         'plot_multipole_bar',
         'plot_fano_fit',
+        'plot_multipole_character_table',
+        'plot_cross_validation_summary',
         'hotspot_location',
         'field_enhancement',
         'near_field_decay',
@@ -99,11 +118,24 @@ __all__ = [
         'hotspot_summary',
         'field_statistics',
         'high_field_regions',
+        'calculate_near_field_integration',
+        'save_near_field_results',
         'plot_field_2d_slice',
         'plot_field_intensity_2d',
         'plot_field_vectors_2d',
         'plot_hotspots_3d',
         'plot_near_field_decay',
+        'plot_field_separate',
+        'plot_field_comparison',
+        'plot_field_overlay',
+        'plot_unpolarized_fields',
+        'get_sphere_boundaries_from_config',
+        'compute_min_surface_distance',
+        'find_edge_artifacts',
+        'GeometryCrossSection',
+        'geometry_cross_section',
+        'cluster_positions',
+        'PostprocessManager',
         'plot_all_surface_charge',
         'plot_surface_charge_3d',
         'plot_surface_charge_2d_8views',

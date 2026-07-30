@@ -14,18 +14,20 @@ def detect_n_gpus() -> int:
         path = os.environ['PBS_GPUFILE']
 
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, encoding = 'utf-8') as f:
                 return len([line for line in f if line.strip()])
 
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
         cvd = os.environ['CUDA_VISIBLE_DEVICES']
+        gpu_list = [x.strip() for x in cvd.split(',') if x.strip()]
+        return len(gpu_list)
 
-        if cvd == '':
-            return 0
-
-        return len(cvd.split(','))
-
-    return 0
+    # fallback for if cuda visible devices isn't set (typical if there is only one GPU like the lab machine)
+    try:
+        import cupy
+        return cupy.cuda.runtime.getDeviceCount()
+    except (ImportError, Exception):
+        return 0
 
 
 def detect_n_cpus() -> int:
@@ -115,7 +117,7 @@ def detect_multi_node() -> bool:
 
             try:
 
-                with open(path) as f:
+                with open(path, encoding = 'utf-8') as f:
                     unique_nodes = set(
                             line.strip() for line in f if line.strip())
 

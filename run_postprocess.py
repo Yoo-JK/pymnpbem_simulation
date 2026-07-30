@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 
 from typing import Any, Dict, List, Optional
@@ -154,6 +155,14 @@ def _build_parser() -> argparse.ArgumentParser:
                    'hyperparameters (same style as --str-conf/--sim-conf). '
                    'Explicit CLI flags override it. '
                    '(분석 하이퍼파라미터 config; --str-conf/--sim-conf 와 동일 스타일.)')
+    parser.add_argument('--str-conf', type = str, default = None,
+            help = 'Structure config .py (mnpbem_simulation-style invocation). '
+                   'Accepted for CLI parity; the analysis keys are read from '
+                   '--sim-conf.')
+    parser.add_argument('--sim-conf', type = str, default = None,
+            help = 'Simulation config .py holding the analysis keys inline '
+                   '(mnpbem_simulation style). Supplies --result / --case-dir '
+                   'from output_dir + simulation_name.')
     parser.add_argument('--analyzers', type = str, default = None,
             help = 'Comma-separated: spectrum,fano,eigenmode,multipole,fano-analysis. '
                    '(default: spectrum)')
@@ -202,13 +211,64 @@ def _build_parser() -> argparse.ArgumentParser:
 
 # Analyzer hyperparameters that --anal-conf can set, with their built-in
 # defaults.  Keys match the argparse dest names (underscored).
+# Keys prefixed with 'anal_' are analysis-section keys from config/analysis/
+# config_analysis.py that are accepted but consumed separately (not mapped to
+# argparse); they are silently accepted to avoid "unknown keys" warnings.
 _ANAL_CONF_DEFAULTS = {
     'result': None, 'analyzers': 'spectrum', 'output': None,
     'fano_peaks': 1, 'config': None, 'n_modes': 10, 'max_l': 4,
     'export_formats': None, 'case_dir': None, 'fano_features': None,
     'fano_pol': 0, 'eig_cache': None, 'xaxis': 'wavelength',
     'polarizations': None, 'excitation': 'planewave',
+    # analysis-section keys (from config/analysis/config_analysis.py)
+    'calculate_cross_sections': True,
+    'calculate_fields': False,
+    'field_region': None,
+    'field_mindist': 0.5,
+    'field_nmax': 2000,
+    'field_wavelength_idx': 'peak',
+    'export_field_arrays': False,
+    'field_hotspot_count': 10,
+    'field_hotspot_min_distance': 3,
+    'spectrum_xaxis': 'wavelength',
+    'save_plots': True,
+    'plot_format': None,
+    'plot_dpi': 300,
+    'run_eigenmode_analysis': False,
+    'eigenmode_n': 10,
+    'eigenmode_top_k': 5,
+    'retarded_eigen_wavelength': None,
+    'fano_target_wavelengths': None,
+    'svd_rank_threshold': 1.0e-3,
 }
+
+
+def _anal_conf_from_sim_conf(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build the analysis args from an mnpbem_simulation-style sim-conf.
+
+    That flavour keeps the postprocess keys inline in the simulation config,
+    so we take the subset this CLI understands and derive result/case-dir
+    from output_dir + simulation_name. The remaining keys are the
+    simulation's own — not typos — so they are dropped without a warning.
+    """
+    from pymnpbem_simulation.config import load_py_config
+
+    sim_args = load_py_config(args.sim_conf)
+    conf = {k: v for k, v in sim_args.items() if k in _ANAL_CONF_DEFAULTS}
+
+    print('[info] loading sim-conf <{}> ({} analysis key(s))'.format(
+            args.sim_conf, len(conf)))
+
+    out_dir = sim_args.get('output_dir', None)
+    name = sim_args.get('simulation_name', None)
+
+    if out_dir and name:
+        case_dir = os.path.join(str(out_dir), str(name))
+        conf.setdefault('case_dir', case_dir)
+        conf.setdefault('result', os.path.join(case_dir, 'spectrum.npz'))
+        conf.setdefault('config', os.path.join(case_dir, 'config.yaml'))
+
+    return conf
 
 
 def _apply_anal_conf(args: argparse.Namespace) -> None:
@@ -222,7 +282,9 @@ def _apply_anal_conf(args: argparse.Namespace) -> None:
     (분석 하이퍼파라미터를 config 로 받아 재현 가능하게. 우선순위: CLI > anal-conf > 기본값.)
     """
     conf = {}
-    if getattr(args, 'anal_conf', None):
+    if getattr(args, 'sim_conf', None) and not getattr(args, 'anal_conf', None):
+        conf = _anal_conf_from_sim_conf(args)
+    elif getattr(args, 'anal_conf', None):
         from pymnpbem_simulation.config import load_py_config
         conf = load_py_config(args.anal_conf)
         print('[info] loading anal-conf <{}> ({} keys)'.format(args.anal_conf, len(conf)))
@@ -240,8 +302,19 @@ def _apply_anal_conf(args: argparse.Namespace) -> None:
         if isinstance(val, (list, tuple)):
             setattr(args, key, ','.join(str(x) for x in val))
     if isinstance(getattr(args, 'polarizations', None), (list, tuple)):
-        import json as _json
-        args.polarizations = _json.dumps(args.polarizations)
+        args.polarizations = json.dumps(args.polarizations)
+    # Bridge analysis-section aliases: spectrum_xaxis -> xaxis,
+    # eigenmode_n -> n_modes, so downstream code reading args.xaxis /
+    # args.n_modes sees the value from config/analysis/config_analysis.py.
+    if getattr(args, 'xaxis', None) is None:
+        setattr(args, 'xaxis', getattr(args, 'spectrum_xaxis', 'wavelength'))
+    if getattr(args, 'n_modes', None) is None:
+        setattr(args, 'n_modes', getattr(args, 'eigenmode_n', 10))
+    # run_eigenmode_analysis -> ensure 'eigenmode' is in analyzers when True.
+    if getattr(args, 'run_eigenmode_analysis', False):
+        ana_str = getattr(args, 'analyzers', '') or ''
+        if 'eigenmode' not in ana_str:
+            setattr(args, 'analyzers', ana_str + ',eigenmode' if ana_str else 'eigenmode')
     if not args.result:
         raise SystemExit('[error] --result (or result= in --anal-conf) is required.')
 

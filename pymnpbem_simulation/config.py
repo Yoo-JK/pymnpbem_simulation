@@ -27,7 +27,7 @@ DEFAULT_OUTPUT_FORMATS = ['npz', 'json', 'png']
 
 
 def load_yaml(path: str) -> Dict[str, Any]:
-    with open(path) as f:
+    with open(path, encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     if not isinstance(cfg, dict):
@@ -96,6 +96,8 @@ def apply_defaults(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     out = _auto_promote_iter(out)
     out = _auto_wrap_substrate(out)
+    out = _auto_wrap_mirror(out)
+    out = _auto_wrap_nonlocal(out)
     out = _auto_convert_field_region(out)
 
     return out
@@ -110,6 +112,11 @@ _SIM_LAYER_PROMOTE = {
     'ret': 'ret_layer',
     'stat': 'stat_layer',
     'ret_iter': 'ret_layer_iter'}
+
+
+_SIM_MIRROR_PROMOTE = {
+    'ret': 'ret_mirror',
+    'stat': 'stat_mirror'}
 
 
 def _auto_convert_field_region(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -279,6 +286,144 @@ def _auto_wrap_substrate(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _auto_wrap_mirror(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Auto-wrap MATLAB-style <compute.mirror=True> (use_mirror_symmetry) into
+    the canonical <structure.type=with_mirror> form and promote
+    <simulation.type> from <ret>/<stat> to the corresponding _mirror variant.
+
+    Mirrors _auto_wrap_substrate: the base structure is preserved in
+    <structure.base> and the symmetry axis in <structure.mirror.sym>.
+    <compute.mirror> may be a bool (sym defaults to 'xy') or a string axis
+    ('x'/'y'/'xy'); <compute.mirror_sym> overrides the axis when mirror=True.
+    """
+
+    out = cfg
+    cmp_ = out.get('compute', None)
+
+    if not isinstance(cmp_, dict):
+        return out
+
+    mir = cmp_.get('mirror', False)
+
+    if not mir:
+        return out
+
+    cfg_struct = out.get('structure', None)
+
+    if not isinstance(cfg_struct, dict):
+        return out
+
+    base_type = str(cfg_struct.get('type', '')).lower()
+
+    if base_type == 'with_mirror':
+        return out
+
+    sym = mir if isinstance(mir, str) else str(cmp_.get('mirror_sym', 'xy'))
+
+    out = copy.deepcopy(out)
+
+    base_cfg = dict(out['structure'])
+    out['structure'] = {
+            'type': 'with_mirror',
+            'base': base_cfg,
+            'mirror': {'sym': sym}}
+
+    sim_cfg = out.get('simulation', None)
+
+    if isinstance(sim_cfg, dict):
+        sim_type = str(sim_cfg.get('type', 'ret')).lower()
+
+        if sim_type in _SIM_MIRROR_PROMOTE:
+            sim_cfg['type'] = _SIM_MIRROR_PROMOTE[sim_type]
+
+    print('[info] auto-wrapped <structure.type={}> with mirror '
+            '(sym={}, sim.type -> {})'.format(
+                    base_type, sym, out.get('simulation', dict()).get('type', '?')))
+
+    return out
+
+
+def _auto_wrap_nonlocal(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Auto-wrap MATLAB-style <compute.nonlocal=True> (use_nonlocality) into
+    the canonical <structure.type=with_nonlocal> form.
+
+    Mirrors _auto_wrap_mirror / _auto_wrap_substrate: the base structure is
+    preserved in <structure.base> and the nonlocal parameters are read from
+    <materials.nonlocal> if present, with sensible defaults otherwise.
+
+    Expected keys in <materials.nonlocal>:
+      metal        : Drude metal name (default: first entry of materials list, or 'gold')
+      delta_d      : cover-layer thickness in nm (default: 0.05)
+      beta         : hydrodynamic parameter (default: null = sqrt(3/5)*v_F*hbar)
+      model        : 'hydrodynamic' (default); 'qcm' is accepted for MATLAB
+                     wrapper compatibility but falls back to hydrodynamic
+      drude_params : explicit Drude override, flat or keyed by material name
+
+    No-op when <compute.nonlocal> is falsy or <structure.type> is already
+    <with_nonlocal>.
+    """
+
+    out = cfg
+    cmp_ = out.get('compute', None)
+
+    if not isinstance(cmp_, dict):
+        return out
+
+    if not bool(cmp_.get('nonlocal', False)):
+        return out
+
+    cfg_struct = out.get('structure', None)
+
+    if not isinstance(cfg_struct, dict):
+        return out
+
+    base_type = str(cfg_struct.get('type', '')).lower()
+
+    if base_type == 'with_nonlocal':
+        return out
+
+    out = copy.deepcopy(out)
+
+    materials_cfg = out.get('materials', dict())
+    nl_params = materials_cfg.get('nonlocal', dict()) if isinstance(materials_cfg, dict) else dict()
+    if not isinstance(nl_params, dict):
+        nl_params = dict()
+
+    # Default metal: first entry of particle_list, or 'gold'.
+    particle_list = materials_cfg.get('particle_list', []) if isinstance(materials_cfg, dict) else []
+    default_metal = particle_list[0] if isinstance(particle_list, list) and particle_list else 'gold'
+
+    nl_spec = {
+        'metal': nl_params.get('metal', default_metal),
+        'delta_d': float(nl_params.get('delta_d', 0.05)),
+        'beta': nl_params.get('beta', None),
+        'model': str(nl_params.get('model', 'hydrodynamic')).strip().lower()}
+
+    eps_embed = nl_params.get('eps_embed', None)
+    if eps_embed is not None:
+        nl_spec['eps_embed'] = float(eps_embed)
+
+    drude_params = nl_params.get('drude_params', None)
+    if isinstance(drude_params, dict) and drude_params:
+        nl_spec['drude_params'] = drude_params
+
+    base_cfg = dict(out['structure'])
+    out['structure'] = {
+            'type': 'with_nonlocal',
+            'base': base_cfg,
+            'nonlocal': nl_spec}
+
+    print('[info] auto-wrapped <structure.type={}> with nonlocal '
+            '(metal={}, model={}, delta_d={}nm, beta={})'.format(
+                    base_type,
+                    nl_spec['metal'],
+                    nl_spec['model'],
+                    nl_spec['delta_d'],
+                    nl_spec['beta']))
+
+    return out
+
+
 def _resolve_substrate_eps(name: Any, ri_paths: Any) -> Any:
     """Resolve substrate eps from MATLAB-style refractive_index_paths or fall
     back to a built-in preset name.
@@ -302,6 +447,31 @@ def _resolve_substrate_eps(name: Any, ri_paths: Any) -> Any:
 
             if stype == 'table':
                 return str(spec.get('file', name))
+
+            # tolerate shorthand descriptor dicts without explicit type
+            if 'epsilon' in spec:
+                return float(spec['epsilon'])
+
+            if 'file' in spec or 'path' in spec:
+                return str(spec.get('file', spec.get('path', name)))
+
+        if isinstance(spec, (int, float)):
+            return float(spec)
+
+        if isinstance(spec, str):
+            if spec.endswith('.dat'):
+                return spec
+            # allow numeric strings as direct constant eps overrides
+            try:
+                return float(spec)
+            except ValueError:
+                # preserve symbolic names so WithSubstrate presets can resolve
+                return spec
+
+        if callable(spec):
+            raise ValueError(
+                '[error] Unsupported callable substrate descriptor for <{}>; '
+                'use constant/table instead.'.format(name))
 
     return name
 
@@ -332,7 +502,7 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 def save_yaml(path: str,
         cfg: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok = True)
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
 

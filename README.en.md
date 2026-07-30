@@ -5,7 +5,7 @@ Python wrapper for MNPBEM (Metal Nanoparticle Boundary Element Method) simulatio
 > 한국어 README 는 [README.md](./README.md) 참조. (For the Korean version, see [README.md](./README.md).)
 
 A ground-up rewrite of the former MATLAB-based `mnpbem_simulation` wrapper that instead
-calls the Python MNPBEM port (`/home/yoojk20/workspace/MNPBEM`) directly.
+calls the Python MNPBEM port (`~/workspace/MNPBEM`) directly.
 
 Key changes:
 - Removes the MATLAB code-generation step → calls Python functions directly
@@ -21,7 +21,7 @@ conda create -n pymnpbem_sim python=3.11
 conda activate pymnpbem_sim
 
 # Python MNPBEM port (editable, in sibling repo)
-pip install -e /home/yoojk20/workspace/MNPBEM
+pip install -e ~/workspace/MNPBEM
 
 # Core scientific stack
 pip install numpy==2.0.2 scipy==1.14.1 matplotlib==3.10.7 pandas==2.3.3
@@ -175,7 +175,7 @@ pymnpbem_simulation/
 ## Status
 
 In production use. The end-to-end pipeline that calls the Python MNPBEM port
-(`/home/yoojk20/workspace/MNPBEM`) directly runs stably and is used for large campaigns
+(`~/workspace/MNPBEM`) directly runs stably and is used for large campaigns
 such as Au / Au@Ag / core-shell dimer sweeps.
 
 - **Simulation modes**: planewave / dipole / EELS × quasistatic (stat) / retarded (ret), in vacuum and on substrates (layered Green / Sommerfeld)

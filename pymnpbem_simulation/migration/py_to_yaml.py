@@ -30,7 +30,11 @@ _KEY_TO_SECTION = {
     'waitbar': ('simulation', 'waitbar'),
     'use_parallel': ('compute', 'use_parallel'),
     'num_workers': ('compute', 'n_workers'),
+    'num_cores': ('compute', 'n_workers'),
     'max_comp_threads': ('compute', 'n_threads'),
+    'iter_tolerance': ('compute', 'iter_options', 'tol'),
+    'iter_maxiter': ('compute', 'iter_options', 'maxit'),
+    'h2_tolerance': ('compute', 'iter_options', 'htol'),
     'wavelength_chunk_size': ('compute', 'wavelength_chunk_size'),
     'use_mirror_symmetry': ('compute', 'mirror'),
     'use_iterative_solver': ('compute', 'iterative'),
@@ -42,13 +46,26 @@ _KEY_TO_SECTION = {
     'substrate': ('materials', 'substrate'),
     'use_substrate': ('materials', 'use_substrate'),
     'refractive_index_paths': ('materials', 'refractive_index_paths'),
+    'nonlocal_model': ('materials', 'nonlocal', 'model'),
+    'nonlocal_drude_params': ('materials', 'nonlocal', 'drude_params'),
+    'nonlocal_cover_thickness': ('materials', 'nonlocal', 'delta_d'),
     'diameter': ('structure', 'diameter'),
     'size': ('structure', 'size'),
+    'height': ('structure', 'height'),
+    'axes': ('structure', 'axes'),
+    'side_length': ('structure', 'side_length'),
+    'thickness': ('structure', 'thickness'),
     'gap': ('structure', 'gap'),
     'rounding': ('structure', 'rounding'),
     'roundings': ('structure', 'roundings'),
     'mesh_density': ('structure', 'mesh_density'),
+    'rod_mesh': ('structure', 'rod_mesh'),
+    'nphi': ('structure', 'nphi'),
+    'ntheta': ('structure', 'ntheta'),
+    'nz': ('structure', 'nz'),
     'core_size': ('structure', 'core_size'),
+    'core_diameter': ('structure', 'core_diameter'),
+    'shell_thickness': ('structure', 'shell_thickness'),
     'shell_layers': ('structure', 'shell_layers'),
     'offset': ('structure', 'offset'),
     'tilt_angle': ('structure', 'tilt_angle'),
@@ -60,29 +77,32 @@ _KEY_TO_SECTION = {
     'voxel_method': ('structure', 'voxel_method'),
     'output_dir': ('output', 'dir'),
     'output_formats': ('output', 'formats'),
-    'save_plots': ('output', 'save_plots'),
-    'plot_format': ('output', 'plot_format'),
-    'plot_dpi': ('output', 'plot_dpi'),
-    'spectrum_xaxis': ('postprocess', 'spectrum_xaxis'),
+    'save_plots': ('analysis', 'save_plots'),
+    'plot_format': ('analysis', 'plot_format'),
+    'plot_dpi': ('analysis', 'plot_dpi'),
+    'spectrum_xaxis': ('analysis', 'spectrum_xaxis'),
+    'analyzers': ('analysis', 'analyzers'),
     'calculate_cross_sections': ('simulation', 'calculate_cross_sections'),
-    'calculate_fields': ('simulation', 'calculate_fields'),
-    'field_region': ('simulation', 'field_region'),
-    'field_mindist': ('simulation', 'field_mindist'),
-    'field_nmax': ('simulation', 'field_nmax'),
-    'field_wavelength_idx': ('simulation', 'field_wavelength_idx'),
-    'export_field_arrays': ('simulation', 'export_field_arrays'),
-    'field_hotspot_count': ('simulation', 'field_hotspot_count'),
-    'field_hotspot_min_distance': ('simulation', 'field_hotspot_min_distance'),
-    'run_eigenmode_analysis': ('postprocess', 'run_eigenmode_analysis'),
-    'eigenmode_n': ('postprocess', 'eigenmode_n'),
-    'eigenmode_top_k': ('postprocess', 'eigenmode_top_k'),
-    'retarded_eigen_wavelength': ('postprocess', 'retarded_eigen_wavelength'),
-    'fano_target_wavelengths': ('postprocess', 'fano_target_wavelengths'),
-    'svd_rank_threshold': ('postprocess', 'svd_rank_threshold')}
+    'calculate_surface_charges': ('simulation', 'save_sigma_cache'),
+    'calculate_fields': ('analysis', 'calculate_fields'),
+    'field_region': ('analysis', 'field_region'),
+    'field_mindist': ('analysis', 'field_mindist'),
+    'field_nmax': ('analysis', 'field_nmax'),
+    'field_wavelength_idx': ('analysis', 'field_wavelength_idx'),
+    'export_field_arrays': ('analysis', 'export_field_arrays'),
+    'field_hotspot_count': ('analysis', 'field_hotspot_count'),
+    'field_hotspot_min_distance': ('analysis', 'field_hotspot_min_distance'),
+    'run_eigenmode_analysis': ('analysis', 'run_eigenmode_analysis'),
+    'eigenmode_n': ('analysis', 'eigenmode_n'),
+    'eigenmode_top_k': ('analysis', 'eigenmode_top_k'),
+    'retarded_eigen_wavelength': ('analysis', 'retarded_eigen_wavelength'),
+    'fano_target_wavelengths': ('analysis', 'fano_target_wavelengths'),
+    'svd_rank_threshold': ('analysis', 'svd_rank_threshold')}
 
 
 _DROP_KEYS = {
     'mnpbem_path',
+    'pymnpbem_path',
     'matlab_executable',
     'matlab_options'}
 
@@ -125,12 +145,7 @@ def convert_args_to_yaml(args: Dict[str, Any]) -> Dict[str, Any]:
             unmapped.append(k)
             continue
 
-        section, sub_key = _KEY_TO_SECTION[k]
-
-        if section not in out:
-            out[section] = dict()
-
-        out[section][sub_key] = _normalize_value(k, v)
+        _assign_path(out, _KEY_TO_SECTION[k], _normalize_value(k, v))
 
     if unmapped:
         if 'extras' not in out:
@@ -145,6 +160,22 @@ def convert_args_to_yaml(args: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _assign_path(out: Dict[str, Any],
+        path: Any,
+        value: Any) -> None:
+
+    node = out
+
+    for key in path[:-1]:
+
+        if not isinstance(node.get(key, None), dict):
+            node[key] = dict()
+
+        node = node[key]
+
+    node[path[-1]] = value
+
+
 def _normalize_value(key: str,
         v: Any) -> Any:
 
@@ -155,7 +186,7 @@ def _normalize_value(key: str,
 
         return v
 
-    if key == 'num_workers':
+    if key in ('num_workers', 'num_cores'):
 
         if v == 'auto':
             return -1
@@ -188,9 +219,35 @@ def _post_process(cfg: Dict[str, Any]) -> Dict[str, Any]:
             out['simulation']['enei_max'] = wr[1]
             out['simulation']['n_wavelengths'] = wr[2]
 
+    out = _expand_rod_mesh(out)
     out = _redirect_field_only_simulation(out)
     out = _redirect_iterative_to_iter_type(out)
 
+    return out
+
+
+def _expand_rod_mesh(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Legacy ``rod_mesh = [nphi, ntheta, nz]`` -> the three scalar keys the
+    rod / core_shell_rod builders actually read."""
+
+    struct = cfg.get('structure', None)
+
+    if not isinstance(struct, dict) or 'rod_mesh' not in struct:
+        return cfg
+
+    out = dict(cfg)
+    struct = dict(struct)
+    mesh = struct.pop('rod_mesh')
+
+    if isinstance(mesh, (list, tuple)) and len(mesh) == 3:
+        struct['nphi'] = int(mesh[0])
+        struct['ntheta'] = int(mesh[1])
+        struct['nz'] = int(mesh[2])
+    else:
+        raise ValueError(
+                '[error] <rod_mesh> must be [nphi, ntheta, nz], got <{}>'.format(mesh))
+
+    out['structure'] = struct
     return out
 
 
@@ -331,7 +388,7 @@ def convert_py_to_yaml(path_str: Optional[str],
     cfg = convert_args_to_yaml(args)
 
     ensure_dir(os.path.dirname(os.path.abspath(path_out)))
-    with open(path_out, 'w') as f:
+    with open(path_out, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
     print_info('saved YAML <{}>'.format(path_out))
@@ -357,7 +414,7 @@ def upgrade_yaml(path_in: str, path_out: Optional[str] = None) -> Dict[str, Any]
         path_out = path_in
 
     ensure_dir(os.path.dirname(os.path.abspath(path_out)))
-    with open(path_out, 'w') as f:
+    with open(path_out, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
     print_info('upgraded YAML <{}> -> <{}>'.format(path_in, path_out))

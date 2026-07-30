@@ -1,6 +1,6 @@
 # MNPBEM Python Port — Feature Coverage Matrix
 
-본 문서는 MATLAB MNPBEM 의 주요 기능이 Python port (`/home/yoojk20/workspace/MNPBEM/mnpbem/`) 에 어느 정도 구현되어 있는지 정리한 것이다.
+본 문서는 MATLAB MNPBEM 의 주요 기능이 Python port (`~/workspace/MNPBEM/mnpbem/`) 에 어느 정도 구현되어 있는지 정리한 것이다.
 
 조사일: 2026-05-02 (Phase 2 Wave 1 - Task 1)
 

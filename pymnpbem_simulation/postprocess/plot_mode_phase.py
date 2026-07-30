@@ -27,7 +27,8 @@ import matplotlib.pyplot as plt
 from ..util import print_info
 
 
-_ARIAL = '/home/yoojk20/miniconda3/pkgs/mscorefonts-0.0.1-3/fonts/arial.ttf'
+_ARIAL = os.path.join(os.path.expanduser('~'),
+        'miniconda3', 'pkgs', 'mscorefonts-0.0.1-3', 'fonts', 'arial.ttf')
 
 
 def _use_arial() -> None:

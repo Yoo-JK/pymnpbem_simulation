@@ -55,7 +55,7 @@ def _run_baseline(repo_root: Path,
     summary_path = out_dir / 'spectrum.json'
     assert summary_path.exists(), 'missing spectrum.json'
 
-    with open(summary_path, 'r') as f:
+    with open(summary_path, 'r', encoding = 'utf-8') as f:
         return json.load(f)
 
 

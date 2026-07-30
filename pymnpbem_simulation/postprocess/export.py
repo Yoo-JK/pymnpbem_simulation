@@ -88,7 +88,7 @@ def export_csv(result: Dict[str, Any],
                     headers.append('{}_{}'.format(k, j))
 
     if not columns:
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding = 'utf-8') as f:
             f.write('# no 1D arrays in result\n')
         return output_path
 
@@ -248,7 +248,7 @@ def export_json(result: Dict[str, Any],
 
     serializable = _to_serializable(result)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding = 'utf-8') as f:
         json.dump(serializable, f, indent = 2)
 
     print_info('export_json: <{}>'.format(output_path))

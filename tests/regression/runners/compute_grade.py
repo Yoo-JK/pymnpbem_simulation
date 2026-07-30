@@ -103,7 +103,7 @@ def main():
             help = 'Max BAD grades allowed (default 0)')
     args = parser.parse_args()
 
-    with open(args.json, 'r') as f:
+    with open(args.json, 'r', encoding = 'utf-8') as f:
         items = json.load(f)
 
     records = [(it['name'], float(it['measured']), float(it['reference']))
@@ -118,7 +118,7 @@ def main():
                 rec['reference'], rec['rel_err']))
 
     if args.out:
-        with open(args.out, 'w') as f:
+        with open(args.out, 'w', encoding = 'utf-8') as f:
             json.dump(result, f, indent = 2)
         print('[grade] wrote <{}>'.format(args.out))
 
