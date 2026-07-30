@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 
 from typing import Any, Dict, List, Optional
@@ -301,8 +302,7 @@ def _apply_anal_conf(args: argparse.Namespace) -> None:
         if isinstance(val, (list, tuple)):
             setattr(args, key, ','.join(str(x) for x in val))
     if isinstance(getattr(args, 'polarizations', None), (list, tuple)):
-        import json as _json
-        args.polarizations = _json.dumps(args.polarizations)
+        args.polarizations = json.dumps(args.polarizations)
     # Bridge analysis-section aliases: spectrum_xaxis -> xaxis,
     # eigenmode_n -> n_modes, so downstream code reading args.xaxis /
     # args.n_modes sees the value from config/analysis/config_analysis.py.
