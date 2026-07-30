@@ -12,6 +12,33 @@
 | `~/research/adda/` | 129G | ADDA (DDA) 시뮬 — PyMNPBEM 아님 |
 | `~/scratch/*.zip` | 69G | 과거 export 아카이브 (중복) |
 
+## 0. 통합 아카이브 — `~/research/SIMULATION_ARCHIVE/` (127G)
+
+위 루트들을 하나의 트리로 모은 것. **PyMNPBEM 결과를 다룰 때는 여기부터 본다.**
+
+```
+SIMULATION_ARCHIVE/
+├── README.md      아카이브 자체 설명 (케이스 규약·복구 이력)
+├── INDEX.csv      103 케이스 기계판독 목록
+├── cube/          dimer·monomer 7 family   (81G, 하드링크)
+├── rod/           results + mat + fano     (46G, 실복사)
+├── legacy_matlab/ MATLAB MNPBEM 레퍼런스   (364M, 하드링크)
+└── misc/          흩어져 있던 소규모 결과  (497M, 실복사)
+```
+
+`INDEX.csv` 컬럼: `group, family, case, n_wavelength, n_expected, status,
+n_sigma, has_field, spectrum_source, size_mb`.
+집계: **complete 91 / partial 4 / 데이터없음 8**.
+
+- `cube/`·`legacy_matlab/` 은 **하드링크**라 원본과 inode 를 공유한다.
+  아카이브에서 파일을 고치면 원본도 바뀐다. 한쪽만 지우는 것은 안전하다.
+- `rod/`·`misc/` 는 원본이 `~/scratch`(sda3), 아카이브는 `~/research`(nvme) 로
+  다른 장치라 하드링크가 불가능해 실제 복사본이다.
+- 제외: `~/research/adda/` (129G, 다른 코드), `rod_pymnpbem/txt/` (47G,
+  `mat/` 에서 재생성 가능), `pymnpbem/bug_backup/` (6G).
+
+배포용 zip: `~/research/SIMULATION_ARCHIVE.zip` (store 압축, 약 127G).
+
 ---
 
 ## 1. `~/research/pymnpbem/` — dimer / monomer 본진 (87G)
@@ -23,31 +50,40 @@
 
 | family | 크기 | 완료 | 부분 | 비고 |
 |---|---|---|---|---|
-| `monomer/` | 403M | 1 | 0 | `au_r0.2` (sigma 400) |
-| `au_dimer/nosub/` | 6.5G | 8 | 8 | 완료: r0.2/r0.3 × g0.0/0.6/1.0/5.0 |
-| `au_dimer/sub/` | 17G | 16 | 0 | 전부 완료. 8개는 필드/표면전하 PNG ~5950장 (≈2G/케이스) |
-| `auag_dimer_4nm/` | 53G | 34 | 8 | 부분은 전부 r0.3_sub 계열 |
+| `monomer/` | 403M | 1 | 0 | `au_r0.2`, 100 파장 그리드 |
+| `au_dimer/nosub/` | 6.5G | **16** | 0 | 8건은 sigma 캐시에서 복구 |
+| `au_dimer/sub/` | 17G | 16 | 0 | 8개는 필드/표면전하 PNG ~5950장 (≈2G/케이스) |
+| `auag_dimer_4nm/` | 53G | 38 | 4 | 부분은 전부 r0.3_sub 계열 |
 | `auagcl_dimer_4nm/` | 2.1G | 4 | 1 | const g0.6/0.8/1/5 완료. **sell 변종은 미실행(32K 빈 스텁)** |
 | `auagagcl_dimer/` | 775M | 1 | 2 | **g0.6 완료.** g0.8/g1 은 12K 빈 스텁 |
 | `auagago_dimer/` | 775M | 1 | 0 | **g0.6 완료** |
 
-### 부분 케이스 상세
+### 스펙트럼 복구 (2026-07-30)
 
-`au_dimer/nosub` — g0.2 / g0.4 / g0.8 / g3.0 (r0.2·r0.3 각각):
-sigma 200개와 PNG 207장은 있으나 `spectrum.npz` 없음.
-→ **sigma 캐시가 온전하므로 BEM 재계산 없이 스펙트럼만 재생성 가능**
-(`~/scratch/spectrum_from_cache.py`).
+중단 케이스 12건의 `spectrum.npz` 를 `sigma/` 캐시에서 재계산했다.
+BEM 을 다시 풀지 않고 `PlaneWaveRet.extinction/scattering(sig)` 만 호출하는
+경로다. 완료 케이스(`au_dimer/nosub/au_r0.3_g0.0`)로 검증했을 때 원본 대비
+**최대 상대오차 2e-15** — 머신 정밀도.
 
-`auag_dimer_4nm` — 전부 `auag_r0.3_*_sub`:
+- `au_dimer/nosub` 8건: 100/100 파장 전부 복구 → family 16/16 완료
+- `auag_dimer_4nm` 4건: 파장 부분 커버리지로 복구
 
-| 케이스 | sigma | 크기 | 상태 |
+출처는 `run_metadata.json` 의 `spectrum_source` 로 구분한다
+(`reconstructed_from_sigma_cache` 또는 `partial_backup_20260608_211902`).
+부분 케이스는 `spectrum_partial: true` + `spectrum_n_wavelengths` 가 함께 기록된다.
+
+### 남은 부분·미실행 케이스
+
+전부 `auag_dimer_4nm/auag_r0.3_*_sub`:
+
+| 케이스 | 파장 | sigma | 상태 |
 |---|---|---|---|
-| `auag_r0.3_g0.4_sub` | 111 | 211M | 중단 |
-| `auag_r0.3_g0.6_sub` | 13 (+ `_partial_backup_20260608_211902`) | 1.9G | 중단·백업 보유 |
-| `auag_r0.3_g1.0_sub` | 17 (+ 동일 백업) | 4.1G | 중단·백업 보유 |
-| `auag_r0.3_g0.6_rot15/rot30/rot45_sub` | 0 / 0 / 4 | — | 미착수 (회전 캠페인) |
-| `auag_r0.3_g30.0_sub` | 0 | — | 미착수 |
-| `auag_r0.3_g50.0_sub` | 18 | — | 중단 |
+| `auag_r0.3_g1.0_sub` | 101 / 140 | 16 (+백업) | 부분 복구 |
+| `auag_r0.3_g0.4_sub` | 55 / 140 | 110 | 부분 복구 |
+| `auag_r0.3_g0.6_sub` | 45 / 140 | 12 (+백업) | 부분 복구 |
+| `auag_r0.3_g50.0_sub` | 9 / 140 | 18 | 부분 복구 |
+| `auag_r0.3_g0.6_rot15/rot30/rot45_sub` | 0 | 0 / 0 / 4 | 미착수 (회전 캠페인) |
+| `auag_r0.3_g30.0_sub` | 0 | 0 | 미착수 |
 
 `_partial_backup_20260608_211902` 안에 6/8 시점의 sigma 가 남아 있다.
 재개 시 이 백업을 먼저 확인할 것.
