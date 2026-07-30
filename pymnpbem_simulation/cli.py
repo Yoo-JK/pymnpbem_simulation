@@ -114,7 +114,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         print_info('=== merged cfg ===')
         print(json.dumps(cfg, indent = 2, default = str), flush = True)
 
-    enei = _build_enei(cfg, args.n_wavelengths)
+    try:
+        enei = _build_enei(cfg, args.n_wavelengths, out_dir)
+    except ValueError as e:
+        print_error('{}'.format(e))
+        return 2
+
+    if len(enei) == 0:
+        print_error('[error] no wavelengths resolved — check '
+                'wavelength_range / field_wavelength_idx')
+        return 2
+
     print_info('wavelengths: {} points from {:.1f} to {:.1f} nm'.format(
         len(enei), float(enei[0]), float(enei[-1])))
 
@@ -366,7 +376,8 @@ def _build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _build_enei(cfg: Dict[str, Any],
-        override_n: Optional[int]) -> np.ndarray:
+        override_n: Optional[int],
+        out_dir: Optional[str] = None) -> np.ndarray:
 
     sim = cfg['simulation']
 
@@ -375,9 +386,9 @@ def _build_enei(cfg: Dict[str, Any],
 
     # field-only mode wavelength resolution (priority order):
     #   1. simulation.field_wavelengths — explicit nm list (preferred)
-    #   2. simulation.field_wavelength_idx — indices into the original
-    #      spectrum's wavelength grid (legacy compat with existing yamls
-    #      that picked hotspots by index after the spectrum sweep)
+    #   2. simulation.field_wavelength_idx — 'middle' / 'peak*' / an index /
+    #      a list of target wavelengths in nm. Same grammar mnpbem_simulation
+    #      uses, so configs written for either wrapper resolve identically.
     #   3. fall through to wavelength_range / enei_min..enei_max (e.g.
     #      when calculate_spectrum is False but the user wants every wl)
     if field_only:
@@ -386,21 +397,10 @@ def _build_enei(cfg: Dict[str, Any],
             return np.asarray([float(w) for w in fw], dtype = float)
 
         fwi = sim.get('field_wavelength_idx')
-        if fwi is not None and len(fwi) > 0:
-            # Resolve indices against the spectrum grid implied by
-            # wavelength_range / enei_min..enei_max. The same grid the
-            # original spectrum sweep used.
-            if 'wavelength_range' in sim:
-                wr = sim['wavelength_range']
-                grid = np.linspace(float(wr[0]), float(wr[1]), int(wr[2]))
-            else:
-                grid = np.linspace(
-                        float(sim['enei_min']),
-                        float(sim['enei_max']),
-                        int(sim['n_wavelengths']))
-            idx = np.asarray([int(i) for i in fwi], dtype = int)
-            idx = idx[(idx >= 0) & (idx < len(grid))]
-            return grid[idx].astype(float)
+        if fwi is not None and not (isinstance(fwi, (list, tuple))
+                and len(fwi) == 0):
+            grid = _spectrum_grid(sim)
+            return _resolve_field_wavelengths(fwi, grid, out_dir)
 
     if 'wavelength_range' in sim:
         wr = sim['wavelength_range']
@@ -414,6 +414,101 @@ def _build_enei(cfg: Dict[str, Any],
         n_wl = int(override_n)
 
     return np.linspace(float(e_min), float(e_max), int(n_wl))
+
+
+def _spectrum_grid(sim: Dict[str, Any]) -> np.ndarray:
+    if 'wavelength_range' in sim:
+        wr = sim['wavelength_range']
+        return np.linspace(float(wr[0]), float(wr[1]), int(wr[2]))
+
+    return np.linspace(
+            float(sim['enei_min']),
+            float(sim['enei_max']),
+            int(sim['n_wavelengths']))
+
+
+_PEAK_OBSERVABLE = {
+    'peak': 'abs',
+    'peak_abs': 'abs',
+    'peak_ext': 'ext',
+    'peak_sca': 'sca'}
+
+
+def _resolve_field_wavelengths(spec: Any,
+        grid: np.ndarray,
+        out_dir: Optional[str]) -> np.ndarray:
+    from .util import print_info
+
+    if isinstance(spec, str):
+        key = spec.strip().lower()
+
+        if key == 'middle':
+            return grid[[len(grid) // 2]].astype(float)
+
+        if key in _PEAK_OBSERVABLE:
+            return _peaks_from_spectrum(_PEAK_OBSERVABLE[key], grid, out_dir)
+
+        raise ValueError(
+                '[error] field_wavelength_idx: unknown <{}> (expected middle, '
+                '{}, an index, or a list of wavelengths in nm)'.format(
+                    spec, ', '.join(sorted(_PEAK_OBSERVABLE))))
+
+    # A bare integer is an index into the spectrum grid; a list holds target
+    # wavelengths in nm, each mapped to its nearest grid point. This is the
+    # mnpbem_simulation grammar and every existing config follows it.
+    if isinstance(spec, (int, np.integer)) and not isinstance(spec, bool):
+        idx = int(spec)
+        if not 0 <= idx < len(grid):
+            raise ValueError(
+                    '[error] field_wavelength_idx: index {} out of range for a '
+                    '{}-point spectrum grid'.format(idx, len(grid)))
+        return grid[[idx]].astype(float)
+
+    targets = np.asarray([float(w) for w in spec], dtype = float)
+    idx = np.unique(np.abs(grid[None, :] - targets[:, None]).argmin(axis = 1))
+    picked = grid[idx].astype(float)
+
+    print_info('field wavelengths: {} target(s) -> {} unique grid point(s) '
+            '({:.1f}..{:.1f} nm)'.format(
+                len(targets), len(picked), picked[0], picked[-1]))
+
+    return picked
+
+
+def _peaks_from_spectrum(observable: str,
+        grid: np.ndarray,
+        out_dir: Optional[str]) -> np.ndarray:
+    from .util import print_info
+
+    path = os.path.join(out_dir, 'spectrum.npz') if out_dir else None
+
+    if path is None or not os.path.exists(path):
+        raise ValueError(
+                '[error] field_wavelength_idx: peak selection needs the '
+                'spectrum from the preceding run, but <{}> is missing. Run the '
+                'spectrum pass first, or list wavelengths in nm '
+                'instead.'.format(path))
+
+    with np.load(path) as data:
+        wl = np.asarray(data['wavelength'], dtype = float)
+        cross = np.asarray(data[observable], dtype = float)
+
+    if cross.ndim == 1:
+        cross = cross[:, None]
+
+    # Peak per polarization, plus the unpolarized peak so the field maps line
+    # up with the unpolarized spectrum the postprocess also emits.
+    idx = [int(np.argmax(cross[:, i])) for i in range(cross.shape[1])]
+    if cross.shape[1] > 1:
+        idx.append(int(np.argmax(cross.mean(axis = 1))))
+
+    picked = np.unique(wl[np.unique(idx)]).astype(float)
+
+    print_info('field wavelengths: {} peak(s) of <{}> at {}'.format(
+        len(picked), observable,
+        ', '.join('{:.1f}'.format(w) for w in picked)))
+
+    return picked
 
 
 def _reanalyze(out_dir: str) -> int:
