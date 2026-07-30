@@ -2,7 +2,7 @@
 
 ## 디자인 원칙
 
-1. **Pipeline-first** (`/home/yoojk20/.claude/CLAUDE.md`): 가장 단순한 dimer baseline 으로 end-to-end 동작 먼저 확보, 이후 기능 확장.
+1. **Pipeline-first**: 가장 단순한 dimer baseline 으로 end-to-end 동작 먼저 확보, 이후 기능 확장.
 2. **MATLAB 코드 생성 제거**: 기존 wrapper 의 `simulation_script.m` 합성 단계 (4034 라인) 를 폐기. Python MNPBEM port 의 함수를 직접 호출.
 3. **Python-native I/O**: `.mat` 미사용. `.npz` (압축) + `.h5` (대용량 field). 결과 분석은 `.npz` 만 로드.
 4. **3-축 병렬**: `n_workers × n_threads × n_gpus_per_worker`. CPU/GPU 동일 모델.

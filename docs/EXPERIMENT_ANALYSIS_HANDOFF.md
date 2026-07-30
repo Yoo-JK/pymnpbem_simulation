@@ -11,7 +11,7 @@ pymnpbem_simulation 개요, (3) post-analysis(위상차 분석 포함) 방법을
 - **툴**: `pymnpbem`(=`~/workspace/MNPBEM`, GPU BEM 코어) + `pymnpbem_simulation`(=`~/workspace/pymnpbem_simulation`, 래퍼).
 - **분석 실행**: `python run_postprocess.py --anal-conf A.py --result <case>/spectrum.npz` (또는 `master.py`로 시뮬→분석 한번에).
 - **실측 데이터**: `~/scratch/paper_figure_collection/raw/` (digitized 산란 스펙트럼 CSV).
-- **env**: `/home/yoojk20/miniconda3/envs/mnpbem/bin/python` (MNPBEM+cupy 포함).
+- **env**: `~/miniconda3/envs/mnpbem/bin/python` (MNPBEM+cupy 포함).
 
 ---
 

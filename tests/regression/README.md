@@ -39,7 +39,7 @@ tests/regression/
 ## 로컬 실행
 
 ```bash
-PYBIN=/home/yoojk20/miniconda3/envs/mnpbem/bin/python
+PYBIN=$HOME/miniconda3/envs/mnpbem/bin/python
 
 # fast subset (commit 마다)
 $PYBIN -m pytest tests/regression/ -m fast --tb=short -q
@@ -69,7 +69,7 @@ $PYBIN tests/regression/runners/run_full_regression.py \
 
 `data/reference_results.json` 의 출처:
 - Wave 2 merge smoke 7종 결과 (`/tmp/pymnpbem_wave2_merge_report.md` 참고)
-- `/home/yoojk20/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json`
+- `$HOME/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json`
 - Wave 1 통합 (main HEAD `9cac8ba`)
 
 reference 갱신은 동일 환경에서 `run_full_regression.py` 재실행 후 수동 update.
@@ -77,7 +77,7 @@ reference 갱신은 동일 환경에서 `run_full_regression.py` 재실행 후 �
 ## 환경
 
 - conda env: `mnpbem` (Python 3.11)
-- shell PYBIN: `/home/yoojk20/miniconda3/envs/mnpbem/bin/python`
+- shell PYBIN: `$HOME/miniconda3/envs/mnpbem/bin/python`
 
 ## CI 연동
 

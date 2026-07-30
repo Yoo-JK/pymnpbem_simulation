@@ -12,7 +12,8 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_YAML = REPO_ROOT / 'examples' / 'dimer_baseline.yaml'
-REFERENCE_JSON = Path('/home/yoojk20/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json')
+REFERENCE_JSON = Path(os.path.join(os.path.expanduser('~'),
+        'scratch', 'pymnpbem_sanity_test', 'lane_results', 'baseline_cpu.json'))
 
 
 def grade_diff(rel: float) -> str:

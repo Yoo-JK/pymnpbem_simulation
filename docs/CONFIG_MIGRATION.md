@@ -99,6 +99,8 @@ args['use_substrate'] = False
 기존 `config_sim_au_r0.2_g0.6.py`:
 
 ```python
+import os
+
 args = {}
 args['use_parallel'] = True
 args['num_workers'] = 4
@@ -115,7 +117,7 @@ args['refine'] = 3
 args['use_mirror_symmetry'] = False
 args['use_iterative_solver'] = True
 args['use_nonlocality'] = False
-args['output_dir'] = '/home/yoojk20/research/mnpbem/dimer'
+args['output_dir'] = os.path.join(os.path.expanduser('~'), 'research', 'mnpbem', 'dimer')
 args['output_formats'] = ['txt', 'csv', 'json']
 args['save_plots'] = True
 args['run_eigenmode_analysis'] = True
@@ -126,7 +128,7 @@ args['run_eigenmode_analysis'] = True
 ```yaml
 output:
   name: au_r0.2_g0.6
-  dir: /home/yoojk20/research/mnpbem/dimer
+  dir: ~/research/mnpbem/dimer
   formats: [txt, csv, json]
   save_plots: true
 structure:

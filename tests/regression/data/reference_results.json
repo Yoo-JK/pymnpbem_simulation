@@ -62,7 +62,7 @@
     "source": "Wave 2 smoke test 6"
   },
   "dimer_baseline_lane": {
-    "json_ref": "/home/yoojk20/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json",
+    "json_ref": "~/scratch/pymnpbem_sanity_test/lane_results/baseline_cpu.json",
     "n_faces": 6336,
     "peak_ext_x_at_636nm": 39344.20355464538,
     "matlab_ext_x_at_636nm": 39344.11,
