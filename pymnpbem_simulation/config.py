@@ -352,9 +352,12 @@ def _auto_wrap_nonlocal(cfg: Dict[str, Any]) -> Dict[str, Any]:
     <materials.nonlocal> if present, with sensible defaults otherwise.
 
     Expected keys in <materials.nonlocal>:
-      metal    : Drude metal name (default: first entry of materials list, or 'gold')
-      delta_d  : cover-layer thickness in nm (default: 0.05)
-      beta     : hydrodynamic parameter (default: null = sqrt(3/5)*v_F*hbar)
+      metal        : Drude metal name (default: first entry of materials list, or 'gold')
+      delta_d      : cover-layer thickness in nm (default: 0.05)
+      beta         : hydrodynamic parameter (default: null = sqrt(3/5)*v_F*hbar)
+      model        : 'hydrodynamic' (default); 'qcm' is accepted for MATLAB
+                     wrapper compatibility but falls back to hydrodynamic
+      drude_params : explicit Drude override, flat or keyed by material name
 
     No-op when <compute.nonlocal> is falsy or <structure.type> is already
     <with_nonlocal>.
@@ -393,11 +396,16 @@ def _auto_wrap_nonlocal(cfg: Dict[str, Any]) -> Dict[str, Any]:
     nl_spec = {
         'metal': nl_params.get('metal', default_metal),
         'delta_d': float(nl_params.get('delta_d', 0.05)),
-        'beta': nl_params.get('beta', None)}
+        'beta': nl_params.get('beta', None),
+        'model': str(nl_params.get('model', 'hydrodynamic')).strip().lower()}
 
     eps_embed = nl_params.get('eps_embed', None)
     if eps_embed is not None:
         nl_spec['eps_embed'] = float(eps_embed)
+
+    drude_params = nl_params.get('drude_params', None)
+    if isinstance(drude_params, dict) and drude_params:
+        nl_spec['drude_params'] = drude_params
 
     base_cfg = dict(out['structure'])
     out['structure'] = {
@@ -406,9 +414,10 @@ def _auto_wrap_nonlocal(cfg: Dict[str, Any]) -> Dict[str, Any]:
             'nonlocal': nl_spec}
 
     print('[info] auto-wrapped <structure.type={}> with nonlocal '
-            '(metal={}, delta_d={}nm, beta={})'.format(
+            '(metal={}, model={}, delta_d={}nm, beta={})'.format(
                     base_type,
                     nl_spec['metal'],
+                    nl_spec['model'],
                     nl_spec['delta_d'],
                     nl_spec['beta']))
 

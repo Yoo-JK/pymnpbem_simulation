@@ -349,6 +349,101 @@ def test_nonlocal_silver_factory() -> None:
     assert np.isfinite(val) and abs(val) > 0.0
 
 
+def test_nonlocal_builtin_metals_unchanged() -> None:
+    """Default metal paths must stay bit-identical to mnpbem make_nonlocal_pair."""
+    from pymnpbem_simulation.material.nonlocal_eps import build_nonlocal_eps
+    from mnpbem.materials import make_nonlocal_pair, EpsConst
+
+    wl = np.array([500.0, 636.0, 800.0])
+
+    for metal in ('gold', 'silver', 'aluminum', 'au', 'ag', 'al'):
+        _eb, core, shell = build_nonlocal_eps({'metal': metal})
+        core_ref, shell_ref = make_nonlocal_pair(metal,
+                eps_embed = EpsConst(1.0), delta_d = 0.05, beta = None)
+        assert np.array_equal(np.asarray(core(wl)[0]), np.asarray(core_ref(wl)[0])), metal
+        assert np.array_equal(np.asarray(shell(wl)[0]), np.asarray(shell_ref(wl)[0])), metal
+
+
+def test_nonlocal_copper_preset() -> None:
+    """Copper has no mnpbem EpsDrude factory; the built-in preset covers it."""
+    from pymnpbem_simulation.material.nonlocal_eps import build_nonlocal_eps
+
+    for metal in ('copper', 'cu'):
+        _eb, core, shell = build_nonlocal_eps({'metal': metal})
+        eps_core, _ = core(600.0)
+        eps_shell, _ = shell(600.0)
+        assert np.isfinite(eps_core) and eps_core.real < 0.0
+        assert np.isfinite(eps_shell) and abs(eps_shell) > 0.0
+
+
+def test_nonlocal_drude_params_override() -> None:
+    """Flat and material-keyed drude_params forms give the same result."""
+    from pymnpbem_simulation.material.nonlocal_eps import build_nonlocal_eps
+
+    params = {'omega_p': 9.02, 'gamma': 0.071, 'eps_inf': 9.84, 'v_f': 1.39e6}
+
+    _eb, _c, flat = build_nonlocal_eps({'metal': 'gold', 'drude_params': params})
+    _eb, _c, keyed = build_nonlocal_eps({'metal': 'au',
+            'drude_params': {'gold': params}})
+    _eb, _c, default = build_nonlocal_eps({'metal': 'gold'})
+
+    assert np.array_equal(np.asarray(flat(600.0)[0]), np.asarray(keyed(600.0)[0]))
+    assert not np.array_equal(np.asarray(flat(600.0)[0]), np.asarray(default(600.0)[0]))
+
+    # A key for a different metal must not hijack this build.
+    _eb, _c, unmatched = build_nonlocal_eps({'metal': 'gold',
+            'drude_params': {'silver': {'omega_p': 9.17}}})
+    assert np.array_equal(np.asarray(unmatched(600.0)[0]), np.asarray(default(600.0)[0]))
+
+
+def test_nonlocal_qcm_falls_back_to_hydrodynamic() -> None:
+    """'qcm' is accepted for MATLAB-wrapper parity but is not implemented."""
+    from pymnpbem_simulation.material.nonlocal_eps import build_nonlocal_eps
+
+    _eb, _c, qcm = build_nonlocal_eps({'metal': 'gold', 'model': 'qcm'})
+    _eb, _c, hydro = build_nonlocal_eps({'metal': 'gold'})
+
+    assert np.array_equal(np.asarray(qcm(600.0)[0]), np.asarray(hydro(600.0)[0]))
+
+
+def test_nonlocal_invalid_specs_raise() -> None:
+    from pymnpbem_simulation.material.nonlocal_eps import build_nonlocal_eps
+
+    for spec in ({'metal': 'gold', 'model': 'bogus'}, {'metal': 'platinum'}):
+        with pytest.raises(ValueError):
+            build_nonlocal_eps(spec)
+
+
+def test_auto_wrap_nonlocal_forwards_landes_keys() -> None:
+    """compute.nonlocal + materials.nonlocal -> structure.with_nonlocal spec."""
+    from pymnpbem_simulation.config import _auto_wrap_nonlocal
+
+    cfg = {'compute': {'nonlocal': True},
+            'structure': {'type': 'dimer_cube', 'size': 47, 'gap': 0.6},
+            'materials': {'particle_list': ['gold'],
+                    'nonlocal': {'model': 'qcm', 'delta_d': 0.08,
+                            'drude_params': {'gold': {'omega_p': 9.02}}}}}
+
+    out = _auto_wrap_nonlocal(cfg)
+    spec = out['structure']['nonlocal']
+
+    assert out['structure']['type'] == 'with_nonlocal'
+    assert out['structure']['base']['type'] == 'dimer_cube'
+    assert spec['model'] == 'qcm'
+    assert spec['delta_d'] == pytest.approx(0.08)
+    assert spec['drude_params']['gold']['omega_p'] == pytest.approx(9.02)
+
+    # Defaults stay hydrodynamic, and the wrap is a no-op when disabled.
+    minimal = _auto_wrap_nonlocal({'compute': {'nonlocal': True},
+            'structure': {'type': 'sphere', 'diameter': 10},
+            'materials': {'particle_list': ['silver']}})
+    assert minimal['structure']['nonlocal']['model'] == 'hydrodynamic'
+
+    off = _auto_wrap_nonlocal({'compute': {'nonlocal': False},
+            'structure': {'type': 'sphere'}})
+    assert off['structure']['type'] == 'sphere'
+
+
 if __name__ == '__main__':
     import pytest as _pt
     sys.exit(_pt.main([__file__, '-v']))

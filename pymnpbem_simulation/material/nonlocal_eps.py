@@ -14,10 +14,15 @@ YAML schema (consumed by `WithNonlocalBuilder`)::
         diameter: 10
         mesh_density: 144
       nonlocal:
-        metal: gold        # 'gold' | 'silver' | 'aluminum' | 'from_table:<path>.dat'
+        metal: gold        # 'gold'|'silver'|'aluminum'|'copper'|'from_table:<path>.dat'
         beta: null         # eV*nm. null -> sqrt(3/5) * v_F * hbar default for metal
         delta_d: 0.05      # nm — artificial cover-layer thickness
         eps_embed: 1.0     # outer medium permittivity (scalar) or '<path>.dat'
+        drude_params:      # optional explicit Drude override
+          omega_p: 9.02
+          gamma: 0.071
+          eps_inf: 9.84
+          v_f: 1.39e6
 
 EpsFun-based legacy wrapper (M7 Wave 3) is removed; this module now
 delegates to the canonical EpsNonlocal class.
@@ -25,10 +30,42 @@ delegates to the canonical EpsNonlocal class.
 
 from typing import Any, Dict, Tuple
 
+import numpy as np
+
 from mnpbem.materials import EpsConst, EpsTable, EpsDrude, EpsNonlocal, make_nonlocal_pair
 
 
 _DEFAULT_DELTA_D_NM = 0.05
+
+_HBAR_EV_S = 6.582119569e-16
+
+# Drude parameters used when the metal has no canonical mnpbem EpsDrude
+# factory (copper) or when the caller asks for an explicit override.
+# omega_p / gamma / eps_inf in eV, v_f in m/s.
+_DRUDE_PRESETS = {
+    'gold': {'omega_p': 9.02, 'gamma': 0.071, 'eps_inf': 9.84, 'v_f': 1.39e6},
+    'silver': {'omega_p': 9.17, 'gamma': 0.021, 'eps_inf': 3.7, 'v_f': 1.39e6},
+    'aluminum': {'omega_p': 14.98, 'gamma': 0.047, 'eps_inf': 1.0, 'v_f': 2.03e6},
+    'copper': {'omega_p': 10.83, 'gamma': 0.073, 'eps_inf': 1.0, 'v_f': 1.57e6},
+}
+
+_METAL_ALIASES = {
+    'au': 'gold', 'gold': 'gold',
+    'ag': 'silver', 'silver': 'silver',
+    'al': 'aluminum', 'aluminum': 'aluminum', 'aluminium': 'aluminum',
+    'cu': 'copper', 'copper': 'copper',
+}
+
+# Metals that mnpbem's make_nonlocal_pair / EpsDrude can build directly.
+_MNPBEM_NATIVE_METALS = {'au', 'gold', 'ag', 'silver', 'al', 'aluminum', 'aluminium'}
+
+
+def canonical_metal(name: Any) -> str:
+    return _METAL_ALIASES.get(str(name).strip().lower(), str(name).strip().lower())
+
+
+def beta_from_fermi_velocity(v_f: float) -> float:
+    return _HBAR_EV_S * np.sqrt(3.0 / 5.0) * float(v_f) * 1.0e9
 
 
 def is_nonlocal_spec(spec: Any) -> bool:
@@ -90,12 +127,43 @@ def build_nonlocal_eps(spec: Dict[str, Any],
 
     beta = spec.get('beta', None)
     delta_d = float(spec.get('delta_d', _DEFAULT_DELTA_D_NM))
+    model = str(spec.get('model', 'hydrodynamic')).strip().lower()
+
+    if model not in {'hydrodynamic', 'qcm'}:
+        raise ValueError(
+                '[error] build_nonlocal_eps: unknown <model>=<{}> '
+                '(expected hydrodynamic or qcm)'.format(model))
+
+    if model == 'qcm':
+        # Matches the MATLAB wrapper, which also records 'qcm' but only ever
+        # evaluates the hydrodynamic cover layer.
+        print('[warn] build_nonlocal_eps: <model: qcm> is not implemented; '
+                'falling back to the hydrodynamic cover layer')
 
     if eps_embed is None:
         eps_embed = _resolve_eps_embed(spec.get('eps_embed', 1.0))
 
+    drude_params = _resolve_drude_params(spec.get('drude_params', None), metal_l)
+
+    # Branch O: explicit Drude override, or a metal mnpbem cannot build itself
+    # (copper). Both need EpsNonlocal wired up by hand.
+    if drude_params is not None or (metal_l not in _MNPBEM_NATIVE_METALS
+            and canonical_metal(metal_l) in _DRUDE_PRESETS):
+        params = drude_params if drude_params is not None else _preset_for(metal_l)
+        eps_metal_core = _core_eps_from(metal, metal_l, params)
+        if beta is None and params.get('v_f', None) is not None:
+            beta = beta_from_fermi_velocity(params['v_f'])
+        eps_shell = EpsNonlocal(eps_metal_core, eps_embed,
+                delta_d = delta_d,
+                eps_inf = params['eps_inf'],
+                omega_p = params['omega_p'],
+                gamma = params['gamma'],
+                beta = beta,
+                name = metal)
+        return eps_embed, eps_metal_core, eps_shell
+
     # Branch A: built-in metal name -> use make_nonlocal_pair helper.
-    if metal_l in {'au', 'gold', 'ag', 'silver', 'al', 'aluminum', 'aluminium'}:
+    if metal_l in _MNPBEM_NATIVE_METALS:
         eps_metal_core, eps_shell = make_nonlocal_pair(metal_l,
                 eps_embed = eps_embed,
                 delta_d = delta_d,
@@ -137,7 +205,7 @@ def build_nonlocal_eps(spec: Dict[str, Any],
 
     raise ValueError(
             '[error] build_nonlocal_eps: unknown <metal>=<{}> '
-            '(expected gold/silver/aluminum or from_table:<path>.dat)'.format(metal))
+            '(expected gold/silver/aluminum/copper or from_table:<path>.dat)'.format(metal))
 
 
 def _resolve_eps_embed(value: Any) -> Any:
@@ -165,5 +233,67 @@ def _drude_factory_for(name: str) -> Any:
         return EpsDrude.silver
     if n in {'aluminum', 'aluminium', 'al'}:
         return EpsDrude.aluminum
+    if n in {'copper', 'cu'}:
+        p = _DRUDE_PRESETS['copper']
+        return lambda: EpsDrude(p['eps_inf'], p['omega_p'], p['gamma'], name = 'Cu')
     raise ValueError(
             '[error] build_nonlocal_eps: no Drude factory for <{}>'.format(name))
+
+
+def _preset_for(metal: str) -> Dict[str, Any]:
+    key = canonical_metal(metal)
+    if key not in _DRUDE_PRESETS:
+        raise ValueError(
+                '[error] build_nonlocal_eps: no Drude preset for <{}> '
+                '(known: {})'.format(metal, sorted(_DRUDE_PRESETS)))
+    return dict(_DRUDE_PRESETS[key])
+
+
+def _resolve_drude_params(raw: Any, metal: str) -> Any:
+    # Accepts the flat {'omega_p': ...} form and the MATLAB-wrapper form keyed
+    # by material name, {'gold': {'omega_p': ...}}. None -> canonical mnpbem path.
+    if not isinstance(raw, dict) or not raw:
+        return None
+
+    entry = raw
+
+    # Material-keyed form: pick the entry matching this metal.
+    if not any(k in raw for k in ('omega_p', 'gamma', 'eps_inf', 'v_f')):
+        key = canonical_metal(metal)
+        match = None
+        for name, value in raw.items():
+            if canonical_metal(name) == key and isinstance(value, dict):
+                match = value
+                break
+        if match is None:
+            return None
+        entry = match
+
+    params = _preset_for(metal) if canonical_metal(metal) in _DRUDE_PRESETS else dict()
+
+    for key in ('omega_p', 'gamma', 'eps_inf', 'v_f'):
+        if entry.get(key, None) is not None:
+            params[key] = float(entry[key])
+
+    missing = [k for k in ('omega_p', 'gamma', 'eps_inf') if k not in params]
+    if missing:
+        raise ValueError(
+                '[error] build_nonlocal_eps: <drude_params> for <{}> is missing '
+                '{}'.format(metal, missing))
+
+    return params
+
+
+def _core_eps_from(metal: str, metal_l: str, params: Dict[str, Any]) -> Any:
+    if metal_l.startswith('from_table:'):
+        path = metal.split(':', 1)[1].strip()
+        if not path:
+            raise ValueError(
+                    '[error] build_nonlocal_eps: <from_table:> requires a path')
+        return EpsTable(path)
+
+    if metal.endswith('.dat'):
+        return EpsTable(metal)
+
+    return EpsDrude(params['eps_inf'], params['omega_p'], params['gamma'],
+            name = metal)
