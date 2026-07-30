@@ -51,7 +51,7 @@ def _run_cli(yaml_name: str,
     summary = dict()
 
     if summary_path.exists():
-        with open(summary_path) as f:
+        with open(summary_path, encoding = 'utf-8') as f:
             summary = json.load(f)
 
     return summary, res.returncode
@@ -170,7 +170,7 @@ def _write_planewave_stat_yaml(path: Path) -> None:
             'postprocess:\n'
             '  run_eigenmode_analysis: false\n')
 
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding = 'utf-8') as f:
         f.write(content)
 
 
@@ -215,7 +215,7 @@ def _write_dipole_stat_yaml(path: Path) -> None:
             'postprocess:\n'
             '  run_eigenmode_analysis: false\n')
 
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding = 'utf-8') as f:
         f.write(content)
 
 
@@ -261,7 +261,7 @@ def _write_eels_stat_yaml(path: Path) -> None:
             'postprocess:\n'
             '  run_eigenmode_analysis: false\n')
 
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding = 'utf-8') as f:
         f.write(content)
 
 

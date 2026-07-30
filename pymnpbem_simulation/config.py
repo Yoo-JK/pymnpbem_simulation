@@ -27,7 +27,7 @@ DEFAULT_OUTPUT_FORMATS = ['npz', 'json', 'png']
 
 
 def load_yaml(path: str) -> Dict[str, Any]:
-    with open(path) as f:
+    with open(path, encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     if not isinstance(cfg, dict):
@@ -502,7 +502,7 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 def save_yaml(path: str,
         cfg: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok = True)
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
 

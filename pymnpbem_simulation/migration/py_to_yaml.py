@@ -388,7 +388,7 @@ def convert_py_to_yaml(path_str: Optional[str],
     cfg = convert_args_to_yaml(args)
 
     ensure_dir(os.path.dirname(os.path.abspath(path_out)))
-    with open(path_out, 'w') as f:
+    with open(path_out, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
     print_info('saved YAML <{}>'.format(path_out))
@@ -414,7 +414,7 @@ def upgrade_yaml(path_in: str, path_out: Optional[str] = None) -> Dict[str, Any]
         path_out = path_in
 
     ensure_dir(os.path.dirname(os.path.abspath(path_out)))
-    with open(path_out, 'w') as f:
+    with open(path_out, 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys = False, default_flow_style = None)
 
     print_info('upgraded YAML <{}> -> <{}>'.format(path_in, path_out))

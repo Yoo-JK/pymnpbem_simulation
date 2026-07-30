@@ -430,7 +430,7 @@ def _write_manifest_payload(path: str, payload: Dict[str, Any]) -> None:
     os.makedirs(d, exist_ok = True)
     tmp_path = os.path.join(d, 'manifest.{}.tmp'.format(os.getpid()))
     try:
-        with open(tmp_path, 'w') as f:
+        with open(tmp_path, 'w', encoding = 'utf-8') as f:
             json.dump(payload, f, indent = 2, sort_keys = False)
             f.flush()
             os.fsync(f.fileno())
@@ -527,7 +527,7 @@ def read_manifest(output_dir: str) -> Optional[Dict[str, Any]]:
     path = manifest_path(output_dir)
     if not os.path.exists(path):
         return None
-    with open(path) as f:
+    with open(path, encoding = 'utf-8') as f:
         return json.load(f)
 
 

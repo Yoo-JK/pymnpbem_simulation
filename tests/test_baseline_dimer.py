@@ -65,7 +65,7 @@ def test_dimer_baseline_10wl():
     summary_path = out_dir / 'spectrum.json'
     assert summary_path.exists(), '[error] missing <{}>'.format(summary_path)
 
-    with open(summary_path) as f:
+    with open(summary_path, encoding = 'utf-8') as f:
         summary = json.load(f)
 
     assert summary['n_wavelengths'] == N_WAVELENGTHS
@@ -77,7 +77,7 @@ def test_dimer_baseline_10wl():
     print('[test] wall = {:.2f} min'.format(summary['wall_min']))
 
     if REFERENCE_JSON.exists():
-        with open(REFERENCE_JSON) as f:
+        with open(REFERENCE_JSON, encoding = 'utf-8') as f:
             ref = json.load(f)
 
         spec = np.load(out_dir / 'spectrum.npz')

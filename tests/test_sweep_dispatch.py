@@ -85,12 +85,12 @@ def test_has_consistent_inputs_legacy_paths_unchanged():
 # ------------------------- sweep YAML parsing --------------------------
 
 def _write_yaml(path, data):
-    with open(str(path), 'w') as f:
+    with open(str(path), 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(data, f)
 
 
 def _write_py(path, args_dict):
-    with open(str(path), 'w') as f:
+    with open(str(path), 'w', encoding = 'utf-8') as f:
         f.write('args = {}\n'.format(repr(args_dict)))
 
 
@@ -101,7 +101,7 @@ def test_load_sweep_yaml_missing(tmp_path):
 
 def test_load_sweep_yaml_root_must_be_mapping(tmp_path):
     p = tmp_path / 'bad.yaml'
-    with open(str(p), 'w') as f:
+    with open(str(p), 'w', encoding = 'utf-8') as f:
         f.write('- a\n- b\n')
     with pytest.raises(ValueError, match = 'mapping'):
         _load_sweep_yaml(str(p))
@@ -199,7 +199,7 @@ def test_expand_grid_format_B(tmp_path):
     for i, expected_gap in enumerate([0.6, 1.0, 2.0]):
         assert os.path.exists(cases[i]['str_conf'])
 
-        with open(cases[i]['str_conf']) as f:
+        with open(cases[i]['str_conf'], encoding = 'utf-8') as f:
             src = f.read()
         # the generated .py contains the override value
         assert 'gap' in src

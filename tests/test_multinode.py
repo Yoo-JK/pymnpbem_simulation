@@ -323,7 +323,7 @@ def test_multinode_yaml_valid(yaml_file):
     p = REPO_ROOT / yaml_file
     assert p.exists()
 
-    with open(p) as f:
+    with open(p, encoding = 'utf-8') as f:
         cfg = yaml.safe_load(f)
 
     assert cfg['compute']['multi_node'] is True

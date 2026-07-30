@@ -113,7 +113,7 @@ def main():
 
     if args.json:
         Path(args.json).parent.mkdir(parents = True, exist_ok = True)
-        with open(args.json, 'w') as f:
+        with open(args.json, 'w', encoding = 'utf-8') as f:
             json.dump(summary, f, indent = 2)
         print('[runner] wrote summary <{}>'.format(args.json))
 

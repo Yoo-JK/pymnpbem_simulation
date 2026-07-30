@@ -135,7 +135,7 @@ def test_cube_cli_smoke(repo_root, reference_results):
 
     summary_path = out_dir / 'spectrum.json'
     assert summary_path.exists()
-    with open(summary_path) as f:
+    with open(summary_path, encoding = 'utf-8') as f:
         summary = json.load(f)
 
     ref = reference_results['cube_2wl']

@@ -28,7 +28,7 @@ def save_json(path: str,
     ensure_dir(os.path.dirname(path))
     for attempt in range(3):
         try:
-            with open(path, 'w') as f:
+            with open(path, 'w', encoding = 'utf-8') as f:
                 json.dump(obj, f, indent = 2, default = _json_default)
             return
         except OSError:
@@ -50,7 +50,7 @@ def _json_default(obj: Any) -> Any:
 
 
 def load_json(path: str) -> Dict[str, Any]:
-    with open(path) as f:
+    with open(path, encoding = 'utf-8') as f:
         return json.load(f)
 
 

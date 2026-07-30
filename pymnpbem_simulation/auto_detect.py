@@ -14,7 +14,7 @@ def detect_n_gpus() -> int:
         path = os.environ['PBS_GPUFILE']
 
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, encoding = 'utf-8') as f:
                 return len([line for line in f if line.strip()])
 
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
@@ -117,7 +117,7 @@ def detect_multi_node() -> bool:
 
             try:
 
-                with open(path) as f:
+                with open(path, encoding = 'utf-8') as f:
                     unique_nodes = set(
                             line.strip() for line in f if line.strip())
 

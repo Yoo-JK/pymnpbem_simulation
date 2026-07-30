@@ -545,7 +545,7 @@ def save_near_field_results(results: Dict,
     import os
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding = 'utf-8') as f:
         # Header
         title_parts = ['Near-Field Integration Analysis (INTERIOR)']
         if center_only:

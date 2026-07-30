@@ -137,12 +137,12 @@ def test_upgrade_yaml_inplace(tmp_path):
             'n_wavelengths': 100}}
 
     in_path = tmp_path / 'input.yaml'
-    with open(str(in_path), 'w') as f:
+    with open(str(in_path), 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f)
 
     upgrade_yaml(str(in_path))
 
-    with open(str(in_path), 'r') as f:
+    with open(str(in_path), 'r', encoding = 'utf-8') as f:
         new_cfg = yaml.safe_load(f)
 
     sim = new_cfg['simulation']
@@ -162,12 +162,12 @@ def test_upgrade_yaml_keeps_spectrum_when_cross_sections_true(tmp_path):
             'calculate_fields': False}}
 
     p = tmp_path / 'input.yaml'
-    with open(str(p), 'w') as f:
+    with open(str(p), 'w', encoding = 'utf-8') as f:
         yaml.safe_dump(cfg, f)
 
     upgrade_yaml(str(p))
 
-    with open(str(p), 'r') as f:
+    with open(str(p), 'r', encoding = 'utf-8') as f:
         new_cfg = yaml.safe_load(f)
 
     assert new_cfg['simulation']['type'] == 'ret'

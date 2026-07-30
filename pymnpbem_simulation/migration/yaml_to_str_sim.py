@@ -159,10 +159,10 @@ def convert_yaml_to_str_sim(path_yaml: str,
     ensure_dir(os.path.dirname(os.path.abspath(path_str_out)))
     ensure_dir(os.path.dirname(os.path.abspath(path_sim_out)))
 
-    with open(path_str_out, 'w') as f:
+    with open(path_str_out, 'w', encoding = 'utf-8') as f:
         f.write(render_args_py(str_args, header = str_header))
 
-    with open(path_sim_out, 'w') as f:
+    with open(path_sim_out, 'w', encoding = 'utf-8') as f:
         f.write(render_args_py(sim_args, header = sim_header))
 
     print_info('saved str_conf <{}>'.format(path_str_out))

@@ -78,7 +78,7 @@ def test_sphere_substrate_smoke(repo_root, reference_results):
         ext = data['ext']
         peak = float(np.max(ext))
     else:
-        with open(summary_path) as f:
+        with open(summary_path, encoding = 'utf-8') as f:
             summary = json.load(f)
         peak = summary.get('peak_ext_x', 0.0)
 

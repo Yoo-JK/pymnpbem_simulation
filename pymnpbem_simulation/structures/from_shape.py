@@ -64,7 +64,7 @@ def _load_shape_file(path: str) -> np.ndarray:
     and skipped.  Only the first 4 columns are kept.
     """
     rows = []
-    with open(path, 'r') as fh:
+    with open(path, 'r', encoding = 'utf-8') as fh:
         for line in fh:
             line = line.strip()
             if not line:

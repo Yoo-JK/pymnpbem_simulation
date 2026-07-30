@@ -36,7 +36,7 @@ def repo_root() -> Path:
 @pytest.fixture(scope = 'session')
 def reference_results() -> Dict[str, Any]:
     path = DATA_DIR / 'reference_results.json'
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding = 'utf-8') as f:
         return json.load(f)
 
 

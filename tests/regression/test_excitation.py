@@ -56,7 +56,7 @@ def _run_yaml(repo_root: Path,
     summary = {}
     summary_path = out_dir / 'spectrum.json'
     if summary_path.exists():
-        with open(summary_path, 'r') as f:
+        with open(summary_path, 'r', encoding = 'utf-8') as f:
             summary = json.load(f)
 
     return summary, proc.returncode, elapsed
